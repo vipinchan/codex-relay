@@ -78,7 +78,7 @@ function DrawerLayoutContent() {
       <Drawer.Screen
         name="index"
         options={{
-          drawerLabel: "Threads",
+          drawerLabel: "Conversations",
           title: "Codex Relay",
         }}
       />
