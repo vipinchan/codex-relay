@@ -16,5 +16,8 @@ export function activeThreadAfterRefresh({
     return currentActiveThreadId;
   }
 
-  return threads[0]?.id;
+  // OpenMinis-style navigation treats the session list as the app's home.
+  // When there is no deliberate selection, stay on history instead of
+  // implicitly opening the newest thread after every refresh/startup.
+  return undefined;
 }
