@@ -5,6 +5,8 @@ import { defineConfig } from "hot-updater";
 
 config({ path: ".env.hotupdater" });
 
+const isTrollStoreBuild = process.env.TROLLSTORE_BUILD === "1";
+
 export default defineConfig({
   build: expo(),
   storage: r2Storage({
@@ -21,7 +23,9 @@ export default defineConfig({
     cloudflareApiToken: process.env.HOT_UPDATER_CLOUDFLARE_API_TOKEN!,
   }),
   updateStrategy: "appVersion", // or "fingerprint"
-  signing: { enabled: true, privateKeyPath: "./keys/private-key.pem" },
+  signing: isTrollStoreBuild
+    ? { enabled: false }
+    : { enabled: true, privateKeyPath: "./keys/private-key.pem" },
   patch: {
     enabled: true,
     maxBaseBundles: 2,
