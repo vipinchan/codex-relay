@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feat/trollstore-ipa-pipeline
     paths:
       - "apps/mobile/**"
       - "packages/**"
@@ -28,6 +27,7 @@ on:
 
 permissions:
   contents: write
+  statuses: write
 
 concurrency:
   group: trollstore-ipa-${{ github.ref }}
@@ -132,3 +132,47 @@ jobs:
               --notes-file /tmp/trollstore-release-notes.md \
               --latest
           fi
+
+      - name: Verify published Release IPA
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA:0:7}"
+          tag="trollstore-${short_sha}"
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}"
+
+          assets="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+          for expected_asset in CodexRelay-TrollStore.ipa CodexRelay-TrollStore.ipa.sha256 build-info.txt; do
+            if ! grep -Fxq "$expected_asset" <<<"$assets"; then
+              echo "::error::Release is missing $expected_asset"
+              exit 1
+            fi
+          done
+
+          rm -rf /tmp/trollstore-release-check
+          mkdir -p /tmp/trollstore-release-check
+          gh release download "$tag" \
+            --pattern 'CodexRelay-TrollStore.ipa' \
+            --dir /tmp/trollstore-release-check
+
+          expected_sha="$(awk '{print $1}' dist/trollstore/CodexRelay-TrollStore.ipa.sha256)"
+          published_sha="$(shasum -a 256 /tmp/trollstore-release-check/CodexRelay-TrollStore.ipa | awk '{print $1}')"
+          if [[ "$published_sha" != "$expected_sha" ]]; then
+            echo "::error::Published IPA checksum mismatch"
+            echo "expected=$expected_sha"
+            echo "published=$published_sha"
+            exit 1
+          fi
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context=trollstore-release \
+            -f description='Release IPA checksum verified' \
+            -f target_url="$release_url"
+
+          echo "Release verified: $release_url"
+          echo "IPA SHA-256: $published_sha"
