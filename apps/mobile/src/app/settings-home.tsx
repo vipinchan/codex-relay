@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import type { ReactNode } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
@@ -36,7 +37,7 @@ export default function SettingsHomeScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <SectionTitle>{zh ? "Codex Relay" : "Codex Relay"}</SectionTitle>
+        <SectionTitle>Codex Relay</SectionTitle>
         <SettingsCard>
           <SettingsRow icon="workspace" title={zh ? "已连接电脑" : "Connected Computer"} subtitle={zh ? "Mac、Relay 地址与配对" : "Mac, relay address and pairing"} onPress={openDetailedSettings} />
           <Divider />
@@ -67,7 +68,7 @@ function SectionTitle({ children }: { children: string }) {
   return <ThemedText style={styles.sectionTitle}>{children}</ThemedText>;
 }
 
-function SettingsCard({ children }: { children: React.ReactNode }) {
+function SettingsCard({ children }: { children: ReactNode }) {
   return <View style={styles.card}>{children}</View>;
 }
 
