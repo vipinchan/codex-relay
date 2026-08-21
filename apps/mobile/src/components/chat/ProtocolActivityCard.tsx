@@ -1475,7 +1475,7 @@ const styles = StyleSheet.create({
   },
   planCard: {
     alignSelf: "stretch",
-    borderRadius: 10,
+    borderRadius: 14,
     borderWidth: 1,
     gap: Spacing.two,
     marginVertical: Spacing.two,
@@ -1496,7 +1496,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
   },
   inputRequestCard: {
-    borderRadius: 9,
+    borderRadius: 14,
     borderWidth: 1,
     maxWidth: 420,
     padding: Spacing.three,
@@ -1563,7 +1563,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: "rgba(255, 255, 255, 0.045)",
     borderColor: "rgba(255, 255, 255, 0.06)",
-    borderRadius: 9,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 5,
@@ -1586,7 +1586,7 @@ const styles = StyleSheet.create({
   },
   fileChangeCard: {
     alignSelf: "stretch",
-    borderRadius: 10,
+    borderRadius: 14,
     borderWidth: 1,
     marginVertical: 0,
     maxWidth: "100%",

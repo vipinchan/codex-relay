@@ -340,9 +340,6 @@ export const MessageBubble = memo(function MessageBubble({
       >
         {isAssistant ? (
           <View style={styles.assistantContent}>
-            <ThemedText type="code" themeColor="textSecondary" style={styles.assistantLabel}>
-              Codex
-            </ThemedText>
             {markdownSegments.map((segment) =>
               segment.kind === "code" ? (
                 <HighlightedCodeBlock
@@ -1181,7 +1178,7 @@ function formatMessageTime(value: string) {
 
 const styles = StyleSheet.create({
   row: {
-    marginVertical: Spacing.two,
+    marginVertical: 6,
   },
   userRow: {
     alignItems: "flex-end",
@@ -1197,11 +1194,10 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   userBubble: {
-    backgroundColor: "rgba(56, 56, 56, 0.8)",
-    borderColor: "rgba(255, 255, 255, 0.09)",
-    borderWidth: 1,
-    maxWidth: "82%",
-    paddingHorizontal: 12,
+    backgroundColor: "rgba(118, 118, 128, 0.24)",
+    borderWidth: 0,
+    maxWidth: "84%",
+    paddingHorizontal: 13,
     paddingVertical: 9,
   },
   assistantBubble: {
@@ -1246,10 +1242,9 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   goalValueBubble: {
-    backgroundColor: "rgba(56, 56, 56, 0.8)",
-    borderColor: "rgba(255, 255, 255, 0.09)",
+    backgroundColor: "rgba(118, 118, 128, 0.24)",
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     paddingHorizontal: 13,
     paddingVertical: 9,
   },
@@ -1324,21 +1319,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
-  assistantLabel: {
-    marginBottom: Spacing.one,
-    opacity: 0.7,
-  },
   messageFooter: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 6,
-    marginTop: 4,
+    gap: 4,
+    marginTop: 2,
   },
   userMessageFooter: {
     alignSelf: "flex-end",
   },
   timestamp: {
-    opacity: 0.55,
+    display: "none",
   },
   userTimestamp: {
     color: "rgba(255, 255, 255, 0.68)",
@@ -1350,6 +1341,7 @@ const styles = StyleSheet.create({
     height: 22,
     justifyContent: "center",
     marginLeft: -1,
+    opacity: 0.58,
     width: 22,
   },
   userCopyButton: {

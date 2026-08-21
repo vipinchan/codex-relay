@@ -20,6 +20,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
+import { Icon } from "@/components/ui/icon";
 import { Colors, Spacing } from "@/constants/theme";
 
 import { MessageBubble } from "./MessageBubble";
@@ -148,8 +149,14 @@ export function MessageTimeline({
         rows.length === 0 && !isRunning ? (
           <Animated.View style={[styles.transitionScene, timelineContentStyle]}>
             <View style={styles.empty}>
+              <View style={styles.emptyMark}>
+                <Icon name="model" size={20} tintColor="#F5F5F7" />
+              </View>
+              <ThemedText type="smallBold" style={styles.emptyTitle}>
+                What do you want to build?
+              </ThemedText>
               <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-                Send a message to start the conversation.
+                Message Codex to start working in this workspace.
               </ThemedText>
             </View>
           </Animated.View>
@@ -216,19 +223,37 @@ function LoadingConversation() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: Spacing.two,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.two,
+    paddingBottom: 6,
+    paddingHorizontal: 18,
+    paddingTop: 6,
   },
   empty: {
     alignItems: "center",
     flex: 1,
-    gap: Spacing.two,
+    gap: 7,
     justifyContent: "center",
     padding: Spacing.four,
   },
+  emptyMark: {
+    alignItems: "center",
+    backgroundColor: "#1C1C1E",
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 44,
+    justifyContent: "center",
+    marginBottom: 3,
+    width: 44,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    lineHeight: 20,
+    textAlign: "center",
+  },
   emptyText: {
-    maxWidth: 260,
+    fontSize: 13,
+    lineHeight: 18,
+    maxWidth: 280,
     textAlign: "center",
   },
   list: {

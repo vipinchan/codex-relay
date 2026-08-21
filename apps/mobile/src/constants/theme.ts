@@ -1,43 +1,31 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, Uniwind, Tamagui, Unistyles, etc.
+ * OpenMinis-inspired native iOS palette for the personal Codex Relay client.
+ * The app intentionally stays dark-only; semantic surfaces mirror iOS system
+ * background/fill hierarchy so chat content remains the visual focus.
  */
 
 import { Platform } from "react-native";
 
+const nativeDark = {
+  text: "#F5F5F7",
+  background: "#000000",
+  backgroundElement: "#1C1C1E",
+  backgroundSelected: "#2C2C2E",
+  textSecondary: "#8E8E93",
+  textSecondaryStrong: "#AEAEB2",
+  powerTrack: "#3A3A3C",
+  powerBlue: "#5E9EFF",
+  powerViolet: "#8B7BFF",
+  powerMagenta: "#C77DFF",
+  agentGreen: "#70C769",
+  agentViolet: "#A68BDD",
+  agentCyan: "#55C2DE",
+  agentTeal: "#59BDB5",
+} as const;
+
 export const Colors = {
-  light: {
-    text: "#F2F2F2",
-    background: "#191919",
-    backgroundElement: "#2A2A2A",
-    backgroundSelected: "#383838",
-    textSecondary: "#9A9A9A",
-    textSecondaryStrong: "#A6A6A6",
-    powerTrack: "#454545",
-    powerBlue: "#3E96FF",
-    powerViolet: "#7868FF",
-    powerMagenta: "#C06DFF",
-    agentGreen: "#6BBF59",
-    agentViolet: "#9B84D6",
-    agentCyan: "#48B9D9",
-    agentTeal: "#4FB4AE",
-  },
-  dark: {
-    text: "#F2F2F2",
-    background: "#191919",
-    backgroundElement: "#2A2A2A",
-    backgroundSelected: "#383838",
-    textSecondary: "#9A9A9A",
-    textSecondaryStrong: "#A6A6A6",
-    powerTrack: "#454545",
-    powerBlue: "#3E96FF",
-    powerViolet: "#7868FF",
-    powerMagenta: "#C06DFF",
-    agentGreen: "#6BBF59",
-    agentViolet: "#9B84D6",
-    agentCyan: "#48B9D9",
-    agentTeal: "#4FB4AE",
-  },
+  light: nativeDark,
+  dark: nativeDark,
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;

@@ -10,7 +10,6 @@ import {
   Alert,
   InteractionManager,
   Keyboard,
-  Linking,
   Modal,
   Pressable,
   TextInput,
@@ -28,7 +27,6 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
-import { FaGithub } from "@/assets/icons/fa";
 import {
   AppBottomSheet,
   AppBottomSheetTextInput,
@@ -37,7 +35,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
-import { codexRelayRepositoryUrl } from "@/constants/links";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { hasCodexRelaySession } from "@/lib/codex-relay-api";
@@ -406,11 +403,9 @@ export function ThreadDrawerContent(props: ThreadDrawerContentProps) {
   const renderDrawerRow = useCallback(
     ({ item }: LegendListRenderItemProps<DrawerRow>) => (
       <DrawerRowItem
-        archiveThreadPending={archiveThreadMutation.isPending}
         canRenameThread={canMutateAppServerThreads}
         isCreatingThread={isCreatingThread}
         item={item}
-        onArchiveThread={confirmArchiveThread}
         onCreateThread={createNewThread}
         onOpenThreadActions={openThreadActions}
         onSelectThread={selectThread}
@@ -565,6 +560,16 @@ export function ThreadDrawerContent(props: ThreadDrawerContentProps) {
                 title="Rename chat"
               />
             ) : null}
+            <SheetActionRow
+              accessibilityLabel="Archive chat"
+              icon="archive"
+              onPress={() => {
+                const thread = threadWithActions;
+                closeThreadActions();
+                confirmArchiveThread(thread);
+              }}
+              title="Archive chat"
+            />
           </>
         ) : null}
       </AppBottomSheet>
@@ -851,23 +856,6 @@ function DrawerFooter({
   return (
     <View style={[styles.footerBlock, { paddingBottom: Math.max(bottomInset, 8) }]}>
       <Pressable
-        accessibilityRole="link"
-        accessibilityLabel="Open Codex Relay GitHub repository"
-        onPress={() => void Linking.openURL(codexRelayRepositoryUrl)}
-        style={styles.repositoryFooter}
-      >
-        {({ pressed }) => (
-          <>
-            <View style={[styles.rowIconSlot, pressed && styles.drawerPressedContent]}>
-              <FaGithub size={16} color={theme.text} />
-            </View>
-            <View style={[styles.repositoryFooterCopy, pressed && styles.drawerPressedContent]}>
-              <Text style={styles.repositoryFooterTitle}>Codex Relay on GitHub</Text>
-            </View>
-          </>
-        )}
-      </Pressable>
-      <Pressable
         accessibilityRole="button"
         accessibilityLabel="Settings"
         onPress={onOpenSettings}
@@ -889,11 +877,9 @@ function DrawerFooter({
 }
 
 type DrawerRowItemProps = {
-  archiveThreadPending: boolean;
   canRenameThread: boolean;
   isCreatingThread: boolean;
   item: DrawerRow;
-  onArchiveThread: (thread: ThreadSummary) => void;
   onCreateThread: (workspacePath: string | undefined) => Promise<void>;
   onOpenThreadActions: (thread: ThreadSummary) => void;
   onSelectThread: (threadId: string) => void;
@@ -905,11 +891,9 @@ type DrawerRowItemProps = {
 };
 
 const DrawerRowItem = memo(function DrawerRowItem({
-  archiveThreadPending,
   canRenameThread,
   isCreatingThread,
   item,
-  onArchiveThread,
   onCreateThread,
   onOpenThreadActions,
   onSelectThread,
@@ -1023,28 +1007,16 @@ const DrawerRowItem = memo(function DrawerRowItem({
           </>
         )}
       </Pressable>
-      <Button
-        accessibilityLabel={`Archive thread ${item.thread.title}`}
-        disabled={archiveThreadPending}
-        onPress={() => onArchiveThread(item.thread)}
-        size="icon"
-        variant="ghost"
-        className="size-8 rounded-md"
-      >
-        <Icon name="archive" size={14} tintColor={theme.textSecondary} />
-      </Button>
     </View>
   );
 }, areDrawerRowItemsEqual);
 
 function areDrawerRowItemsEqual(previous: DrawerRowItemProps, next: DrawerRowItemProps) {
   if (
-    previous.archiveThreadPending !== next.archiveThreadPending ||
     previous.canRenameThread !== next.canRenameThread ||
     previous.isCreatingThread !== next.isCreatingThread ||
     previous.item.kind !== next.item.kind ||
     previous.item.id !== next.item.id ||
-    previous.onArchiveThread !== next.onArchiveThread ||
     previous.onCreateThread !== next.onCreateThread ||
     previous.onOpenThreadActions !== next.onOpenThreadActions ||
     previous.onSelectThread !== next.onSelectThread ||
@@ -1110,7 +1082,7 @@ function DrawerListHeader({
   return (
     <View style={styles.header}>
       <View style={styles.brandRow}>
-        <Text style={styles.brandText}>Codex Relay</Text>
+        <Text style={styles.brandText}>Codex</Text>
         {showCloseButton ? (
           <Button
             accessibilityLabel="Close menu"
@@ -1556,20 +1528,21 @@ function formatRelativeTime(value: string) {
 
 const styles = StyleSheet.create({
   drawerRoot: {
+    backgroundColor: "#0C0C0D",
     flex: 1,
     position: "relative",
   },
   listContent: {
     flexGrow: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
   },
   list: {
     flex: 1,
   },
   header: {
-    gap: 8,
-    paddingBottom: 8,
-    paddingTop: 12,
+    gap: 10,
+    paddingBottom: 10,
+    paddingTop: 10,
   },
   brandRow: {
     alignItems: "center",
@@ -1577,19 +1550,19 @@ const styles = StyleSheet.create({
     minHeight: 32,
   },
   brandText: {
-    fontSize: 14,
-    fontWeight: "600",
-    lineHeight: 18,
+    fontSize: 16,
+    fontWeight: "700",
+    lineHeight: 21,
   },
   searchShell: {
     alignItems: "center",
     backgroundColor: "rgba(255, 255, 255, 0.055)",
     borderColor: "rgba(255, 255, 255, 0.08)",
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    height: 32,
-    marginHorizontal: 4,
+    height: 36,
+    marginHorizontal: 0,
     paddingHorizontal: 9,
   },
   searchInput: {
@@ -1682,9 +1655,10 @@ const styles = StyleSheet.create({
   },
   newChatRow: {
     alignItems: "center",
-    borderRadius: 7,
+    backgroundColor: "rgba(255, 255, 255, 0.055)",
+    borderRadius: 12,
     flexDirection: "row",
-    minHeight: 36,
+    minHeight: 40,
     paddingHorizontal: 8,
   },
   newChatIcon: {
@@ -1748,9 +1722,9 @@ const styles = StyleSheet.create({
   },
   thread: {
     alignItems: "center",
-    borderRadius: 6,
+    borderRadius: 10,
     flexDirection: "row",
-    minHeight: 44,
+    minHeight: 46,
     paddingLeft: 0,
     paddingRight: 4,
     paddingVertical: 5,
@@ -1795,7 +1769,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   threadSelected: {
-    backgroundColor: "rgba(255, 255, 255, 0.075)",
+    backgroundColor: "rgba(255, 255, 255, 0.09)",
   },
   drawerPressedContent: {
     opacity: 0.68,
@@ -1837,7 +1811,7 @@ const styles = StyleSheet.create({
     width: 6,
   },
   activeDotSelected: {
-    backgroundColor: "#8CC7FF",
+    backgroundColor: "#F5F5F7",
   },
   moreRow: {
     alignItems: "center",
@@ -1855,12 +1829,14 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.055)",
+    borderRadius: 12,
     flexDirection: "row",
-    minHeight: 42,
-    paddingHorizontal: 0,
+    minHeight: 44,
+    paddingHorizontal: 8,
   },
   footerBlock: {
-    backgroundColor: "#191919",
+    backgroundColor: "#0C0C0D",
     borderTopColor: "rgba(255, 255, 255, 0.08)",
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
@@ -1869,23 +1845,6 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     fontWeight: "500",
-    lineHeight: 16,
-  },
-  repositoryFooter: {
-    alignItems: "center",
-    borderRadius: 7,
-    flexDirection: "row",
-    minHeight: 48,
-    paddingHorizontal: 0,
-    paddingVertical: 4,
-  },
-  repositoryFooterCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  repositoryFooterTitle: {
-    fontSize: 12,
-    fontWeight: "600",
     lineHeight: 16,
   },
   workspaceDisabled: {

@@ -72,8 +72,8 @@ const ATTACH_SHEET_DISMISS_DELAY_MS = 260;
 const ADD_SHEET_KEYBOARD_DISMISS_FALLBACK_MS = 360;
 const FILE_MENTION_INDICATOR = "@";
 const SKILL_MENTION_INDICATOR = "$";
-const DEFAULT_COMPOSER_PLACEHOLDER = "Ask Codex anything. Try $skills or @files.";
-const PLAN_COMPOSER_PLACEHOLDER = "Ask Codex for a plan. Try $skills or @files.";
+const DEFAULT_COMPOSER_PLACEHOLDER = "Message Codex";
+const PLAN_COMPOSER_PLACEHOLDER = "Plan with Codex";
 const SUGGESTION_ROW_ESTIMATED_SIZE = 44;
 const SUGGESTION_LIST_GAP = 2;
 const SUGGESTION_LIST_MAX_HEIGHT = 270;
@@ -1001,7 +1001,7 @@ export const ChatComposer = memo(function ChatComposer({
           styles.container,
           {
             backgroundColor: theme.backgroundElement,
-            borderColor: "rgba(255, 255, 255, 0.1)",
+            borderColor: "rgba(255, 255, 255, 0.12)",
           },
         ]}
       >
@@ -2894,13 +2894,13 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   container: {
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    borderWidth: 1,
-    borderRadius: 18,
-    gap: 5,
-    marginHorizontal: 18,
-    marginBottom: 6,
-    marginTop: 6,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 22,
+    gap: 4,
+    marginHorizontal: 12,
+    marginBottom: 8,
+    marginTop: 4,
     paddingBottom: 8,
     paddingHorizontal: 12,
     paddingTop: 10,
@@ -3312,13 +3312,13 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: "transparent",
-    fontFamily: Fonts.sansMedium,
-    fontSize: 13,
-    lineHeight: 18,
-    maxHeight: 84,
+    fontFamily: Fonts.sans,
+    fontSize: 15,
+    lineHeight: 21,
+    maxHeight: 120,
     minHeight: 42,
     paddingHorizontal: 2,
-    paddingTop: 0,
+    paddingTop: 1,
     paddingBottom: 0,
     textAlignVertical: "top",
   },
@@ -3327,8 +3327,8 @@ const styles = StyleSheet.create({
   },
   planModeChip: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.09)",
-    borderColor: "rgba(255, 255, 255, 0.18)",
+    backgroundColor: "rgba(118, 118, 128, 0.18)",
+    borderColor: "rgba(255, 255, 255, 0.12)",
     borderRadius: 12,
     borderWidth: 1,
     height: 24,
@@ -3349,7 +3349,7 @@ const styles = StyleSheet.create({
   actionRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 8,
+    gap: 7,
     height: 40,
     justifyContent: "flex-start",
   },
@@ -3424,7 +3424,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     height: 36,
     justifyContent: "center",
-    marginLeft: 2,
+    marginLeft: 0,
+    opacity: 0.82,
     width: 36,
   },
   contextRingTrack: {
@@ -3444,23 +3445,23 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   iconButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.09)",
-    borderColor: "rgba(255, 255, 255, 0.18)",
+    backgroundColor: "rgba(118, 118, 128, 0.18)",
+    borderColor: "rgba(255, 255, 255, 0.12)",
     borderRadius: 18,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     height: 36,
     width: 36,
   },
   sendButton: {
     alignItems: "center",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "#F5F5F7",
     borderRadius: 18,
     height: 36,
     justifyContent: "center",
     width: 36,
   },
   sendButtonDisabled: {
-    backgroundColor: "rgba(243, 244, 246, 0.14)",
+    backgroundColor: "rgba(245, 245, 247, 0.16)",
     opacity: 0.72,
   },
   sheetSection: {
