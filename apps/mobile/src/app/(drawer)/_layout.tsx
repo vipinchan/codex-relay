@@ -29,7 +29,6 @@ function DrawerLayoutContent() {
   const usesExpandedDrawer = width >= EXPANDED_DRAWER_BREAKPOINT;
   const showsExpandedDrawer = usesExpandedDrawer && isSidebarVisible;
   const showsCollapsedRail = usesExpandedDrawer && !isSidebarVisible;
-  const compactDrawerWidth = Math.min(width * 0.92, 420);
 
   function expandSidebar() {
     setSidebarVisible(true);
@@ -56,8 +55,8 @@ function DrawerLayoutContent() {
         drawerType: usesExpandedDrawer ? "permanent" : "front",
         headerShown: false,
         swipeEnabled: !usesExpandedDrawer,
-        swipeEdgeWidth: 76,
-        swipeMinDistance: 22,
+        swipeEdgeWidth: Math.min(width * 0.28, 104),
+        swipeMinDistance: 18,
         sceneStyle: {
           backgroundColor: "#000000",
         },
@@ -70,9 +69,9 @@ function DrawerLayoutContent() {
             ? showsExpandedDrawer
               ? sidebarWidth
               : COLLAPSED_DRAWER_WIDTH
-            : compactDrawerWidth,
+            : width,
         },
-        overlayColor: usesExpandedDrawer ? "transparent" : "rgba(0, 0, 0, 0.58)",
+        overlayColor: "transparent",
       }}
     >
       <Drawer.Screen
