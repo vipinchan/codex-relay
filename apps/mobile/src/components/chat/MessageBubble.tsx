@@ -1322,8 +1322,8 @@ const styles = StyleSheet.create({
   messageFooter: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 6,
-    marginTop: 4,
+    gap: 4,
+    marginTop: 2,
   },
   userMessageFooter: {
     alignSelf: "flex-end",
@@ -1341,6 +1341,7 @@ const styles = StyleSheet.create({
     height: 22,
     justifyContent: "center",
     marginLeft: -1,
+    opacity: 0.58,
     width: 22,
   },
   userCopyButton: {

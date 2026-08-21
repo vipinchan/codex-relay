@@ -3424,7 +3424,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     height: 36,
     justifyContent: "center",
-    marginLeft: 2,
+    marginLeft: 0,
+    opacity: 0.82,
     width: 36,
   },
   contextRingTrack: {
@@ -3444,10 +3445,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   iconButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.09)",
-    borderColor: "rgba(255, 255, 255, 0.18)",
+    backgroundColor: "rgba(118, 118, 128, 0.18)",
+    borderColor: "rgba(255, 255, 255, 0.12)",
     borderRadius: 18,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     height: 36,
     width: 36,
   },
