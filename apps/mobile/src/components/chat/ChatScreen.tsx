@@ -29,7 +29,7 @@ import {
   type ScanningResult,
 } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { useFocusEffect, useNavigation } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -223,9 +223,6 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const usesExpandedSidebar = width >= EXPANDED_DRAWER_BREAKPOINT;
   const usesWideLayout = width >= THREE_PANE_LAYOUT_BREAKPOINT;
-  const drawerNavigation = useNavigation<{
-    openDrawer?: () => void;
-  }>();
   const queryClient = useQueryClient();
   const fetchCurrentStatus = useCallback(async () => {
     await runtimePreferencesCoordinator.afterUpdates();
@@ -2119,14 +2116,6 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
     return workspacePreferences;
   }
 
-  function openThreadDrawer() {
-    Keyboard.dismiss();
-    requestAnimationFrame(() => {
-      drawerNavigation.openDrawer?.();
-    });
-    hapticMediumImpact();
-  }
-
   function toggleThreadSidebar() {
     Keyboard.dismiss();
     toggleSidebar();
@@ -2262,13 +2251,19 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       isLoadingMessages={isLoadingMessages}
       isRunning={isRunning}
       leadingAction={{
-        icon: usesExpandedSidebar ? (isSidebarVisible ? "sidebarHide" : "sidebarShow") : "menu",
+        icon: usesExpandedSidebar ? (isSidebarVisible ? "sidebarHide" : "sidebarShow") : "back",
         label: usesExpandedSidebar
           ? isSidebarVisible
-            ? "Hide threads"
-            : "Show threads"
-          : "Open threads",
-        onPress: usesExpandedSidebar ? toggleThreadSidebar : openThreadDrawer,
+            ? "Hide conversations"
+            : "Show conversations"
+          : "Back to conversations",
+        onPress: usesExpandedSidebar
+          ? toggleThreadSidebar
+          : () => {
+              Keyboard.dismiss();
+              hapticSelection();
+              setActiveThread(undefined);
+            },
       }}
       messages={messages}
       onAttachImage={attachImagesFromGallery}

@@ -342,9 +342,6 @@ export default function SettingsScreen() {
             <ThemedText type="smallBold" style={styles.title}>
               Settings
             </ThemedText>
-            <ThemedText type="code" themeColor="textSecondary" style={styles.subtitle}>
-              Account
-            </ThemedText>
           </View>
           <View style={styles.headerButtonPlaceholder} />
         </View>
@@ -1001,24 +998,19 @@ const styles = StyleSheet.create({
   header: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
-    paddingBottom: 8,
-    paddingHorizontal: 18,
-    paddingTop: 6,
+    minHeight: 58,
+    paddingHorizontal: 12,
   },
   headerButton: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 20,
-    borderWidth: 1,
-    height: 40,
+    borderRadius: 22,
+    height: 44,
     justifyContent: "center",
-    width: 40,
+    width: 44,
   },
   headerButtonPlaceholder: {
-    height: 40,
-    width: 40,
+    height: 44,
+    width: 44,
   },
   titleGroup: {
     alignItems: "center",
@@ -1026,21 +1018,17 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   title: {
-    fontSize: 17,
-    lineHeight: 22,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 10,
-    lineHeight: 14,
-    opacity: 0.84,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 18,
+    fontWeight: "600",
+    lineHeight: 23,
     textAlign: "center",
   },
   content: {
-    gap: Spacing.four,
+    gap: 26,
     paddingBottom: Spacing.five,
     paddingHorizontal: 18,
-    paddingTop: Spacing.three,
+    paddingTop: 12,
   },
   scroll: {
     flex: 1,
@@ -1050,27 +1038,24 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontFamily: Fonts.sansMedium,
-    fontSize: 11,
-    lineHeight: 16,
-    opacity: 0.68,
+    fontSize: 13,
+    lineHeight: 18,
+    opacity: 0.72,
+    paddingHorizontal: 8,
   },
   projectLinkList: {
     backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(255, 255, 255, 0.09)",
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 7,
-    padding: Spacing.two,
+    borderRadius: 14,
+    gap: 2,
+    overflow: "hidden",
+    padding: 6,
   },
   projectLinkRow: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    borderRadius: 7,
-    borderWidth: 1,
+    borderRadius: 10,
     flexDirection: "row",
     gap: Spacing.two,
-    minHeight: 56,
+    minHeight: 58,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
@@ -1239,17 +1224,13 @@ const styles = StyleSheet.create({
   },
   connectionPanel: {
     backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(255, 255, 255, 0.09)",
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 14,
     gap: Spacing.two,
     padding: Spacing.three,
   },
   notificationPanel: {
     backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(255, 255, 255, 0.09)",
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 14,
     overflow: "hidden",
   },
   notificationIntro: {
@@ -1285,9 +1266,7 @@ const styles = StyleSheet.create({
   },
   usageCard: {
     backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(255, 255, 255, 0.09)",
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 14,
     overflow: "hidden",
   },
   usageRow: {
