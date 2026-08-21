@@ -13,6 +13,17 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/trollstore-ipa.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/mobile/**"
+      - "packages/**"
+      - "scripts/build-trollstore-ipa.sh"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/trollstore-ipa.yml"
   workflow_dispatch:
 
 permissions:
@@ -69,7 +80,7 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
