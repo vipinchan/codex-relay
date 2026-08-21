@@ -3,7 +3,7 @@ import { Pressable, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
-import { ThreadDrawerContent } from "@/components/chat/ThreadDrawerContent";
+import { ConversationHistoryScreen } from "@/components/chat/ConversationHistoryScreen";
 import {
   EXPANDED_DRAWER_BREAKPOINT,
   IpadSplitLayoutProvider,
@@ -13,7 +13,6 @@ import { Icon, type AppIconName } from "@/components/ui/icon";
 import { Colors } from "@/constants/theme";
 import { hapticMediumImpact } from "@/lib/haptics";
 
-const COMPACT_DRAWER_WIDTH = 320;
 const COLLAPSED_DRAWER_WIDTH = 52;
 
 export default function DrawerLayout() {
@@ -26,11 +25,11 @@ export default function DrawerLayout() {
 
 function DrawerLayoutContent() {
   const { width } = useWindowDimensions();
-  const { beginSidebarResize, isSidebarVisible, resizeSidebar, setSidebarVisible, sidebarWidth } =
-    useIpadSplitLayout();
+  const { isSidebarVisible, setSidebarVisible, sidebarWidth } = useIpadSplitLayout();
   const usesExpandedDrawer = width >= EXPANDED_DRAWER_BREAKPOINT;
   const showsExpandedDrawer = usesExpandedDrawer && isSidebarVisible;
   const showsCollapsedRail = usesExpandedDrawer && !isSidebarVisible;
+  const compactDrawerWidth = Math.min(width * 0.92, 420);
 
   function expandSidebar() {
     setSidebarVisible(true);
@@ -41,12 +40,13 @@ function DrawerLayoutContent() {
     <Drawer
       drawerContent={(props) =>
         showsExpandedDrawer || !usesExpandedDrawer ? (
-          <ThreadDrawerContent
-            isPermanent={showsExpandedDrawer}
-            showResizeHandle={showsExpandedDrawer}
-            onSidebarResize={resizeSidebar}
-            onSidebarResizeStart={beginSidebarResize}
-            {...props}
+          <ConversationHistoryScreen
+            mode="drawer"
+            onClose={() => {
+              if (!showsExpandedDrawer) {
+                props.navigation.closeDrawer();
+              }
+            }}
           />
         ) : showsCollapsedRail ? (
           <CollapsedThreadSidebarRail onExpand={expandSidebar} />
@@ -55,22 +55,24 @@ function DrawerLayoutContent() {
       screenOptions={{
         drawerType: usesExpandedDrawer ? "permanent" : "front",
         headerShown: false,
-        swipeEnabled: false,
+        swipeEnabled: !usesExpandedDrawer,
+        swipeEdgeWidth: 76,
+        swipeMinDistance: 22,
         sceneStyle: {
           backgroundColor: "#000000",
         },
         drawerStyle: {
-          backgroundColor: "#0C0C0D",
-          borderRightColor: "rgba(255, 255, 255, 0.08)",
+          backgroundColor: "#000000",
+          borderRightColor: "rgba(255, 255, 255, 0.06)",
           borderRightWidth: usesExpandedDrawer ? 1 : 0,
           overflow: showsExpandedDrawer ? "visible" : "hidden",
           width: usesExpandedDrawer
             ? showsExpandedDrawer
               ? sidebarWidth
               : COLLAPSED_DRAWER_WIDTH
-            : COMPACT_DRAWER_WIDTH,
+            : compactDrawerWidth,
         },
-        overlayColor: usesExpandedDrawer ? "transparent" : "rgba(0, 0, 0, 0.44)",
+        overlayColor: usesExpandedDrawer ? "transparent" : "rgba(0, 0, 0, 0.58)",
       }}
     >
       <Drawer.Screen
@@ -97,9 +99,9 @@ function CollapsedThreadSidebarRail({ onExpand }: { onExpand: () => void }) {
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.collapsedRail}>
       <View style={styles.collapsedRailTop}>
-        <CollapsedRailButton icon="sidebarShow" label="Show threads" onPress={onExpand} />
-        <CollapsedRailButton icon="search" label="Open thread search" onPress={onExpand} />
-        <CollapsedRailButton icon="newChat" label="Open new chat" onPress={onExpand} />
+        <CollapsedRailButton icon="sidebarShow" label="Show conversations" onPress={onExpand} />
+        <CollapsedRailButton icon="search" label="Search conversations" onPress={onExpand} />
+        <CollapsedRailButton icon="newChat" label="New chat" onPress={onExpand} />
       </View>
       <CollapsedRailButton icon="settings" label="Open settings" onPress={onExpand} />
     </SafeAreaView>
@@ -131,7 +133,7 @@ function CollapsedRailButton({
 const styles = StyleSheet.create({
   collapsedRail: {
     alignItems: "center",
-    backgroundColor: "#0C0C0D",
+    backgroundColor: "#000000",
     flex: 1,
     justifyContent: "space-between",
     paddingBottom: 10,
