@@ -25,409 +25,294 @@ function edit(path, transform) {
   write(path, after);
 }
 
-// OpenMinis' dark appearance is based on native iOS system surfaces. Keep Codex
-// Relay dark-only for this personal build, but move the palette to the same
-// black / system-gray hierarchy so every existing themed component benefits.
-write(
-  "apps/mobile/src/constants/theme.ts",
-  `/**
- * OpenMinis-inspired native iOS palette for the personal Codex Relay client.
- * The app intentionally stays dark-only; semantic surfaces mirror iOS system
- * background/fill hierarchy so chat content remains the visual focus.
- */
+// Pass 2: reduce developer-dashboard chrome and make navigation/chat states feel
+// like a focused mobile agent. Relay/server behavior remains untouched.
+edit("apps/mobile/src/components/chat/ThreadDrawerContent.tsx", (source) => {
+  let next = source
+    .replace("  Linking,\n", "")
+    .replace('import { FaGithub } from "@/assets/icons/fa";\n', "")
+    .replace('import { codexRelayRepositoryUrl } from "@/constants/links";\n', "")
+    .replace("<Text style={styles.brandText}>Codex Relay</Text>", "<Text style={styles.brandText}>Codex</Text>");
 
-import { Platform } from "react-native";
+  next = replaceOnce(
+    next,
+    `    <View style={[styles.footerBlock, { paddingBottom: Math.max(bottomInset, 8) }]}>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel="Open Codex Relay GitHub repository"
+        onPress={() => void Linking.openURL(codexRelayRepositoryUrl)}
+        style={styles.repositoryFooter}
+      >
+        {({ pressed }) => (
+          <>
+            <View style={[styles.rowIconSlot, pressed && styles.drawerPressedContent]}>
+              <FaGithub size={16} color={theme.text} />
+            </View>
+            <View style={[styles.repositoryFooterCopy, pressed && styles.drawerPressedContent]}>
+              <Text style={styles.repositoryFooterTitle}>Codex Relay on GitHub</Text>
+            </View>
+          </>
+        )}
+      </Pressable>
+      <Pressable`,
+    `    <View style={[styles.footerBlock, { paddingBottom: Math.max(bottomInset, 8) }]}>
+      <Pressable`,
+    "drawer repository footer",
+  );
 
-const nativeDark = {
-  text: "#F5F5F7",
-  background: "#000000",
-  backgroundElement: "#1C1C1E",
-  backgroundSelected: "#2C2C2E",
-  textSecondary: "#8E8E93",
-  textSecondaryStrong: "#AEAEB2",
-  powerTrack: "#3A3A3C",
-  powerBlue: "#5E9EFF",
-  powerViolet: "#8B7BFF",
-  powerMagenta: "#C77DFF",
-  agentGreen: "#70C769",
-  agentViolet: "#A68BDD",
-  agentCyan: "#55C2DE",
-  agentTeal: "#59BDB5",
-} as const;
+  next = replaceOnce(
+    next,
+    `            {canMutateAppServerThreads ? (
+              <SheetActionRow
+                accessibilityLabel="Rename chat"
+                icon="newChat"
+                onPress={openRenameThread}
+                title="Rename chat"
+              />
+            ) : null}
+`,
+    `            {canMutateAppServerThreads ? (
+              <SheetActionRow
+                accessibilityLabel="Rename chat"
+                icon="newChat"
+                onPress={openRenameThread}
+                title="Rename chat"
+              />
+            ) : null}
+            <SheetActionRow
+              accessibilityLabel="Archive chat"
+              icon="archive"
+              onPress={() => {
+                const thread = threadWithActions;
+                closeThreadActions();
+                confirmArchiveThread(thread);
+              }}
+              title="Archive chat"
+            />
+`,
+    "archive action sheet item",
+  );
 
-export const Colors = {
-  light: nativeDark,
-  dark: nativeDark,
-} as const;
+  next = next
+    .replace("        archiveThreadPending={archiveThreadMutation.isPending}\n", "")
+    .replace("        onArchiveThread={confirmArchiveThread}\n", "")
+    .replace("  archiveThreadPending: boolean;\n", "")
+    .replace("  onArchiveThread: (thread: ThreadSummary) => void;\n", "")
+    .replace("  archiveThreadPending,\n", "")
+    .replace("  onArchiveThread,\n", "")
+    .replace("    previous.archiveThreadPending !== next.archiveThreadPending ||\n", "")
+    .replace("    previous.onArchiveThread !== next.onArchiveThread ||\n", "");
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+  next = replaceOnce(
+    next,
+    `      <Button
+        accessibilityLabel={\`Archive thread \${item.thread.title}\`}
+        disabled={archiveThreadPending}
+        onPress={() => onArchiveThread(item.thread)}
+        size="icon"
+        variant="ghost"
+        className="size-8 rounded-md"
+      >
+        <Icon name="archive" size={14} tintColor={theme.textSecondary} />
+      </Button>
+`,
+    "",
+    "inline archive button",
+  );
 
-export const Fonts = Platform.select({
-  default: {
-    sans: "System",
-    sansBold: "System",
-    sansMedium: "System",
-    sansSemiBold: "System",
-    serif: "serif",
-    rounded: "System",
-    mono: "monospace",
-    monoMedium: "monospace",
+  next = next
+    .replace(
+      `  footer: {
+    alignItems: "center",
+    flexDirection: "row",
+    minHeight: 42,
+    paddingHorizontal: 0,
+  },`,
+      `  footer: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.055)",
+    borderRadius: 12,
+    flexDirection: "row",
+    minHeight: 44,
+    paddingHorizontal: 8,
+  },`,
+    )
+    .replace(
+      `  repositoryFooter: {
+    alignItems: "center",
+    borderRadius: 7,
+    flexDirection: "row",
+    minHeight: 48,
+    paddingHorizontal: 0,
+    paddingVertical: 4,
   },
-  android: {
-    sans: "sans-serif",
-    sansBold: "sans-serif",
-    sansMedium: "sans-serif-medium",
-    sansSemiBold: "sans-serif-medium",
-    serif: "serif",
-    rounded: "sans-serif",
-    mono: "monospace",
-    monoMedium: "monospace",
+  repositoryFooterCopy: {
+    flex: 1,
+    minWidth: 0,
   },
-  ios: {
-    sans: "System",
-    sansBold: "System",
-    sansMedium: "System",
-    sansSemiBold: "System",
-    serif: "serif",
-    rounded: "System",
-    mono: "Menlo",
-    monoMedium: "Menlo",
+  repositoryFooterTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
   },
-  web: {
-    sans: "var(--font-display)",
-    sansBold: "var(--font-display-bold)",
-    sansMedium: "var(--font-display-medium)",
-    sansSemiBold: "var(--font-display-semibold)",
-    serif: "var(--font-serif)",
-    rounded: "var(--font-rounded)",
-    mono: "var(--font-mono)",
-    monoMedium: "var(--font-mono-medium)",
-  },
+`,
+      "",
+    )
+    .replace("    paddingTop: 8,\n  },\n  footerText:", "    paddingTop: 8,\n  },\n  footerText:");
+
+  return next;
 });
 
-export const Spacing = {
-  half: 2,
-  one: 4,
-  two: 8,
-  three: 16,
-  four: 24,
-  five: 32,
-  six: 64,
-} as const;
-
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
-`,
-);
-
-write(
-  "apps/mobile/src/global.css",
-  `@import "tailwindcss";
-@import "uniwind";
-@plugin "tailwindcss-animate";
-
-@custom-variant dark (&:is(.dark *));
-
-@theme {
-  --color-border: hsl(240 2% 23%);
-  --color-input: hsl(240 3% 11%);
-  --color-ring: hsl(240 2% 56%);
-  --color-background: hsl(0 0% 0%);
-  --color-foreground: hsl(240 5% 96%);
-  --color-primary: hsl(240 5% 96%);
-  --color-primary-foreground: hsl(0 0% 5%);
-  --color-secondary: hsl(240 3% 11%);
-  --color-secondary-foreground: hsl(240 5% 96%);
-  --color-destructive: hsl(0 74% 59%);
-  --color-destructive-foreground: hsl(0 0% 100%);
-  --color-muted: hsl(240 3% 15%);
-  --color-muted-foreground: hsl(240 2% 56%);
-  --color-accent: hsl(240 3% 17%);
-  --color-accent-foreground: hsl(240 5% 96%);
-  --color-popover: hsl(240 3% 11%);
-  --color-popover-foreground: hsl(240 5% 96%);
-  --color-card: hsl(240 3% 11%);
-  --color-card-foreground: hsl(240 5% 96%);
-  --radius-lg: 0.875rem;
-  --radius-md: calc(0.875rem - 2px);
-  --radius-sm: calc(0.875rem - 4px);
-  --font-sans: Geist;
-  --font-mono: GeistMono;
-}
-
-:root {
-  --font-display:
-    Geist, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji,
-    Segoe UI Symbol, Noto Color Emoji;
-  --font-display-medium:
-    Geist-Medium, Geist, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji,
-    Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
-  --font-display-semibold:
-    Geist-SemiBold, Geist, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji,
-    Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
-  --font-display-bold:
-    Geist-Bold, Geist, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji,
-    Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
-  --font-mono:
-    GeistMono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New,
-    monospace;
-  --font-mono-medium:
-    GeistMono-Medium, GeistMono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    Liberation Mono, Courier New, monospace;
-  --font-rounded: Geist, Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-serif: Geist, Inter, ui-sans-serif, system-ui, sans-serif;
-
-  --radius: 0.875rem;
-}
-`,
-);
-
-edit("apps/mobile/src/app/_layout.tsx", (source) =>
-  source.replaceAll("#191919", "#000000").replaceAll("#202222", "#0C0C0D"),
-);
-
-edit("apps/mobile/src/app/(drawer)/_layout.tsx", (source) =>
-  source
-    .replaceAll("#191919", "#000000")
-    .replaceAll("#202222", "#0C0C0D")
-    .replace('overlayColor: usesExpandedDrawer ? "transparent" : "rgba(0, 0, 0, 0.28)"', 'overlayColor: usesExpandedDrawer ? "transparent" : "rgba(0, 0, 0, 0.44)"'),
-);
-
-edit("apps/mobile/src/components/chat/ChatShellHeader.tsx", (source) => {
+edit("apps/mobile/src/components/chat/MessageTimeline.tsx", (source) => {
   let next = replaceOnce(
     source,
-    'type="code"\n          themeColor="textSecondary"',
-    'type="small"\n          themeColor="textSecondary"',
-    "header subtitle typography",
+    'import { ThemedText } from "@/components/themed-text";\n',
+    'import { ThemedText } from "@/components/themed-text";\nimport { Icon } from "@/components/ui/icon";\n',
+    "empty state icon import",
   );
   next = replaceOnce(
     next,
-    `  header: {
-    alignItems: "center",
-    elevation: 4,
-    flexDirection: "row",
-    gap: 10,
-    paddingBottom: 8,
-    paddingHorizontal: 18,
-    paddingTop: 6,
-    zIndex: 4,
-  },`,
-    `  header: {
-    alignItems: "center",
-    elevation: 4,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 46,
-    paddingBottom: 5,
-    paddingHorizontal: 14,
-    paddingTop: 3,
-    zIndex: 4,
-  },`,
-    "chat header layout",
+    `            <View style={styles.empty}>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+                Send a message to start the conversation.
+              </ThemedText>
+            </View>`,
+    `            <View style={styles.empty}>
+              <View style={styles.emptyMark}>
+                <Icon name="model" size={20} tintColor="#F5F5F7" />
+              </View>
+              <ThemedText type="smallBold" style={styles.emptyTitle}>
+                What do you want to build?
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+                Message Codex to start working in this workspace.
+              </ThemedText>
+            </View>`,
+    "empty conversation state",
   );
   next = replaceOnce(
     next,
-    `  headerButton: {
+    `  empty: {
     alignItems: "center",
-    backgroundColor: "rgba(42, 42, 42, 0.8)",
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    flex: 1,
+    gap: Spacing.two,
+    justifyContent: "center",
+    padding: Spacing.four,
+  },
+  emptyText: {
+    maxWidth: 260,
+    textAlign: "center",
+  },`,
+    `  empty: {
+    alignItems: "center",
+    flex: 1,
+    gap: 7,
+    justifyContent: "center",
+    padding: Spacing.four,
+  },
+  emptyMark: {
+    alignItems: "center",
+    backgroundColor: "#1C1C1E",
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 44,
+    justifyContent: "center",
+    marginBottom: 3,
+    width: 44,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 18,
+    maxWidth: 280,
+    textAlign: "center",
+  },`,
+    "empty state styles",
+  );
+  return next;
+});
+
+edit("apps/mobile/src/components/chat/MessageBubble.tsx", (source) =>
+  source
+    .replace(
+      `  messageFooter: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 4,
+  },`,
+      `  messageFooter: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    marginTop: 2,
+  },`,
+    )
+    .replace(
+      `  copyButton: {
+    alignItems: "center",
+    borderRadius: 8,
+    height: 22,
+    justifyContent: "center",
+    marginLeft: -1,
+    width: 22,
+  },`,
+      `  copyButton: {
+    alignItems: "center",
+    borderRadius: 8,
+    height: 22,
+    justifyContent: "center",
+    marginLeft: -1,
+    opacity: 0.58,
+    width: 22,
+  },`,
+    ),
+);
+
+edit("apps/mobile/src/components/chat/ChatComposer.tsx", (source) =>
+  source
+    .replace(
+      `  iconButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.09)",
+    borderColor: "rgba(255, 255, 255, 0.18)",
     borderRadius: 18,
     borderWidth: 1,
     height: 36,
-    justifyContent: "center",
-    position: "relative",
     width: 36,
-    zIndex: 7,
   },`,
-    `  headerButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(28, 28, 30, 0.82)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 17,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 34,
-    justifyContent: "center",
-    position: "relative",
-    width: 34,
-    zIndex: 7,
-  },`,
-    "header action buttons",
-  );
-  next = next
-    .replace('    fontSize: 10,\n    lineHeight: 14,', '    fontSize: 11,\n    lineHeight: 14,')
-    .replace('    opacity: 0.84,', '    opacity: 0.62,')
-    .replace('    fontSize: 17,\n    lineHeight: 22,', '    fontSize: 16,\n    lineHeight: 20,');
-  return next;
-});
-
-edit("apps/mobile/src/components/chat/chat-shell-styles.ts", (source) => {
-  let next = replaceOnce(
-    source,
-    `  shell: {
-    backgroundColor: Colors.dark.background,
-    flex: 1,
-    gap: 0,
-    paddingTop: Spacing.one,
-  },`,
-    `  shell: {
-    backgroundColor: Colors.dark.background,
-    flex: 1,
-    gap: 0,
-    paddingTop: 0,
-  },`,
-    "chat shell spacing",
-  );
-  next = next.replace('    elevation: 8,', '    elevation: 12,');
-  return next;
-});
-
-edit("apps/mobile/src/components/chat/ThreadDrawerContent.tsx", (source) => {
-  let next = source
-    .replace('    paddingHorizontal: 12,\n  },\n  list:', '    paddingHorizontal: 10,\n  },\n  list:')
-    .replace('    gap: 8,\n    paddingBottom: 8,\n    paddingTop: 12,', '    gap: 10,\n    paddingBottom: 10,\n    paddingTop: 10,')
-    .replace('    fontSize: 14,\n    fontWeight: "600",\n    lineHeight: 18,', '    fontSize: 16,\n    fontWeight: "700",\n    lineHeight: 21,')
-    .replace('    borderRadius: 8,\n    borderWidth: StyleSheet.hairlineWidth,\n    flexDirection: "row",\n    height: 32,\n    marginHorizontal: 4,', '    borderRadius: 12,\n    borderWidth: StyleSheet.hairlineWidth,\n    flexDirection: "row",\n    height: 36,\n    marginHorizontal: 0,')
-    .replace('  newChatRow: {\n    alignItems: "center",\n    borderRadius: 7,\n    flexDirection: "row",\n    minHeight: 36,\n    paddingHorizontal: 8,\n  },', '  newChatRow: {\n    alignItems: "center",\n    backgroundColor: "rgba(255, 255, 255, 0.055)",\n    borderRadius: 12,\n    flexDirection: "row",\n    minHeight: 40,\n    paddingHorizontal: 8,\n  },')
-    .replace('  thread: {\n    alignItems: "center",\n    borderRadius: 6,\n    flexDirection: "row",\n    minHeight: 44,', '  thread: {\n    alignItems: "center",\n    borderRadius: 10,\n    flexDirection: "row",\n    minHeight: 46,')
-    .replace('  threadSelected: {\n    backgroundColor: "rgba(255, 255, 255, 0.075)",\n  },', '  threadSelected: {\n    backgroundColor: "rgba(255, 255, 255, 0.09)",\n  },')
-    .replace('    backgroundColor: "#8CC7FF",', '    backgroundColor: "#F5F5F7",')
-    .replace('    backgroundColor: "#191919",\n    borderTopColor:', '    backgroundColor: "#0C0C0D",\n    borderTopColor:')
-    .replace('  drawerRoot: {\n    flex: 1,', '  drawerRoot: {\n    backgroundColor: "#0C0C0D",\n    flex: 1,');
-  return next;
-});
-
-edit("apps/mobile/src/components/chat/ChatComposer.tsx", (source) => {
-  let next = source
-    .replace('const DEFAULT_COMPOSER_PLACEHOLDER = "Ask Codex anything. Try $skills or @files.";', 'const DEFAULT_COMPOSER_PLACEHOLDER = "Message Codex";')
-    .replace('const PLAN_COMPOSER_PLACEHOLDER = "Ask Codex for a plan. Try $skills or @files.";', 'const PLAN_COMPOSER_PLACEHOLDER = "Plan with Codex";')
-    .replace('            borderColor: "rgba(255, 255, 255, 0.1)",', '            borderColor: "rgba(255, 255, 255, 0.12)",');
-  next = replaceOnce(
-    next,
-    `  container: {
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    borderWidth: 1,
-    borderRadius: 18,
-    gap: 5,
-    marginHorizontal: 18,
-    marginBottom: 6,
-    marginTop: 6,
-    paddingBottom: 8,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-  },`,
-    `  container: {
+      `  iconButton: {
+    backgroundColor: "rgba(118, 118, 128, 0.18)",
     borderColor: "rgba(255, 255, 255, 0.12)",
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 22,
-    gap: 4,
-    marginHorizontal: 12,
-    marginBottom: 8,
-    marginTop: 4,
-    paddingBottom: 8,
-    paddingHorizontal: 12,
-    paddingTop: 10,
+    height: 36,
+    width: 36,
   },`,
-    "composer container",
-  );
-  next = replaceOnce(
-    next,
-    `  input: {
-    backgroundColor: "transparent",
-    fontFamily: Fonts.sansMedium,
-    fontSize: 13,
-    lineHeight: 18,
-    maxHeight: 84,
-    minHeight: 42,
-    paddingHorizontal: 2,
-    paddingTop: 0,
-    paddingBottom: 0,
-    textAlignVertical: "top",
+    )
+    .replace(
+      `  contextButton: {
+    alignItems: "center",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    marginLeft: 2,
+    width: 36,
   },`,
-    `  input: {
-    backgroundColor: "transparent",
-    fontFamily: Fonts.sans,
-    fontSize: 15,
-    lineHeight: 21,
-    maxHeight: 120,
-    minHeight: 42,
-    paddingHorizontal: 2,
-    paddingTop: 1,
-    paddingBottom: 0,
-    textAlignVertical: "top",
+      `  contextButton: {
+    alignItems: "center",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    marginLeft: 0,
+    opacity: 0.82,
+    width: 36,
   },`,
-    "composer input",
-  );
-  next = next
-    .replace('  actionRow: {\n    alignItems: "center",\n    flexDirection: "row",\n    gap: 8,\n    height: 40,', '  actionRow: {\n    alignItems: "center",\n    flexDirection: "row",\n    gap: 7,\n    height: 40,')
-    .replace('    backgroundColor: "rgba(255, 255, 255, 0.09)",\n    borderColor: "rgba(255, 255, 255, 0.18)",', '    backgroundColor: "rgba(118, 118, 128, 0.18)",\n    borderColor: "rgba(255, 255, 255, 0.12)",')
-    .replace('    backgroundColor: "#F3F4F6",', '    backgroundColor: "#F5F5F7",')
-    .replace('    backgroundColor: "rgba(243, 244, 246, 0.14)",', '    backgroundColor: "rgba(245, 245, 247, 0.16)",');
-  return next;
-});
-
-edit("apps/mobile/src/components/chat/MessageBubble.tsx", (source) => {
-  let next = replaceOnce(
-    source,
-    `            <ThemedText type="code" themeColor="textSecondary" style={styles.assistantLabel}>
-              Codex
-            </ThemedText>
-`,
-    "",
-    "assistant identity label",
-  );
-  next = replaceOnce(
-    next,
-    `  row: {
-    marginVertical: Spacing.two,
-  },`,
-    `  row: {
-    marginVertical: 6,
-  },`,
-    "message row rhythm",
-  );
-  next = replaceOnce(
-    next,
-    `  userBubble: {
-    backgroundColor: "rgba(56, 56, 56, 0.8)",
-    borderColor: "rgba(255, 255, 255, 0.09)",
-    borderWidth: 1,
-    maxWidth: "82%",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },`,
-    `  userBubble: {
-    backgroundColor: "rgba(118, 118, 128, 0.24)",
-    borderWidth: 0,
-    maxWidth: "84%",
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-  },`,
-    "user bubble",
-  );
-  next = next
-    .replace('  assistantLabel: {\n    marginBottom: Spacing.one,\n    opacity: 0.7,\n  },\n', "")
-    .replace('  timestamp: {\n    opacity: 0.55,\n  },', '  timestamp: {\n    display: "none",\n  },')
-    .replace('  goalValueBubble: {\n    backgroundColor: "rgba(56, 56, 56, 0.8)",\n    borderColor: "rgba(255, 255, 255, 0.09)",\n    borderRadius: 16,\n    borderWidth: 1,', '  goalValueBubble: {\n    backgroundColor: "rgba(118, 118, 128, 0.24)",\n    borderRadius: 16,\n    borderWidth: 0,');
-  return next;
-});
-
-edit("apps/mobile/src/components/chat/MessageTimeline.tsx", (source) =>
-  source
-    .replace('    paddingHorizontal: Spacing.four,\n    paddingTop: Spacing.two,', '    paddingHorizontal: 18,\n    paddingTop: 6,')
-    .replace('    paddingBottom: Spacing.two,', '    paddingBottom: 6,'),
+    ),
 );
 
-edit("apps/mobile/src/components/chat/ProtocolActivityCard.tsx", (source) =>
-  source
-    .replace('  planCard: {\n    alignSelf: "stretch",\n    borderRadius: 10,', '  planCard: {\n    alignSelf: "stretch",\n    borderRadius: 14,')
-    .replace('  inputRequestCard: {\n    borderRadius: 9,', '  inputRequestCard: {\n    borderRadius: 14,')
-    .replace('    borderRadius: 9,\n    borderWidth: StyleSheet.hairlineWidth,', '    borderRadius: 12,\n    borderWidth: StyleSheet.hairlineWidth,')
-    .replace('  fileChangeCard: {\n    alignSelf: "stretch",\n    borderRadius: 10,', '  fileChangeCard: {\n    alignSelf: "stretch",\n    borderRadius: 14,'),
-);
-
-edit("apps/mobile/src/components/chat/RunningFooter.tsx", (source) =>
-  source
-    .replace('    justifyContent: "center",\n    paddingBottom: Spacing.four,\n    paddingTop: Spacing.two,', '    justifyContent: "flex-start",\n    paddingBottom: Spacing.three,\n    paddingTop: Spacing.one,'),
-);
-
-console.log("OpenMinis-inspired UI pass complete");
+console.log("OpenMinis-inspired UI refinement pass complete");
