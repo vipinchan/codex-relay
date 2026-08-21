@@ -8,7 +8,7 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "codex-relay",
-    userInterfaceStyle: "automatic",
+    userInterfaceStyle: "dark",
     ios: {
       icon: "./assets/images/icon.png",
       bundleIdentifier: "com.gronstudio.codexrelay",
@@ -31,7 +31,7 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
     },
     android: {
       adaptiveIcon: {
-        backgroundColor: "#191919",
+        backgroundColor: "#000000",
         foregroundImage: "./assets/images/android-icon-foreground.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
@@ -54,7 +54,7 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
       [
         "expo-splash-screen",
         {
-          backgroundColor: "#191919",
+          backgroundColor: "#000000",
           image: "./assets/images/splash-icon.png",
           imageWidth: 112,
           android: {
