@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { Pressable, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
@@ -50,13 +51,24 @@ export function ChatShellHeader({
 }
 
 function HeaderButton({ action }: { action: ChatShellAction }) {
+  const returnsToHistory = action.label === "Open threads";
+  const icon = returnsToHistory ? "back" : action.icon;
+
+  function handlePress() {
+    if (returnsToHistory && router.canGoBack()) {
+      router.back();
+      return;
+    }
+    action.onPress();
+  }
+
   return (
     <Pressable
-      accessibilityLabel={action.label}
+      accessibilityLabel={returnsToHistory ? "Back to conversations" : action.label}
       accessibilityRole="button"
       disabled={action.disabled}
       hitSlop={8}
-      onPress={action.onPress}
+      onPress={handlePress}
       onPressIn={action.disabled ? undefined : hapticSelection}
       pressRetentionOffset={12}
       style={({ pressed }) => [
@@ -65,7 +77,7 @@ function HeaderButton({ action }: { action: ChatShellAction }) {
         pressed && styles.pressed,
       ]}
     >
-      <Icon name={action.icon} size={17} tintColor={Colors.dark.text} />
+      <Icon name={icon} size={18} tintColor={Colors.dark.text} />
     </Pressable>
   );
 }
@@ -76,7 +88,7 @@ const styles = StyleSheet.create({
     elevation: 4,
     flexDirection: "row",
     gap: 8,
-    minHeight: 46,
+    minHeight: 48,
     paddingBottom: 5,
     paddingHorizontal: 14,
     paddingTop: 3,
@@ -91,27 +103,26 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     alignItems: "center",
-    backgroundColor: "rgba(28, 28, 30, 0.82)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 17,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 34,
+    backgroundColor: "transparent",
+    borderRadius: 18,
+    height: 36,
     justifyContent: "center",
     position: "relative",
-    width: 34,
+    width: 36,
     zIndex: 7,
   },
   headerButtonDisabled: {
     opacity: 0.45,
   },
   pressed: {
-    opacity: 0.7,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    opacity: 0.72,
   },
   subtitle: {
     fontSize: 11,
     lineHeight: 14,
     maxWidth: "100%",
-    opacity: 0.62,
+    opacity: 0.58,
     textAlign: "center",
   },
   title: {
