@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native-unistyles";
 
-import { Colors, MaxContentWidth, Spacing } from "@/constants/theme";
+import { Colors, MaxContentWidth } from "@/constants/theme";
 
 export const chatShellStyles = StyleSheet.create({
   chatBody: {
