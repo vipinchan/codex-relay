@@ -57,10 +57,10 @@ function DrawerLayoutContent() {
         headerShown: false,
         swipeEnabled: false,
         sceneStyle: {
-          backgroundColor: "#191919",
+          backgroundColor: "#000000",
         },
         drawerStyle: {
-          backgroundColor: "#202222",
+          backgroundColor: "#0C0C0D",
           borderRightColor: "rgba(255, 255, 255, 0.08)",
           borderRightWidth: usesExpandedDrawer ? 1 : 0,
           overflow: showsExpandedDrawer ? "visible" : "hidden",
@@ -70,7 +70,7 @@ function DrawerLayoutContent() {
               : COLLAPSED_DRAWER_WIDTH
             : COMPACT_DRAWER_WIDTH,
         },
-        overlayColor: usesExpandedDrawer ? "transparent" : "rgba(0, 0, 0, 0.28)",
+        overlayColor: usesExpandedDrawer ? "transparent" : "rgba(0, 0, 0, 0.44)",
       }}
     >
       <Drawer.Screen
@@ -131,7 +131,7 @@ function CollapsedRailButton({
 const styles = StyleSheet.create({
   collapsedRail: {
     alignItems: "center",
-    backgroundColor: "#202222",
+    backgroundColor: "#0C0C0D",
     flex: 1,
     justifyContent: "space-between",
     paddingBottom: 10,

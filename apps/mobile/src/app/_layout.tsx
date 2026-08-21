@@ -40,9 +40,9 @@ const appTheme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    background: "#191919",
+    background: "#000000",
     border: "rgba(255, 255, 255, 0.08)",
-    card: "#202222",
+    card: "#0C0C0D",
   },
 };
 
@@ -194,7 +194,7 @@ function TabLayout() {
               <Stack
                 screenOptions={{
                   contentStyle: {
-                    backgroundColor: "#191919",
+                    backgroundColor: "#000000",
                   },
                   headerShown: false,
                 }}

@@ -32,7 +32,7 @@ export function ChatShellHeader({
           {title}
         </ThemedText>
         <ThemedText
-          type="code"
+          type="small"
           themeColor="textSecondary"
           style={styles.subtitle}
           numberOfLines={1}
@@ -75,10 +75,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 4,
     flexDirection: "row",
-    gap: 10,
-    paddingBottom: 8,
-    paddingHorizontal: 18,
-    paddingTop: 6,
+    gap: 8,
+    minHeight: 46,
+    paddingBottom: 5,
+    paddingHorizontal: 14,
+    paddingTop: 3,
     zIndex: 4,
   },
   headerActions: {
@@ -90,14 +91,14 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     alignItems: "center",
-    backgroundColor: "rgba(42, 42, 42, 0.8)",
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    borderRadius: 18,
-    borderWidth: 1,
-    height: 36,
+    backgroundColor: "rgba(28, 28, 30, 0.82)",
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 17,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 34,
     justifyContent: "center",
     position: "relative",
-    width: 36,
+    width: 34,
     zIndex: 7,
   },
   headerButtonDisabled: {
@@ -107,15 +108,15 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   subtitle: {
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
     maxWidth: "100%",
-    opacity: 0.84,
+    opacity: 0.62,
     textAlign: "center",
   },
   title: {
-    fontSize: 17,
-    lineHeight: 22,
+    fontSize: 16,
+    lineHeight: 20,
     textAlign: "center",
   },
   titleGroup: {

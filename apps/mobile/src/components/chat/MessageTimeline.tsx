@@ -216,9 +216,9 @@ function LoadingConversation() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: Spacing.two,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.two,
+    paddingBottom: 6,
+    paddingHorizontal: 18,
+    paddingTop: 6,
   },
   empty: {
     alignItems: "center",

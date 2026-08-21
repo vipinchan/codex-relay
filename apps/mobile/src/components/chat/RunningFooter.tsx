@@ -123,8 +123,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: Spacing.two,
-    justifyContent: "center",
-    paddingBottom: Spacing.four,
-    paddingTop: Spacing.two,
+    justifyContent: "flex-start",
+    paddingBottom: Spacing.three,
+    paddingTop: Spacing.one,
   },
 });
