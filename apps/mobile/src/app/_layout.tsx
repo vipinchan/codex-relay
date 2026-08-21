@@ -156,7 +156,7 @@ function TabLayout() {
         return;
       }
       setActiveThread(threadId);
-      router.replace("/");
+      router.replace("/chat");
       Notifications.clearLastNotificationResponse();
     };
 
@@ -212,9 +212,18 @@ function TabLayout() {
                   }}
                 />
                 <Stack.Screen
+                  name="settings-home"
+                  options={{
+                    animation: "slide_from_right",
+                    gestureEnabled: true,
+                    title: "Settings",
+                  }}
+                />
+                <Stack.Screen
                   name="settings"
                   options={{
                     animation: "slide_from_right",
+                    gestureEnabled: true,
                     title: "Settings",
                   }}
                 />
