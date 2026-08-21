@@ -3,13 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ThreadSummary } from "codex-relay/api-schema";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
-import {
-  Pressable,
-  SectionList,
-  TextInput,
-  View,
-  type SectionListData,
-} from "react-native";
+import { Pressable, SectionList, TextInput, View, type SectionListData } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
@@ -18,11 +12,7 @@ import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { hapticLightImpact, hapticSelection } from "@/lib/haptics";
 import { serverStateKeys, serverStateQueryFns } from "@/lib/server-state";
-import {
-  chatStore$,
-  requestThreadStreamReconnect,
-  setActiveThread,
-} from "@/state/chat-store";
+import { chatStore$, requestThreadStreamReconnect, setActiveThread } from "@/state/chat-store";
 import { pinnedThreadStore$, togglePinnedThread } from "@/state/pinned-thread-store";
 
 type Period = "pinned" | "today" | "yesterday" | "week" | "month" | "earlier";
@@ -54,9 +44,7 @@ export function ConversationsHome() {
     const source = serverThreads?.length
       ? serverThreads
       : cachedThreadIds.map((id) => cachedThreadsById[id]).filter(Boolean);
-    return [...source].sort(
-      (a, b) => activityTime(b).getTime() - activityTime(a).getTime(),
-    );
+    return [...source].sort((a, b) => activityTime(b).getTime() - activityTime(a).getTime());
   }, [cachedThreadIds, cachedThreadsById, threadsQuery.data?.threads]);
 
   const filteredThreads = useMemo(() => {
@@ -203,7 +191,8 @@ function ThreadRow({
   onPress: () => void;
   onLongPress: () => void;
 }) {
-  const preview = thread.lastMessagePreview || thread.lastResult || thread.lastPrompt || thread.cwd || "";
+  const preview =
+    thread.lastMessagePreview || thread.lastResult || thread.lastPrompt || thread.cwd || "";
   return (
     <Pressable
       onPress={onPress}
@@ -254,7 +243,11 @@ function RoundTopButton({
   );
 }
 
-function buildSections(threads: ThreadSummary[], pinnedIds: string[], zh: boolean): ThreadSection[] {
+function buildSections(
+  threads: ThreadSummary[],
+  pinnedIds: string[],
+  zh: boolean,
+): ThreadSection[] {
   const pinned = threads.filter((thread) => pinnedIds.includes(thread.id));
   const normal = threads.filter((thread) => !pinnedIds.includes(thread.id));
   const buckets: Record<Exclude<Period, "pinned">, ThreadSummary[]> = {
@@ -266,8 +259,22 @@ function buildSections(threads: ThreadSummary[], pinnedIds: string[], zh: boolea
   };
   for (const thread of normal) buckets[datePeriod(activityTime(thread))].push(thread);
   const labels: Record<Period, string> = zh
-    ? { pinned: "置顶", today: "今天", yesterday: "昨天", week: "本周", month: "本月", earlier: "更早" }
-    : { pinned: "Pinned", today: "Today", yesterday: "Yesterday", week: "This Week", month: "This Month", earlier: "Earlier" };
+    ? {
+        pinned: "置顶",
+        today: "今天",
+        yesterday: "昨天",
+        week: "本周",
+        month: "本月",
+        earlier: "更早",
+      }
+    : {
+        pinned: "Pinned",
+        today: "Today",
+        yesterday: "Yesterday",
+        week: "This Week",
+        month: "This Month",
+        earlier: "Earlier",
+      };
   const ordered: [Period, ThreadSummary[]][] = [
     ["pinned", pinned],
     ["today", buckets.today],
@@ -276,7 +283,9 @@ function buildSections(threads: ThreadSummary[], pinnedIds: string[], zh: boolea
     ["month", buckets.month],
     ["earlier", buckets.earlier],
   ];
-  return ordered.filter(([, data]) => data.length > 0).map(([key, data]) => ({ key, title: labels[key], data }));
+  return ordered
+    .filter(([, data]) => data.length > 0)
+    .map(([key, data]) => ({ key, title: labels[key], data }));
 }
 
 function activityTime(thread: ThreadSummary) {
@@ -372,7 +381,14 @@ const styles = StyleSheet.create({
   threadMeta: { width: 64, alignItems: "flex-end", gap: 8 },
   threadDate: { color: "#68686D", fontSize: 14, lineHeight: 18 },
   emptyState: { alignItems: "center", justifyContent: "center", paddingTop: 120, gap: 14 },
-  emptyIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: "#1C1C1E", alignItems: "center", justifyContent: "center" },
+  emptyIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#1C1C1E",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyTitle: { color: "#8E8E93", fontSize: 17 },
   fabDock: {
     position: "absolute",
