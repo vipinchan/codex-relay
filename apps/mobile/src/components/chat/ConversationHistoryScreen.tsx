@@ -259,7 +259,10 @@ export function ConversationHistoryScreen({ mode = "home", onClose }: Props) {
   }, [openThread, threads]);
 
   return (
-    <SafeAreaView edges={mode === "home" ? ["top", "left", "right"] : ["top", "right"]} style={styles.screen}>
+    <SafeAreaView
+      edges={mode === "home" ? ["top", "left", "right"] : ["top", "right"]}
+      style={styles.screen}
+    >
       <View style={styles.root}>
         <View style={styles.header}>
           <Pressable
@@ -342,7 +345,9 @@ export function ConversationHistoryScreen({ mode = "home", onClose }: Props) {
               </Text>
               {!normalizedSearch ? (
                 <Text style={styles.emptySubtitle}>
-                  {isChineseLocale() ? "点击右下角开始新会话" : "Tap the button below to start a new chat"}
+                  {isChineseLocale()
+                    ? "点击右下角开始新会话"
+                    : "Tap the button below to start a new chat"}
                 </Text>
               ) : null}
             </View>
@@ -423,7 +428,8 @@ function ConversationRow({
   pinned: boolean;
   thread: ThreadSummary;
 }) {
-  const avatarColor = avatarColors[hashString(thread.cwd ?? thread.id) % avatarColors.length] ?? avatarColors[0];
+  const avatarColor =
+    avatarColors[hashString(thread.cwd ?? thread.id) % avatarColors.length] ?? avatarColors[0];
   const preview = previewText(thread);
   const running = thread.state === "running";
 
@@ -458,7 +464,9 @@ function ConversationRow({
           {relativeDate(thread.lastActivityAt ?? thread.updatedAt)}
         </Text>
         {pinned ? <Icon name="pin" size={14} tintColor={palette.textSecondary} /> : null}
-        {isOpening ? <Icon name="running" size={14} tintColor={palette.textSecondaryStrong} /> : null}
+        {isOpening ? (
+          <Icon name="running" size={14} tintColor={palette.textSecondaryStrong} />
+        ) : null}
       </View>
     </Pressable>
   );
@@ -472,7 +480,9 @@ function buildSections(threads: ThreadSummary[], pinnedIds: Set<string>): Histor
 
   const ordered = [...threads].sort(compareActivity);
   for (const thread of ordered) {
-    const key = pinnedIds.has(thread.id) ? "pinned" : datePeriod(thread.lastActivityAt ?? thread.updatedAt);
+    const key = pinnedIds.has(thread.id)
+      ? "pinned"
+      : datePeriod(thread.lastActivityAt ?? thread.updatedAt);
     buckets.get(key)!.push(thread);
   }
 
