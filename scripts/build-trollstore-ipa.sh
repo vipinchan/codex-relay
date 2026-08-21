@@ -31,6 +31,9 @@ cd "$ROOT_DIR"
 pnpm --filter codex-relay build
 
 cd "$MOBILE_DIR"
+# This personal IPA is rebuilt from source on every main update. It does not
+# need the production Hot Updater bundle-signing key during Expo prebuild.
+export TROLLSTORE_BUILD=1
 pnpm exec expo prebuild --platform ios --clean --no-install
 
 cd "$IOS_DIR"
