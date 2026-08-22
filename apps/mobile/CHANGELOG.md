@@ -1,5 +1,11 @@
 # @codex-relay/mobile
 
+## 1.4.0-ship.8
+
+### Patch Changes
+
+- da0e825: Restore full working-directory selection when creating a new chat while preserving the session-first mobile navigation.
+
 ## 1.4.0-ship.7
 
 ### Patch Changes
