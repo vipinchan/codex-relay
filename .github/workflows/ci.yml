@@ -41,3 +41,44 @@ jobs:
 
       - name: Test release version policy
         run: pnpm test:release
+
+      - name: Verify published iOS release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag='@codex-relay/mobile@1.4.0-ship.7'
+          version='1.4.0-ship.7'
+          title='Codex Relay iOS 1.4.0-ship.7'
+          ipa="CodexRelay-${version}.ipa"
+
+          release_json="$(gh release view "$tag" --json name,tagName,isPrerelease,assets)"
+          [[ "$(jq -r '.tagName' <<<"$release_json")" == "$tag" ]]
+          [[ "$(jq -r '.name' <<<"$release_json")" == "$title" ]]
+          [[ "$(jq -r '.isPrerelease' <<<"$release_json")" == 'true' ]]
+
+          asset_names="$(jq -r '.assets[].name' <<<"$release_json")"
+          for expected_asset in "$ipa" "$ipa.sha256" build-info.txt; do
+            grep -Fxq "$expected_asset" <<<"$asset_names"
+          done
+
+          verify_dir="$(mktemp -d)"
+          gh release download "$tag" \
+            --pattern "$ipa" \
+            --pattern "$ipa.sha256" \
+            --pattern build-info.txt \
+            --dir "$verify_dir"
+
+          expected_sha="$(awk '{print $1}' "$verify_dir/$ipa.sha256")"
+          actual_sha="$(sha256sum "$verify_dir/$ipa" | awk '{print $1}')"
+          [[ -n "$expected_sha" ]]
+          [[ "$actual_sha" == "$expected_sha" ]]
+
+          grep -Fxq 'app_version=1.4.0' "$verify_dir/build-info.txt"
+          grep -Fxq 'mobile_release=1.4.0-ship.7' "$verify_dir/build-info.txt"
+          grep -Fxq 'minimum_ios=16.4' "$verify_dir/build-info.txt"
+
+          echo "Release verified: $tag"
+          echo "IPA SHA-256: $actual_sha"
