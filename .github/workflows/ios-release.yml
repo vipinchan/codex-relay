@@ -1,0 +1,185 @@
+name: iOS Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/mobile/package.json"
+      - "apps/mobile/CHANGELOG.md"
+      - "apps/mobile/app.config.ts"
+      - "apps/mobile/hot-updater.config.ts"
+      - "packages/**"
+      - "scripts/build-ios-ipa.sh"
+      - "scripts/mobile-release-version.mjs"
+      - ".github/scripts/detect-mobile-patch-release.mjs"
+      - ".github/workflows/ios-release.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-ipa:
+    name: Publish mobile IPA release
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect mobile ship release
+        id: mobile-release
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: node .github/scripts/detect-mobile-patch-release.mjs
+
+      - name: Set up pnpm
+        if: steps.mobile-release.outputs.deploy == 'true'
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        if: steps.mobile-release.outputs.deploy == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.mobile-release.outputs.deploy == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve release metadata
+        if: steps.mobile-release.outputs.deploy == 'true'
+        id: release
+        shell: bash
+        run: |
+          version="$(node -p 'require("./apps/mobile/package.json").version')"
+          tag="@codex-relay/mobile@${version}"
+          ipa="CodexRelay-${version}.ipa"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ipa=$ipa" >> "$GITHUB_OUTPUT"
+
+      - name: Build release IPA
+        if: steps.mobile-release.outputs.deploy == 'true'
+        env:
+          IOS_IPA_NAME: ${{ steps.release.outputs.ipa }}
+          MOBILE_RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: bash scripts/build-ios-ipa.sh
+
+      - name: Prepare release notes
+        if: steps.mobile-release.outputs.deploy == 'true'
+        env:
+          MOBILE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes=/tmp/mobile-release-notes.md
+          awk -v version="$MOBILE_VERSION" '
+            $0 == "## " version { capture=1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' apps/mobile/CHANGELOG.md > "$notes"
+
+          if [[ ! -s "$notes" ]]; then
+            echo "No changelog section found for $MOBILE_VERSION." > "$notes"
+          fi
+
+          app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
+          min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
+          commit="${GITHUB_SHA:0:7}"
+
+          cat >> "$notes" <<EOF
+
+          ### Build
+
+          - App Version: \`${app_version}\`
+          - Mobile Release: \`${MOBILE_VERSION}\`
+          - Minimum iOS: \`${min_ios}\`
+          - Commit: \`${commit}\`
+          - Build: \`${GITHUB_RUN_NUMBER}\`
+
+          ### Installation
+
+          Install the IPA with a compatible sideloading solution such as TrollStore.
+          EOF
+
+      - name: Publish GitHub Release
+        if: steps.mobile-release.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          IPA_NAME: ${{ steps.release.outputs.ipa }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="@codex-relay/mobile@${RELEASE_VERSION}"
+          ipa_path="dist/ios/${IPA_NAME}"
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              "$ipa_path" \
+              "$ipa_path.sha256" \
+              dist/ios/build-info.txt \
+              --clobber
+            gh release edit "$RELEASE_TAG" \
+              --title "$title" \
+              --notes-file /tmp/mobile-release-notes.md \
+              --prerelease
+          else
+            gh release create "$RELEASE_TAG" \
+              "$ipa_path" \
+              "$ipa_path.sha256" \
+              dist/ios/build-info.txt \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --notes-file /tmp/mobile-release-notes.md \
+              --prerelease
+          fi
+
+      - name: Verify published IPA
+        if: steps.mobile-release.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          IPA_NAME: ${{ steps.release.outputs.ipa }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          for expected in "$IPA_NAME" "$IPA_NAME.sha256" build-info.txt; do
+            if ! grep -Fxq "$expected" <<<"$assets"; then
+              echo "::error::Release is missing $expected"
+              exit 1
+            fi
+          done
+
+          rm -rf /tmp/codex-relay-release-check
+          mkdir -p /tmp/codex-relay-release-check
+          gh release download "$RELEASE_TAG" \
+            --pattern "$IPA_NAME" \
+            --dir /tmp/codex-relay-release-check
+
+          expected_sha="$(awk '{print $1}' "dist/ios/$IPA_NAME.sha256")"
+          published_sha="$(shasum -a 256 "/tmp/codex-relay-release-check/$IPA_NAME" | awk '{print $1}')"
+          if [[ "$published_sha" != "$expected_sha" ]]; then
+            echo "::error::Published IPA checksum mismatch"
+            echo "expected=$expected_sha"
+            echo "published=$published_sha"
+            exit 1
+          fi
+
+          echo "Release verified: $RELEASE_TAG"
+          echo "IPA SHA-256: $published_sha"
