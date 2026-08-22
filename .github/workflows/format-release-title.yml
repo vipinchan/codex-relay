@@ -1,0 +1,35 @@
+name: Format Release Title
+
+on:
+  push:
+    branches:
+      - ci/ios-release-title
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ci/ios-release-title
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec oxfmt .github/workflows/ios-release.yml --write
+      - name: Commit formatting
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/ios-release.yml
+          git commit -m "ci(ios): format release workflow"
+          git push origin HEAD:ci/ios-release-title
