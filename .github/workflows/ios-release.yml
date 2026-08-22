@@ -125,7 +125,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          title="@codex-relay/mobile@${RELEASE_VERSION}"
+          title="Codex Relay iOS ${RELEASE_VERSION}"
           ipa_path="dist/ios/${IPA_NAME}"
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
