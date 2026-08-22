@@ -1,5 +1,12 @@
 # @codex-relay/mobile
 
+## 1.4.0-ship.7
+
+### Patch Changes
+
+- e194f13: Tighten the conversation history layout and refine the dark session list styling to match the OpenMinis-inspired mobile design.
+- e0a5593: Redesign the mobile app around session-first conversation history, native back navigation, and a dedicated settings home.
+
 ## 1.4.0-ship.6
 
 ### Patch Changes
