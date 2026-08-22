@@ -5,7 +5,7 @@ import { defineConfig } from "hot-updater";
 
 config({ path: ".env.hotupdater" });
 
-const isTrollStoreBuild = process.env.TROLLSTORE_BUILD === "1";
+const isSideloadBuild = process.env.SIDELOAD_BUILD === "1";
 
 export default defineConfig({
   build: expo(),
@@ -23,7 +23,7 @@ export default defineConfig({
     cloudflareApiToken: process.env.HOT_UPDATER_CLOUDFLARE_API_TOKEN!,
   }),
   updateStrategy: "appVersion", // or "fingerprint"
-  signing: isTrollStoreBuild
+  signing: isSideloadBuild
     ? { enabled: false }
     : { enabled: true, privateKeyPath: "./keys/private-key.pem" },
   patch: {

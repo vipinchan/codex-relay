@@ -4,16 +4,22 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOBILE_DIR="$ROOT_DIR/apps/mobile"
 IOS_DIR="$MOBILE_DIR/ios"
-BUILD_DIR="$ROOT_DIR/build/trollstore"
+BUILD_DIR="$ROOT_DIR/build/ios"
 ARCHIVE_PATH="$BUILD_DIR/CodexRelay.xcarchive"
 PACKAGE_DIR="$BUILD_DIR/package"
-DIST_DIR="$ROOT_DIR/dist/trollstore"
-IPA_PATH="$DIST_DIR/CodexRelay-TrollStore.ipa"
+DIST_DIR="$ROOT_DIR/dist/ios"
+IPA_NAME="${IOS_IPA_NAME:-CodexRelay.ipa}"
+IPA_PATH="$DIST_DIR/$IPA_NAME"
 CHECKSUM_PATH="$IPA_PATH.sha256"
 BUILD_INFO_PATH="$DIST_DIR/build-info.txt"
 
+if [[ "$IPA_NAME" == */* || "$IPA_NAME" != *.ipa ]]; then
+  echo "error: IOS_IPA_NAME must be a .ipa filename without path separators" >&2
+  exit 1
+fi
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "error: TrollStore IPA builds require macOS/Xcode" >&2
+  echo "error: iOS IPA builds require macOS/Xcode" >&2
   exit 1
 fi
 
@@ -31,9 +37,9 @@ cd "$ROOT_DIR"
 pnpm --filter codex-relay build
 
 cd "$MOBILE_DIR"
-# This personal IPA is rebuilt from source on every main update. It does not
-# need the production Hot Updater bundle-signing key during Expo prebuild.
-export TROLLSTORE_BUILD=1
+# Source-built sideload packages do not need the production Hot Updater
+# bundle-signing key during Expo prebuild.
+export SIDELOAD_BUILD=1
 pnpm exec expo prebuild --platform ios --clean --no-install
 
 cd "$IOS_DIR"
@@ -81,8 +87,8 @@ if [[ -z "$APP_PATH" ]]; then
   exit 1
 fi
 
-# Give the bundle a valid ad-hoc signature. TrollStore will apply its own
-# CoreTrust-compatible signing when the IPA is installed.
+# Apply an ad-hoc signature so the packaged app bundle is structurally valid
+# for compatible sideloading installers.
 codesign --force --deep --sign - "$APP_PATH"
 codesign --verify --deep --strict "$APP_PATH"
 
@@ -108,12 +114,16 @@ SHORT_SHA="${GITHUB_SHA:-local}"
 if [[ "$SHORT_SHA" != "local" ]]; then
   SHORT_SHA="${SHORT_SHA:0:7}"
 fi
+BUILD_NUMBER="${GITHUB_RUN_NUMBER:-local}"
+MOBILE_RELEASE="${MOBILE_RELEASE_VERSION:-none}"
 
 cat > "$BUILD_INFO_PATH" <<EOF
-Codex Relay TrollStore build
+Codex Relay iOS build
 commit=$SHORT_SHA
+build=$BUILD_NUMBER
 bundle_id=$BUNDLE_ID
 app_version=$APP_VERSION
+mobile_release=$MOBILE_RELEASE
 minimum_ios=$MIN_IOS
 xcode=$XCODE_VERSION
 scheme=$SCHEME
