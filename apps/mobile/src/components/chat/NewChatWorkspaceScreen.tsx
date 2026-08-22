@@ -16,11 +16,7 @@ import {
   serverStateQueryFns,
 } from "@/lib/server-state";
 import { workspaceName } from "@/lib/workspace-name";
-import {
-  setActiveThread,
-  setConnection,
-  setHasPairedSession,
-} from "@/state/chat-store";
+import { setActiveThread, setConnection, setHasPairedSession } from "@/state/chat-store";
 
 type WorkspaceBrowser = Awaited<ReturnType<typeof fetchWorkspaceDirectoriesState>>;
 
@@ -96,7 +92,11 @@ export function NewChatWorkspaceScreen() {
 
     const result: WorkspaceRow[] = [];
     if (browser.parentPath) {
-      result.push({ id: `parent:${browser.parentPath}`, kind: "parent", path: browser.parentPath });
+      result.push({
+        id: `parent:${browser.parentPath}`,
+        kind: "parent",
+        path: browser.parentPath,
+      });
     }
     for (const directory of browser.directories) {
       result.push({
