@@ -1,0 +1,92 @@
+name: iOS Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/mobile/**"
+      - "packages/**"
+      - "scripts/build-ios-ipa.sh"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/ios-build.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/mobile/**"
+      - "packages/**"
+      - "scripts/build-ios-ipa.sh"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    name: Build iOS IPA
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Show build environment
+        run: |
+          sw_vers
+          xcodebuild -version
+          node --version
+          pnpm --version
+          pod --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build IPA
+        run: bash scripts/build-ios-ipa.sh
+
+      - name: Resolve artifact name
+        id: artifact
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA:0:7}"
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            echo "name=CodexRelay-pr-${{ github.event.pull_request.number }}-${short_sha}" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            echo "name=CodexRelay-main-${short_sha}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=CodexRelay-manual-${short_sha}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: |
+            dist/ios/CodexRelay.ipa
+            dist/ios/CodexRelay.ipa.sha256
+            dist/ios/build-info.txt
+          if-no-files-found: error
+          retention-days: 30
