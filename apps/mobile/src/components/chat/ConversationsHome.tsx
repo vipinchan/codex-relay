@@ -17,9 +17,16 @@ import { pinnedThreadStore$, togglePinnedThread } from "@/state/pinned-thread-st
 
 type Period = "pinned" | "today" | "yesterday" | "week" | "month" | "earlier";
 type ThreadSection = { key: Period; title: string; data: ThreadSummary[] };
+type ThreadGlyph = "agentAtom" | "branch" | "file" | "folder" | "terminal";
 
 const accent = "#6EA8FF";
-const sessionIconBg = "#123A38";
+const iconPalettes = [
+  { background: "#18393A", foreground: "#72DDD5" },
+  { background: "#282642", foreground: "#A49CFF" },
+  { background: "#18324A", foreground: "#79B8FF" },
+  { background: "#3D2630", foreground: "#FF8DA5" },
+  { background: "#20382E", foreground: "#78D9A5" },
+] as const;
 
 export function ConversationsHome() {
   const hasPairedSession = useSelector(() => chatStore$.hasPairedSession.get());
@@ -96,7 +103,7 @@ export function ConversationsHome() {
 
       {searchOpen ? (
         <View style={styles.searchWrap}>
-          <Icon name="search" size={20} tintColor={Colors.dark.textSecondary} />
+          <Icon name="search" size={18} tintColor={Colors.dark.textSecondary} />
           <TextInput
             autoFocus
             autoCapitalize="none"
@@ -109,7 +116,7 @@ export function ConversationsHome() {
           />
           {searchQuery ? (
             <Pressable hitSlop={8} onPress={() => setSearchQuery("")}>
-              <Icon name="x" size={18} tintColor={Colors.dark.textSecondary} />
+              <Icon name="x" size={17} tintColor={Colors.dark.textSecondary} />
             </Pressable>
           ) : null}
         </View>
@@ -124,7 +131,9 @@ export function ConversationsHome() {
         onRefresh={() => void threadsQuery.refetch()}
         refreshing={threadsQuery.isFetching && threads.length > 0}
         renderSectionHeader={({ section }) => (
-          <ThemedText style={styles.sectionTitle}>{section.title}</ThemedText>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>{section.title}</ThemedText>
+          </View>
         )}
         renderItem={({ item }) => (
           <ThreadRow
@@ -141,7 +150,7 @@ export function ConversationsHome() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
-              <Icon name="newChat" size={24} tintColor={Colors.dark.textSecondary} />
+              <Icon name="newChat" size={22} tintColor={Colors.dark.textSecondary} />
             </View>
             <ThemedText style={styles.emptyTitle}>
               {searchQuery
@@ -163,7 +172,7 @@ export function ConversationsHome() {
           onPress={toggleSearch}
           style={({ pressed }) => [styles.searchFab, pressed && styles.pressed]}
         >
-          <Icon name={searchOpen ? "x" : "search"} size={30} tintColor="#FFFFFF" />
+          <Icon name={searchOpen ? "x" : "search"} size={27} tintColor="#FFFFFF" />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -171,7 +180,7 @@ export function ConversationsHome() {
           onPress={createNewChat}
           style={({ pressed }) => [styles.newFab, pressed && styles.pressed]}
         >
-          <Icon name="newChat" size={28} tintColor="#FFFFFF" />
+          <Icon name="newChat" size={26} tintColor="#FFFFFF" />
         </Pressable>
       </View>
     </SafeAreaView>
@@ -193,6 +202,8 @@ function ThreadRow({
 }) {
   const preview =
     thread.lastMessagePreview || thread.lastResult || thread.lastPrompt || thread.cwd || "";
+  const visual = threadVisual(thread);
+
   return (
     <Pressable
       onPress={onPress}
@@ -200,8 +211,8 @@ function ThreadRow({
       delayLongPress={350}
       style={({ pressed }) => [styles.threadRow, pressed && styles.rowPressed]}
     >
-      <View style={styles.threadIcon}>
-        <Icon name="terminal" size={24} tintColor="#54D6DF" strokeWidth={1.8} />
+      <View style={[styles.threadIcon, { backgroundColor: visual.background }]}>
+        <Icon name={visual.icon} size={22} tintColor={visual.foreground} strokeWidth={1.8} />
       </View>
       <View style={styles.threadCopy}>
         <ThemedText numberOfLines={1} style={styles.threadTitle}>
@@ -215,7 +226,7 @@ function ThreadRow({
         <ThemedText numberOfLines={1} style={styles.threadDate}>
           {relativeDate(activityTime(thread), zh)}
         </ThemedText>
-        {pinned ? <Icon name="pin" size={14} tintColor={Colors.dark.textSecondary} /> : null}
+        {pinned ? <Icon name="pin" size={12} tintColor="#77777D" /> : null}
       </View>
     </Pressable>
   );
@@ -238,9 +249,35 @@ function RoundTopButton({
       onPress={onPress}
       style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}
     >
-      <Icon name={icon} size={25} tintColor={accent} strokeWidth={1.8} />
+      <Icon name={icon} size={27} tintColor={accent} strokeWidth={1.8} />
     </Pressable>
   );
+}
+
+function threadVisual(thread: ThreadSummary): {
+  icon: ThreadGlyph;
+  background: string;
+  foreground: string;
+} {
+  const hint = `${thread.title || ""} ${thread.cwd || ""}`.toLocaleLowerCase();
+  let icon: ThreadGlyph = "terminal";
+
+  if (thread.cwd?.startsWith("/") || hint.includes("project") || hint.includes("目录")) {
+    icon = "folder";
+  } else if (hint.includes("git") || hint.includes("repo") || hint.includes("pull request")) {
+    icon = "branch";
+  } else if (hint.includes("file") || hint.includes("文档") || hint.includes("readme")) {
+    icon = "file";
+  } else if (hint.includes("分析") || hint.includes("复盘") || hint.includes("review")) {
+    icon = "agentAtom";
+  }
+
+  let hash = 0;
+  for (let index = 0; index < thread.id.length; index += 1) {
+    hash = (hash * 31 + thread.id.charCodeAt(index)) >>> 0;
+  }
+  const palette = iconPalettes[hash % iconPalettes.length];
+  return { icon, ...palette };
 }
 
 function buildSections(
@@ -323,105 +360,115 @@ function relativeDate(date: Date, zh: boolean) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#000000" },
   topBar: {
-    height: 76,
+    height: 64,
     alignItems: "center",
     justifyContent: "space-between",
     flexDirection: "row",
-    paddingHorizontal: 28,
+    paddingHorizontal: 22,
   },
-  appTitle: { fontSize: 23, lineHeight: 29, fontWeight: "700", color: "#FFFFFF" },
+  appTitle: { fontSize: 22, lineHeight: 27, fontWeight: "700", color: "#FFFFFF" },
   topButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
   searchWrap: {
-    marginHorizontal: 22,
-    marginBottom: 10,
-    minHeight: 48,
-    borderRadius: 16,
-    paddingHorizontal: 15,
-    gap: 10,
+    marginHorizontal: 18,
+    marginBottom: 8,
+    minHeight: 42,
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    gap: 9,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1B1B1D",
+    backgroundColor: "#1C1C1E",
   },
-  searchInput: { flex: 1, color: "#FFFFFF", fontSize: 17, paddingVertical: 12 },
-  listContent: { paddingHorizontal: 22, paddingTop: 10, paddingBottom: 132 },
+  searchInput: { flex: 1, color: "#FFFFFF", fontSize: 16, paddingVertical: 9 },
+  listContent: { paddingBottom: 92 },
+  sectionHeader: {
+    height: 34,
+    justifyContent: "center",
+    paddingHorizontal: 22,
+    backgroundColor: "#1C1C1E",
+  },
   sectionTitle: {
-    marginTop: 22,
-    marginBottom: 9,
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: "700",
+    fontSize: 15.5,
+    lineHeight: 19,
+    fontWeight: "600",
     color: "#8E8E93",
   },
   threadRow: {
-    minHeight: 78,
+    height: 66,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 9,
-    gap: 13,
-    borderRadius: 16,
+    paddingHorizontal: 22,
+    gap: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#1C1C1E",
   },
-  rowPressed: { backgroundColor: "rgba(255,255,255,0.055)" },
+  rowPressed: { backgroundColor: "#111113" },
   threadIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: sessionIconBg,
   },
   threadCopy: { flex: 1, minWidth: 0 },
-  threadTitle: { color: "#FFFFFF", fontSize: 20, lineHeight: 25, fontWeight: "700" },
-  threadPreview: { color: "#8E8E93", fontSize: 16, lineHeight: 21, marginTop: 3 },
-  threadMeta: { width: 64, alignItems: "flex-end", gap: 8 },
-  threadDate: { color: "#68686D", fontSize: 14, lineHeight: 18 },
-  emptyState: { alignItems: "center", justifyContent: "center", paddingTop: 120, gap: 14 },
-  emptyIcon: {
+  threadTitle: { color: "#FFFFFF", fontSize: 17.5, lineHeight: 22, fontWeight: "700" },
+  threadPreview: { color: "#8E8E93", fontSize: 14.5, lineHeight: 18, marginTop: 1 },
+  threadMeta: {
     width: 58,
-    height: 58,
-    borderRadius: 29,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+  },
+  threadDate: { color: "#77777D", fontSize: 13.5, lineHeight: 17 },
+  emptyState: { alignItems: "center", justifyContent: "center", paddingTop: 110, gap: 12 },
+  emptyIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: "#1C1C1E",
     alignItems: "center",
     justifyContent: "center",
   },
-  emptyTitle: { color: "#8E8E93", fontSize: 17 },
+  emptyTitle: { color: "#8E8E93", fontSize: 16 },
   fabDock: {
     position: "absolute",
-    left: 28,
-    right: 28,
-    bottom: 28,
+    left: 22,
+    right: 22,
+    bottom: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   searchFab: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#1C1C1E",
     shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.38,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
   },
   newFab: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#77736C",
+    backgroundColor: "#4054C8",
     shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
   },
-  pressed: { opacity: 0.62, transform: [{ scale: 0.96 }] },
+  pressed: { opacity: 0.64, transform: [{ scale: 0.96 }] },
 });
