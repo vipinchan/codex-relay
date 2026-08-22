@@ -128,7 +128,7 @@ jobs:
         run: pnpm release
 
       - name: Validate Hot Updater configuration
-        if: steps.mobile-release.outputs.deploy == 'true'
+        if: steps.mobile-release.outputs.deploy == 'true' && vars.ENABLE_MOBILE_OTA == 'true'
         env:
           MOBILE_ENV: ${{ secrets.MOBILE_ENV }}
           HOT_UPDATER_ENV: ${{ secrets.HOT_UPDATER_ENV }}
@@ -148,7 +148,7 @@ jobs:
           fi
 
       - name: Restore mobile deployment environment
-        if: steps.mobile-release.outputs.deploy == 'true'
+        if: steps.mobile-release.outputs.deploy == 'true' && vars.ENABLE_MOBILE_OTA == 'true'
         working-directory: apps/mobile
         env:
           MOBILE_ENV: ${{ secrets.MOBILE_ENV }}
@@ -162,13 +162,13 @@ jobs:
           printf '%s' "$HOT_UPDATER_PRIVATE_KEY" > keys/private-key.pem
 
       - name: Deploy iOS OTA update
-        if: steps.mobile-release.outputs.deploy == 'true'
+        if: steps.mobile-release.outputs.deploy == 'true' && vars.ENABLE_MOBILE_OTA == 'true'
         timeout-minutes: 30
         working-directory: apps/mobile
         run: pnpm hot-updater deploy -p ios -t "${{ steps.ios-app-version.outputs.version }}"
 
       - name: Verify iOS OTA update
-        if: steps.mobile-release.outputs.deploy == 'true'
+        if: steps.mobile-release.outputs.deploy == 'true' && vars.ENABLE_MOBILE_OTA == 'true'
         working-directory: apps/mobile
         run: pnpm hot-updater bundle list -p ios --limit 5 --json
 
@@ -225,11 +225,11 @@ jobs:
                 branch: "changeset-release/mobile-main",
                 title: `chore: release @codex-relay/mobile@${process.env.MOBILE_RELEASE_VERSION} (app-version ${process.env.IOS_APP_VERSION})`,
                 body: [
-                  "## iOS OTA deployment",
+                  "## Mobile release",
                   "",
-                  `- Mobile release: \`@codex-relay/mobile@${process.env.MOBILE_RELEASE_VERSION}\``,
-                  `- Target app-version: \`${process.env.IOS_APP_VERSION}\``,
-                  "- Deployment: Hot Updater after merge",
+                  `- Package: \`@codex-relay/mobile@${process.env.MOBILE_RELEASE_VERSION}\``,
+                  `- App version: \`${process.env.IOS_APP_VERSION}\``,
+                  "- Deployment: versioned IPA release after merge",
                 ].join("\n"),
               });
             }
