@@ -9,7 +9,12 @@ import type {
   DirectFetchStreamChunk,
 } from "./specs/direct-fetch.nitro";
 
-export const DirectFetch = NitroModules.createHybridObject<DirectFetchSpec>("DirectFetch");
+let directFetch: DirectFetchSpec | undefined;
+
+function getDirectFetch(): DirectFetchSpec {
+  directFetch ??= NitroModules.createHybridObject<DirectFetchSpec>("DirectFetch");
+  return directFetch;
+}
 
 export interface DirectFetchHeader {
   key: string;
@@ -55,7 +60,8 @@ export async function dfetchStream(
   onChunk: (chunk: string) => void,
 ): Promise<Response> {
   const request = await normalizeRequest(input, init);
-  const stream = (DirectFetch as Partial<DirectFetchSpec>).stream;
+  const nativeDirectFetch = getDirectFetch();
+  const stream = (nativeDirectFetch as Partial<DirectFetchSpec>).stream;
   if (typeof stream !== "function") {
     const response = await fetchDirect(request);
     if (response.bodyString) {
@@ -65,7 +71,7 @@ export async function dfetchStream(
   }
 
   const response = await stream.call(
-    DirectFetch,
+    nativeDirectFetch,
     {
       url: request.url,
       method: request.method,
@@ -92,7 +98,7 @@ export async function dfetchDownload(
   init?: DirectFetchInit,
 ): Promise<DirectFetchDownloadResponse> {
   const request = await normalizeRequest(input, init);
-  const response = await DirectFetch.download({
+  const response = await getDirectFetch().download({
     url: request.url,
     fileUri,
     method: request.method,
@@ -109,7 +115,7 @@ export async function dfetchDownload(
 export const fetch = dfetch;
 
 async function fetchDirect(request: DirectFetchRequest): Promise<DirectFetchResponse> {
-  const response = await DirectFetch.fetch({
+  const response = await getDirectFetch().fetch({
     url: request.url,
     method: request.method,
     headersJson: JSON.stringify(request.headers ?? []),
