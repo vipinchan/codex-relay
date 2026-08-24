@@ -2,21 +2,29 @@ import { useSelector } from "@legendapp/state/react";
 import { useQuery } from "@tanstack/react-query";
 import type { ThreadSummary } from "codex-relay/api-schema";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, SectionList, TextInput, View, type SectionListData } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
-import { Icon } from "@/components/ui/icon";
+import { Icon, type AppIconName } from "@/components/ui/icon";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
+import { hasCodexRelaySession } from "@/lib/codex-relay-api";
 import { hapticLightImpact, hapticSelection } from "@/lib/haptics";
 import { serverStateKeys, serverStateQueryFns } from "@/lib/server-state";
-import { chatStore$, requestThreadStreamReconnect, setActiveThread } from "@/state/chat-store";
+import { workspaceName } from "@/lib/workspace-name";
+import {
+  chatStore$,
+  requestThreadStreamReconnect,
+  setActiveThread,
+  setHasPairedSession,
+} from "@/state/chat-store";
 import { pinnedThreadStore$, togglePinnedThread } from "@/state/pinned-thread-store";
 
 type Period = "pinned" | "today" | "yesterday" | "week" | "month" | "earlier";
-type ThreadSection = { key: Period; title: string; data: ThreadSummary[] };
+type GroupingMode = "project" | "time";
+type ThreadSection = { key: string; title: string; data: ThreadSummary[] };
 type ThreadGlyph = "agentAtom" | "branch" | "file" | "folder" | "terminal";
 
 const accent = "#6EA8FF";
@@ -35,6 +43,11 @@ export function ConversationsHome() {
   const cachedThreadsById = useSelector(() => chatStore$.threadsById.get());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [groupingMode, setGroupingMode] = useState<GroupingMode>("time");
+
+  useEffect(() => {
+    setHasPairedSession(hasCodexRelaySession());
+  }, []);
 
   const threadsQuery = useQuery({
     queryKey: serverStateKeys.threads(),
@@ -64,10 +77,10 @@ export function ConversationsHome() {
     );
   }, [searchQuery, threads]);
 
-  const sections = useMemo(
-    () => buildSections(filteredThreads, pinnedThreadIds, zh),
-    [filteredThreads, pinnedThreadIds, zh],
-  );
+  const sections = useMemo(() => {
+    if (groupingMode === "project") return buildProjectSections(filteredThreads, zh);
+    return buildTimeSections(filteredThreads, pinnedThreadIds, zh);
+  }, [filteredThreads, groupingMode, pinnedThreadIds, zh]);
 
   function openThread(thread: ThreadSummary) {
     hapticSelection();
@@ -93,12 +106,21 @@ export function ConversationsHome() {
     if (searchOpen) setSearchQuery("");
   }
 
+  function toggleGroupingMode() {
+    hapticSelection();
+    setGroupingMode((mode) => (mode === "time" ? "project" : "time"));
+  }
+
   return (
     <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.screen}>
       <View style={styles.topBar}>
-        <RoundTopButton icon="settings" label="Settings" onPress={openSettings} />
+        <View style={styles.topBarSide}>
+          <RoundTopButton icon="settings" label="Settings" onPress={openSettings} />
+        </View>
         <ThemedText style={styles.appTitle}>Codex</ThemedText>
-        <RoundTopButton icon="terminal" label="New Codex session" onPress={createNewChat} />
+        <View style={[styles.topBarSide, styles.topBarSideEnd]}>
+          <GroupingButton mode={groupingMode} zh={zh} onPress={toggleGroupingMode} />
+        </View>
       </View>
 
       {searchOpen ? (
@@ -123,8 +145,9 @@ export function ConversationsHome() {
       ) : null}
 
       <SectionList
+        key={groupingMode}
         sections={sections as readonly SectionListData<ThreadSummary, ThreadSection>[]}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => `${item.id}:${item.createdAt}:${index}`}
         contentContainerStyle={styles.listContent}
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
@@ -237,7 +260,7 @@ function RoundTopButton({
   label,
   onPress,
 }: {
-  icon: "settings" | "terminal";
+  icon: AppIconName;
   label: string;
   onPress: () => void;
 }) {
@@ -250,6 +273,41 @@ function RoundTopButton({
       style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}
     >
       <Icon name={icon} size={27} tintColor={accent} strokeWidth={1.8} />
+    </Pressable>
+  );
+}
+
+function GroupingButton({
+  mode,
+  zh,
+  onPress,
+}: {
+  mode: GroupingMode;
+  zh: boolean;
+  onPress: () => void;
+}) {
+  const isProject = mode === "project";
+  const currentLabel = isProject ? (zh ? "项目" : "Project") : zh ? "时间" : "Time";
+  const nextLabel = isProject ? (zh ? "时间" : "time") : zh ? "项目" : "project";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={
+        zh ? `当前按${currentLabel}分组，切换为按${nextLabel}分组` : `Grouped by ${currentLabel}`
+      }
+      accessibilityHint={zh ? undefined : `Switch to grouping by ${nextLabel}`}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [styles.groupingButton, pressed && styles.pressed]}
+    >
+      <Icon
+        name={isProject ? "folder" : "clock"}
+        size={16}
+        tintColor={accent}
+        strokeWidth={2}
+      />
+      <ThemedText style={styles.groupingButtonLabel}>{currentLabel}</ThemedText>
     </Pressable>
   );
 }
@@ -280,7 +338,7 @@ function threadVisual(thread: ThreadSummary): {
   return { icon, ...palette };
 }
 
-function buildSections(
+function buildTimeSections(
   threads: ThreadSummary[],
   pinnedIds: string[],
   zh: boolean,
@@ -325,6 +383,23 @@ function buildSections(
     .map(([key, data]) => ({ key, title: labels[key], data }));
 }
 
+function buildProjectSections(threads: ThreadSummary[], zh: boolean): ThreadSection[] {
+  const groups = new Map<string, ThreadSection>();
+
+  for (const thread of threads) {
+    const title = workspaceName(thread.cwd) ?? (zh ? "无项目" : "No Project");
+    const key = thread.cwd ?? title;
+    const group = groups.get(key);
+    if (group) {
+      group.data.push(thread);
+    } else {
+      groups.set(key, { key: `project:${key}`, title, data: [thread] });
+    }
+  }
+
+  return [...groups.values()];
+}
+
 function activityTime(thread: ThreadSummary) {
   return new Date(thread.lastActivityAt || thread.updatedAt || thread.createdAt);
 }
@@ -366,6 +441,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 22,
   },
+  topBarSide: { width: 90, alignItems: "flex-start" },
+  topBarSideEnd: { alignItems: "flex-end" },
   appTitle: { fontSize: 22, lineHeight: 27, fontWeight: "700", color: "#FFFFFF" },
   topButton: {
     width: 40,
@@ -373,6 +450,25 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+  },
+  groupingButton: {
+    height: 34,
+    minWidth: 72,
+    paddingHorizontal: 10,
+    borderRadius: 17,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#1C1C1E",
+    borderWidth: 1,
+    borderColor: "#263A5B",
+  },
+  groupingButtonLabel: {
+    color: accent,
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: "600",
   },
   searchWrap: {
     marginHorizontal: 18,

@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Clock,
   CircleAlert,
   CircleCheck,
   Copy,
@@ -63,6 +64,7 @@ export type AppIconName =
   | "closeMenu"
   | "chevronRight"
   | "check"
+  | "clock"
   | "controls"
   | "copy"
   | "expand"
@@ -118,6 +120,7 @@ const iconComponents: Record<AppIconName, LucideComponent> = {
   attach: Image,
   branch: GitBranch,
   check: Check,
+  clock: Clock,
   closeMenu: Menu,
   chevronRight: ChevronRight,
   controls: SlidersHorizontal,
