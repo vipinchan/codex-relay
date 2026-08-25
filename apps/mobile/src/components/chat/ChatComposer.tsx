@@ -1005,49 +1005,51 @@ export const ChatComposer = memo(function ChatComposer({
           },
         ]}
       >
-        <EnrichedMarkdownTextInput
-          autoCapitalize="sentences"
-          cursorColor={theme.text}
-          defaultValue={value}
-          editable={isInputEditable}
-          markdownStyle={inputMarkdownStyle}
-          onBlur={() => {
-            isInputFocusedRef.current = false;
-          }}
-          onChangeMarkdown={handleInputMarkdownChange}
-          onChangeSelection={handleInputSelectionChange}
-          onChangeText={handleInputTextChange}
-          onFocus={() => {
-            isInputFocusedRef.current = true;
-            lastInputFocusAtRef.current = Date.now();
-          }}
-          ref={inputRef}
-          placeholder={
-            !isInputEditable
-              ? (disabledPlaceholder ?? "Connect to the Codex Relay server first")
-              : isPlanMode
-                ? PLAN_COMPOSER_PLACEHOLDER
-                : DEFAULT_COMPOSER_PLACEHOLDER
-          }
-          placeholderTextColor={theme.textSecondary}
-          scrollEnabled
-          selectionColor="rgba(142, 199, 255, 0.34)"
-          style={inputStyle}
-        />
-        {isPlanMode ? (
-          <Pressable
-            accessibilityLabel="Plan mode is on"
-            accessibilityRole="button"
-            accessibilityHint="Turns off Plan mode"
-            hitSlop={6}
-            onPress={togglePlanMode}
-            style={({ pressed }) => [styles.planModeChip, pressed && styles.pressed]}
-          >
-            <Text numberOfLines={1} style={styles.planModeChipText}>
-              Plan mode
-            </Text>
-          </Pressable>
-        ) : null}
+        <View style={styles.inputStage}>
+          <EnrichedMarkdownTextInput
+            autoCapitalize="sentences"
+            cursorColor={theme.text}
+            defaultValue={value}
+            editable={isInputEditable}
+            markdownStyle={inputMarkdownStyle}
+            onBlur={() => {
+              isInputFocusedRef.current = false;
+            }}
+            onChangeMarkdown={handleInputMarkdownChange}
+            onChangeSelection={handleInputSelectionChange}
+            onChangeText={handleInputTextChange}
+            onFocus={() => {
+              isInputFocusedRef.current = true;
+              lastInputFocusAtRef.current = Date.now();
+            }}
+            ref={inputRef}
+            placeholder={
+              !isInputEditable
+                ? (disabledPlaceholder ?? "Connect to the Codex Relay server first")
+                : isPlanMode
+                  ? PLAN_COMPOSER_PLACEHOLDER
+                  : DEFAULT_COMPOSER_PLACEHOLDER
+            }
+            placeholderTextColor={theme.textSecondary}
+            scrollEnabled
+            selectionColor="rgba(142, 199, 255, 0.34)"
+            style={inputStyle}
+          />
+          {isPlanMode ? (
+            <Pressable
+              accessibilityLabel="Plan mode is on"
+              accessibilityRole="button"
+              accessibilityHint="Turns off Plan mode"
+              hitSlop={6}
+              onPress={togglePlanMode}
+              style={({ pressed }) => [styles.planModeChip, pressed && styles.pressed]}
+            >
+              <Text numberOfLines={1} style={styles.planModeChipText}>
+                Plan mode
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
         <AttachmentRail
           attachments={attachments}
           composerThreadId={composerThreadId}
@@ -2894,16 +2896,16 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   container: {
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "rgba(255, 255, 255, 0.1)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 22,
-    gap: 4,
+    borderRadius: 19,
+    gap: 2,
     marginHorizontal: 12,
-    marginBottom: 8,
-    marginTop: 4,
-    paddingBottom: 8,
-    paddingHorizontal: 12,
-    paddingTop: 10,
+    marginBottom: 7,
+    marginTop: 3,
+    paddingBottom: 5,
+    paddingHorizontal: 8,
+    paddingTop: 7,
   },
   planDecisionPanel: {
     borderColor: "rgba(255, 255, 255, 0.14)",
@@ -3315,12 +3317,16 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sans,
     fontSize: 15,
     lineHeight: 21,
-    maxHeight: 120,
-    minHeight: 42,
-    paddingHorizontal: 2,
-    paddingTop: 1,
+    maxHeight: 112,
+    minHeight: 34,
+    paddingHorizontal: 5,
+    paddingTop: 2,
     paddingBottom: 0,
     textAlignVertical: "top",
+  },
+  inputStage: {
+    minHeight: 34,
+    position: "relative",
   },
   inputWithModeChip: {
     paddingRight: 82,
@@ -3335,8 +3341,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 9,
     position: "absolute",
-    right: 12,
-    top: 10,
+    right: 9,
+    top: 8,
     zIndex: 1,
   },
   planModeChipText: {
@@ -3348,10 +3354,14 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     alignItems: "center",
+    borderTopColor: "rgba(255, 255, 255, 0.07)",
+    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 7,
     height: 40,
     justifyContent: "flex-start",
+    marginTop: 2,
+    paddingTop: 3,
   },
   attachmentRail: {
     alignItems: "center",

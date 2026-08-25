@@ -89,6 +89,24 @@ All spacing derives from the existing `Spacing` constants.
 
 ## 5. Components
 
+### Conversation UI v2
+
+- **Conversation first**: user turns use compact, right-aligned bubbles; assistant turns sit
+  directly on the timeline without a surrounding card. Message chrome stays subordinate to the
+  content.
+- **Runtime activity**: command, search, thinking, tool, subagent, and file-change events enter as
+  one-line summaries. File changes expand in place on request; full protocol detail remains
+  available from the expanded summary.
+- **Streaming scroll**: the timeline follows token and layout growth only while the reader is at
+  the end. Scrolling away freezes the viewport and reveals a floating `Latest` action; returning to
+  the end resumes streaming follow mode.
+- **Approvals**: unresolved approvals are the strongest operational element in the timeline, with
+  a warning accent and inline decisions. A resolved approval automatically collapses back to a
+  quiet one-line history item.
+- **Composer**: the composer is a compact docked surface with the prompt as its primary element and
+  context, usage, mode, send, and stop actions on the supporting rail. Engineering surfaces such as
+  Git, Terminal, Files, and Web Preview remain outside the message hierarchy.
+
 ### Compact Control Button
 
 - **Structure**: shared `Button` with `size="icon"` or short text plus `Icon`.

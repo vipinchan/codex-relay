@@ -20,6 +20,7 @@ const INLINE_PATCH_LINE_LIMIT = 48;
 
 export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
   const [isDetailVisible, setIsDetailVisible] = useState(false);
+  const [isActivityExpanded, setActivityExpanded] = useState(false);
   const [answer, setAnswer] = useState("");
   const [isResolving, setResolving] = useState(false);
   const [resolution, setResolution] = useState<string | undefined>();
@@ -57,6 +58,8 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
         });
       }
       setResolution(decision);
+      setActivityExpanded(false);
+      setIsDetailVisible(false);
       markMessageApprovalResolvedState(queryClient, message.threadId, message.id, decision);
       hapticSuccess();
     } catch (caught) {
@@ -129,9 +132,13 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
           ]}
         >
           <Pressable
-            accessibilityLabel={`Open details for ${model.label}`}
+            accessibilityLabel={`${isActivityExpanded ? "Collapse" : "Expand"} ${model.label}`}
             accessibilityRole="button"
-            onPress={() => setIsDetailVisible(true)}
+            accessibilityState={{ expanded: isActivityExpanded }}
+            onPress={() => {
+              hapticSelection();
+              setActivityExpanded((current) => !current);
+            }}
             style={({ pressed }) => [styles.fileChangeHeader, pressed && styles.rowPressed]}
           >
             <View style={styles.fileChangeHeaderTitleGroup}>
@@ -140,12 +147,32 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
               </ThemedText>
               <FileChangeStats stats={stats} />
             </View>
+            <Icon
+              name={isActivityExpanded ? "expand" : "chevronRight"}
+              size={14}
+              tintColor={theme.textSecondary}
+            />
           </Pressable>
-          <FileChangeAccordion
-            expandedPaths={expandedFileChangePaths}
-            message={message}
-            onTogglePath={toggleFileChangePath}
-          />
+          {isActivityExpanded ? (
+            <>
+              <FileChangeAccordion
+                expandedPaths={expandedFileChangePaths}
+                message={message}
+                onTogglePath={toggleFileChangePath}
+              />
+              <Pressable
+                accessibilityLabel={`Open full details for ${model.label}`}
+                accessibilityRole="button"
+                onPress={() => setIsDetailVisible(true)}
+                style={({ pressed }) => [styles.fullDetailsRow, pressed && styles.rowPressed]}
+              >
+                <ThemedText type="code" themeColor="textSecondary" style={styles.fullDetailsText}>
+                  Full details
+                </ThemedText>
+                <Icon name="chevronRight" size={13} tintColor={theme.textSecondary} />
+              </Pressable>
+            </>
+          ) : null}
         </View>
 
         <ActivityDetailSheet
@@ -162,13 +189,13 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
     <>
       <View
         style={[
-          canResolve || resolution ? styles.actionWrap : undefined,
+          canResolve ? styles.actionWrap : undefined,
           canResolve &&
             isInputRequest && [
               styles.inputRequestCard,
               {
-                backgroundColor: theme.backgroundElement,
-                borderColor: theme.backgroundSelected,
+                backgroundColor: "rgba(255, 138, 69, 0.08)",
+                borderColor: "rgba(255, 138, 69, 0.4)",
               },
             ],
         ]}
@@ -182,14 +209,19 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
             needsUserAction && [
               styles.actionRow,
               {
-                backgroundColor: theme.backgroundElement,
-                borderColor: theme.backgroundSelected,
+                backgroundColor: "rgba(255, 138, 69, 0.1)",
+                borderColor: "rgba(255, 138, 69, 0.46)",
               },
             ],
             isInputRequest && styles.inputRequestHeader,
             pressed && styles.rowPressed,
           ]}
         >
+          {needsUserAction ? (
+            <Icon name="warning" size={15} tintColor="#FF9A5C" strokeWidth={2.2} />
+          ) : displayedResolution ? (
+            <Icon name="check" size={13} tintColor="#78B88B" strokeWidth={2.3} />
+          ) : null}
           <ThemedText
             type="code"
             numberOfLines={1}
@@ -201,15 +233,18 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
           >
             {model.label}
           </ThemedText>
-          {model.detail ? (
+          {model.detail || displayedResolution ? (
             <ThemedText
               type="code"
               themeColor="textSecondary"
               numberOfLines={1}
               style={[styles.detail, needsUserAction && styles.actionDetail]}
             >
-              {model.detail}
+              {displayedResolution ? `Responded: ${displayedResolution}` : model.detail}
             </ThemedText>
+          ) : null}
+          {!needsUserAction && !displayedResolution ? (
+            <Icon name="chevronRight" size={12} tintColor={theme.textSecondary} />
           ) : null}
         </Pressable>
 
@@ -257,12 +292,6 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
               />
             </View>
           </View>
-        ) : null}
-
-        {displayedResolution ? (
-          <ThemedText type="code" themeColor="textSecondary" style={styles.resolvedText}>
-            Responded: {displayedResolution}
-          </ThemedText>
         ) : null}
       </View>
 
@@ -1553,11 +1582,6 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     opacity: 0.9,
   },
-  resolvedText: {
-    fontSize: 10,
-    lineHeight: 13,
-    opacity: 0.72,
-  },
   row: {
     alignItems: "center",
     alignSelf: "flex-start",
@@ -1638,6 +1662,19 @@ const styles = StyleSheet.create({
   fileChangeAccordion: {
     borderTopColor: "rgba(255, 255, 255, 0.08)",
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  fullDetailsRow: {
+    alignItems: "center",
+    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 34,
+    paddingHorizontal: 14,
+  },
+  fullDetailsText: {
+    fontSize: 11,
+    lineHeight: 15,
   },
   fileChangeFileItem: {
     borderTopColor: "rgba(255, 255, 255, 0.06)",

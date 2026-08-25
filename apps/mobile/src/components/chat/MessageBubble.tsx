@@ -107,11 +107,17 @@ type MarkdownSegment =
   | { code: string; kind: "code"; language: string };
 
 export const MessageBubble = memo(function MessageBubble({
+  assistantBlock,
   message,
   onMessageCopied,
   onMessageRewind,
   onOpenMarkdownAttachment,
 }: {
+  assistantBlock?: {
+    copyContent?: string;
+    isFirst: boolean;
+    isLast: boolean;
+  };
   message: ChatMessage;
   onMessageCopied?: () => void;
   onMessageRewind?: (message: ChatMessage) => void;
@@ -142,8 +148,13 @@ export const MessageBubble = memo(function MessageBubble({
     [isUser, messageContent, imageUris.length],
   );
   const copyMarkdown = useMemo(
-    () => messageMarkdownForClipboard(message.role, message.content, imageUris.length > 0),
-    [imageUris.length, message.content, message.role],
+    () =>
+      messageMarkdownForClipboard(
+        message.role,
+        assistantBlock?.copyContent ?? message.content,
+        imageUris.length > 0,
+      ),
+    [assistantBlock?.copyContent, imageUris.length, message.content, message.role],
   );
   const goalPrompt = useMemo(
     () => (isUser ? parseGoalPrompt(displayContent) : undefined),
@@ -329,7 +340,15 @@ export const MessageBubble = memo(function MessageBubble({
   }
 
   return (
-    <View style={[styles.row, isUser ? styles.userRow : styles.assistantRow]}>
+    <View
+      style={[
+        styles.row,
+        isUser ? styles.userRow : styles.assistantRow,
+        assistantBlock && styles.assistantBlockRow,
+        assistantBlock?.isFirst && styles.assistantBlockFirstRow,
+        assistantBlock?.isLast && styles.assistantBlockLastRow,
+      ]}
+    >
       <View
         style={[
           styles.bubble,
@@ -360,19 +379,23 @@ export const MessageBubble = memo(function MessageBubble({
                 />
               ),
             )}
-            <MessageAttachments
-              imageUris={imageUris}
-              markdownAttachments={markdownAttachments}
-              messageId={message.id}
-              onOpenMarkdownAttachment={onOpenMarkdownAttachment}
-            />
-            <MessageFooter
-              canCopy={copyMarkdown.length > 0}
-              isCopied={isCopied}
-              onCopyPress={handleCopyPress}
-              timestamp={timestamp}
-              variant="assistant"
-            />
+            {!assistantBlock || assistantBlock.isLast ? (
+              <>
+                <MessageAttachments
+                  imageUris={imageUris}
+                  markdownAttachments={markdownAttachments}
+                  messageId={message.id}
+                  onOpenMarkdownAttachment={onOpenMarkdownAttachment}
+                />
+                <MessageFooter
+                  canCopy={copyMarkdown.length > 0}
+                  isCopied={isCopied}
+                  onCopyPress={handleCopyPress}
+                  timestamp={timestamp}
+                  variant="assistant"
+                />
+              </>
+            ) : null}
           </View>
         ) : (
           <View style={styles.userContent}>
@@ -1178,13 +1201,22 @@ function formatMessageTime(value: string) {
 
 const styles = StyleSheet.create({
   row: {
-    marginVertical: 6,
+    marginVertical: 5,
   },
   userRow: {
     alignItems: "flex-end",
   },
   assistantRow: {
     alignItems: "stretch",
+  },
+  assistantBlockRow: {
+    marginVertical: 0,
+  },
+  assistantBlockFirstRow: {
+    marginTop: 5,
+  },
+  assistantBlockLastRow: {
+    marginBottom: 5,
   },
   bubble: {
     borderRadius: 18,
@@ -1194,11 +1226,11 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   userBubble: {
-    backgroundColor: "rgba(118, 118, 128, 0.24)",
+    backgroundColor: "rgba(103, 123, 147, 0.2)",
     borderWidth: 0,
-    maxWidth: "84%",
-    paddingHorizontal: 13,
-    paddingVertical: 9,
+    maxWidth: "80%",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   assistantBubble: {
     maxWidth: "100%",
@@ -1208,6 +1240,7 @@ const styles = StyleSheet.create({
   },
   assistantContent: {
     paddingHorizontal: 0,
+    paddingRight: Spacing.two,
   },
   errorBubble: {
     backgroundColor: "rgba(216, 79, 79, 0.16)",
@@ -1323,7 +1356,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 4,
-    marginTop: 2,
+    marginTop: 0,
   },
   userMessageFooter: {
     alignSelf: "flex-end",
@@ -1341,7 +1374,7 @@ const styles = StyleSheet.create({
     height: 22,
     justifyContent: "center",
     marginLeft: -1,
-    opacity: 0.58,
+    opacity: 0.48,
     width: 22,
   },
   userCopyButton: {
@@ -1355,16 +1388,16 @@ const styles = StyleSheet.create({
   },
   protocolRow: {
     alignSelf: "stretch",
-    marginVertical: 3,
+    marginVertical: 2,
   },
   metaRow: {
-    alignSelf: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderRadius: 14,
+    alignSelf: "flex-start",
+    backgroundColor: "transparent",
+    borderRadius: 0,
     marginVertical: Spacing.one,
     maxWidth: "90%",
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.one,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
   pressed: {
     opacity: 0.7,

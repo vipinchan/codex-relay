@@ -6,8 +6,8 @@ import {
   type MaintainVisibleContentPositionConfig,
 } from "@legendapp/list/react-native";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import Animated, {
   Easing,
@@ -24,7 +24,18 @@ import { Icon } from "@/components/ui/icon";
 import { Colors, Spacing } from "@/constants/theme";
 
 import { MessageBubble } from "./MessageBubble";
-import { messageItemType, messageKeyExtractor } from "./timeline-message-items";
+import { ActivityGroupCard } from "./ActivityGroupCard";
+import { messageItemType } from "./timeline-message-items";
+import {
+  buildTimelineRows,
+  INITIAL_TIMELINE_WINDOW_SIZE,
+  nextTimelineWindowSize,
+  TIMELINE_WINDOW_INCREMENT,
+  timelineFollowTrigger,
+  timelineLatestRowIndex,
+  type TimelineRow,
+  visibleMessageWindow,
+} from "./timeline-rows";
 import type { WorkspaceMarkdownPreviewTarget } from "./workspace-preview/markdown-target";
 import { RunningFooter } from "./RunningFooter";
 
@@ -39,8 +50,8 @@ const MAINTAIN_SCROLL_AT_END: MaintainScrollAtEndOptions = {
     layout: true,
   },
 };
-const MAINTAIN_VISIBLE_CONTENT_POSITION: MaintainVisibleContentPositionConfig<ChatMessage> = {
-  data: false,
+const MAINTAIN_VISIBLE_CONTENT_POSITION: MaintainVisibleContentPositionConfig<TimelineRow> = {
+  data: true,
   size: true,
 };
 const MAINTAIN_SCROLL_AT_END_THRESHOLD = 0.1;
@@ -72,15 +83,28 @@ export function MessageTimeline({
   threadId?: string;
 }) {
   const listRef = useRef<LegendListRef | null>(null);
+  const isAtLatestRef = useRef(true);
+  const isJumpingToLatestRef = useRef(false);
+  const previousRowsRef = useRef<readonly TimelineRow[]>([]);
   const { bottom } = useSafeAreaInsets();
-  const rows = messages;
   const timelineKey = threadId ?? "no-thread";
+  const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_TIMELINE_WINDOW_SIZE);
+  const messageWindow = useMemo(
+    () => visibleMessageWindow(messages, visibleMessageCount),
+    [messages, visibleMessageCount],
+  );
+  const rows = useMemo(
+    () => buildTimelineRows(messageWindow.messages, previousRowsRef.current),
+    [messageWindow.messages],
+  );
   const [settledTimelineKey, setSettledTimelineKey] = useState<string | undefined>(undefined);
+  const [isAtLatest, setAtLatest] = useState(true);
   const extraContentPadding = useSharedValue(0);
   const contentRevealProgress = useSharedValue(0);
   const hasRows = rows.length > 0;
   const isTimelineReady = !hasRows || settledTimelineKey === timelineKey;
   const showLoadingConversation = isLoading || (hasRows && !isTimelineReady);
+  const followTrigger = timelineFollowTrigger(messages, isRunning);
   const timelineContentStyle = useAnimatedStyle(() => ({
     opacity: contentRevealProgress.value,
     transform: [{ translateY: TIMELINE_CONTENT_SETTLE_OFFSET * (1 - contentRevealProgress.value) }],
@@ -94,8 +118,47 @@ export function MessageTimeline({
   }, [bottomAccessoryHeight, extraContentPadding]);
 
   useEffect(() => {
+    previousRowsRef.current = rows;
+  }, [rows]);
+
+  useEffect(() => {
     setSettledTimelineKey(undefined);
+    setVisibleMessageCount(INITIAL_TIMELINE_WINDOW_SIZE);
+    isAtLatestRef.current = true;
+    setAtLatest(true);
   }, [timelineKey]);
+
+  useEffect(() => {
+    if (!isTimelineReady || !isAtLatestRef.current) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated: false });
+    });
+    const settleTimer = isRunning
+      ? undefined
+      : setTimeout(() => {
+          if (isAtLatestRef.current) {
+            listRef.current?.scrollToEnd({ animated: false });
+          }
+        }, 240);
+    const lateSettleTimer = isRunning
+      ? undefined
+      : setTimeout(() => {
+          if (isAtLatestRef.current) {
+            listRef.current?.scrollToEnd({ animated: false });
+          }
+        }, 900);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (settleTimer !== undefined) {
+        clearTimeout(settleTimer);
+      }
+      if (lateSettleTimer !== undefined) {
+        clearTimeout(lateSettleTimer);
+      }
+    };
+  }, [followTrigger, isRunning, isTimelineReady]);
 
   useEffect(() => {
     if (isLoading || !hasRows) {
@@ -126,15 +189,29 @@ export function MessageTimeline({
     });
   }, [contentRevealProgress, showLoadingConversation]);
 
-  const renderMessage = useCallback(
-    ({ item }: LegendListRenderItemProps<ChatMessage>) => (
-      <MessageBubble
-        message={item}
-        onMessageCopied={onMessageCopied}
-        onMessageRewind={onMessageRewind}
-        onOpenMarkdownAttachment={onOpenMarkdownAttachment}
-      />
-    ),
+  const renderRow = useCallback(
+    ({ item }: LegendListRenderItemProps<TimelineRow>) =>
+      item.type === "activity-group" ? (
+        <ActivityGroupCard messages={item.messages} />
+      ) : item.type === "assistant-block" ? (
+        <MessageBubble
+          assistantBlock={{
+            copyContent: item.copyContent,
+            isFirst: item.isFirst,
+            isLast: item.isLast,
+          }}
+          message={item.message}
+          onMessageCopied={onMessageCopied}
+          onOpenMarkdownAttachment={onOpenMarkdownAttachment}
+        />
+      ) : (
+        <MessageBubble
+          message={item.message}
+          onMessageCopied={onMessageCopied}
+          onMessageRewind={onMessageRewind}
+          onOpenMarkdownAttachment={onOpenMarkdownAttachment}
+        />
+      ),
     [onMessageCopied, onMessageRewind, onOpenMarkdownAttachment],
   );
   const handleTimelineLoad = useCallback(() => {
@@ -142,6 +219,51 @@ export function MessageTimeline({
       setSettledTimelineKey(timelineKey);
     });
   }, [timelineKey]);
+  const handleScroll = useCallback(() => {
+    if (isJumpingToLatestRef.current) {
+      return;
+    }
+    const nextIsAtLatest = listRef.current?.getState().isAtEnd;
+    if (nextIsAtLatest === undefined) {
+      return;
+    }
+    if (nextIsAtLatest === isAtLatestRef.current) {
+      return;
+    }
+    isAtLatestRef.current = nextIsAtLatest;
+    setAtLatest(nextIsAtLatest);
+  }, []);
+  const jumpToLatest = useCallback(() => {
+    const list = listRef.current;
+    const latestRowIndex = timelineLatestRowIndex(rows.length);
+    if (!list || latestRowIndex === undefined) {
+      return;
+    }
+    isJumpingToLatestRef.current = true;
+    isAtLatestRef.current = true;
+    setAtLatest(true);
+    void (async () => {
+      try {
+        await list.scrollToIndex({ animated: true, index: latestRowIndex, viewPosition: 1 });
+      } catch {
+        // LegendList can reject an estimated long-range jump before its measurements converge.
+      }
+      try {
+        await list.scrollToEnd({ animated: false });
+      } catch {
+        // Keep the button available if the final measured scroll cannot be completed.
+      }
+      requestAnimationFrame(() => {
+        const nextIsAtLatest = list.getState().isAtEnd;
+        isJumpingToLatestRef.current = false;
+        isAtLatestRef.current = nextIsAtLatest;
+        setAtLatest(nextIsAtLatest);
+      });
+    })();
+  }, [rows.length]);
+  const loadEarlierMessages = useCallback(() => {
+    setVisibleMessageCount((current) => nextTimelineWindowSize(current, messages.length));
+  }, [messages.length]);
 
   return (
     <View onTouchStart={onKeyboardDismissRequest} style={styles.transitionHost}>
@@ -172,19 +294,20 @@ export function MessageTimeline({
               data={rows}
               estimatedItemSize={MESSAGE_ESTIMATED_ITEM_SIZE}
               freeze={keyboardLayoutFrozen}
-              getItemType={messageItemType}
+              getItemType={timelineRowItemType}
               initialScrollAtEnd
-              keyExtractor={messageKeyExtractor}
-              renderItem={renderMessage}
+              keyExtractor={timelineRowKeyExtractor}
+              renderItem={renderRow}
               contentContainerStyle={styles.content}
               keyboardDismissMode="interactive"
               keyboardLiftBehavior="whenAtEnd"
               keyboardOffset={bottom - 24}
               keyboardShouldPersistTaps="handled"
-              maintainScrollAtEnd={MAINTAIN_SCROLL_AT_END}
+              maintainScrollAtEnd={isAtLatest ? MAINTAIN_SCROLL_AT_END : false}
               maintainScrollAtEndThreshold={MAINTAIN_SCROLL_AT_END_THRESHOLD}
               maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
               onLoad={handleTimelineLoad}
+              onScroll={handleScroll}
               recycleItems={false}
               scrollEventThrottle={48}
               showsVerticalScrollIndicator={false}
@@ -192,7 +315,28 @@ export function MessageTimeline({
               ListFooterComponent={
                 isRunning ? <RunningFooter /> : <View style={styles.listEndPad} />
               }
+              ListHeaderComponent={
+                messageWindow.hiddenCount > 0 ? (
+                  <EarlierMessagesButton
+                    hiddenCount={messageWindow.hiddenCount}
+                    onPress={loadEarlierMessages}
+                  />
+                ) : null
+              }
             />
+            {!isAtLatest ? (
+              <Pressable
+                accessibilityLabel="Jump to latest message"
+                accessibilityRole="button"
+                onPress={jumpToLatest}
+                style={({ pressed }) => [styles.jumpToLatest, pressed && styles.jumpPressed]}
+              >
+                <Icon name="expand" size={14} tintColor="#F5F5F7" strokeWidth={2.2} />
+                <ThemedText type="smallBold" style={styles.jumpLabel}>
+                  Latest
+                </ThemedText>
+              </Pressable>
+            ) : null}
           </Animated.View>
         )
       ) : null}
@@ -219,6 +363,37 @@ function LoadingConversation() {
       </ThemedText>
     </View>
   );
+}
+
+function EarlierMessagesButton({
+  hiddenCount,
+  onPress,
+}: {
+  hiddenCount: number;
+  onPress: () => void;
+}) {
+  const nextCount = Math.min(TIMELINE_WINDOW_INCREMENT, hiddenCount);
+  return (
+    <Pressable
+      accessibilityLabel={`Load ${nextCount} earlier messages`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.earlierMessages, pressed && styles.jumpPressed]}
+    >
+      <Icon name="expand" size={13} tintColor={Colors.dark.textSecondary} strokeWidth={2.1} />
+      <ThemedText type="code" themeColor="textSecondary" style={styles.earlierMessagesLabel}>
+        Show {nextCount} earlier · {hiddenCount} hidden
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+function timelineRowKeyExtractor(row: TimelineRow) {
+  return row.key;
+}
+
+function timelineRowItemType(row: TimelineRow) {
+  return row.type === "message" ? messageItemType(row.message) : row.type;
 }
 
 const styles = StyleSheet.create({
@@ -256,11 +431,48 @@ const styles = StyleSheet.create({
     maxWidth: 280,
     textAlign: "center",
   },
+  earlierMessages: {
+    alignItems: "center",
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: Spacing.two,
+    minHeight: 34,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+  },
+  earlierMessagesLabel: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
   list: {
     flex: 1,
   },
   listEndPad: {
     height: Spacing.two,
+  },
+  jumpToLatest: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: "rgba(42, 42, 44, 0.96)",
+    borderColor: "rgba(255, 255, 255, 0.16)",
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    bottom: 12,
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 36,
+    paddingHorizontal: 13,
+    position: "absolute",
+  },
+  jumpLabel: {
+    color: "#F5F5F7",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  jumpPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.97 }],
   },
   transitionHost: {
     flex: 1,
