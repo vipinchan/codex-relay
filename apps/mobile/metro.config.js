@@ -8,10 +8,7 @@ const existingBlockList = config.resolver.blockList;
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules ?? {}),
   "codex-relay": path.resolve(__dirname, "../../packages/codex-relay"),
-  "react-native-direct-fetch": path.resolve(
-    __dirname,
-    "../../packages/react-native-direct-fetch",
-  ),
+  "react-native-direct-fetch": path.resolve(__dirname, "../../packages/react-native-direct-fetch"),
 };
 
 config.resolver.blockList = [
@@ -43,10 +40,7 @@ finalConfig.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === "react-native-direct-fetch") {
     return {
       type: "sourceFile",
-      filePath: path.resolve(
-        __dirname,
-        "../../packages/react-native-direct-fetch/src/index.ts",
-      ),
+      filePath: path.resolve(__dirname, "../../packages/react-native-direct-fetch/src/index.ts"),
     };
   }
 

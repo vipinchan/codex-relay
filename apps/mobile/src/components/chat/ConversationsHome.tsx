@@ -301,12 +301,7 @@ function GroupingButton({
       onPress={onPress}
       style={({ pressed }) => [styles.groupingButton, pressed && styles.pressed]}
     >
-      <Icon
-        name={isProject ? "folder" : "clock"}
-        size={16}
-        tintColor={accent}
-        strokeWidth={2}
-      />
+      <Icon name={isProject ? "folder" : "clock"} size={16} tintColor={accent} strokeWidth={2} />
       <ThemedText style={styles.groupingButtonLabel}>{currentLabel}</ThemedText>
     </Pressable>
   );
