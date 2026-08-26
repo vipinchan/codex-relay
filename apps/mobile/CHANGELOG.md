@@ -1,5 +1,11 @@
 # @codex-relay/mobile
 
+## 1.4.0-ship.9
+
+### Patch Changes
+
+- 0832d38: Redesign the mobile chat experience with compact conversation styling, grouped runtime activity, reliable long-session scrolling, a streamlined composer, and focused approval states.
+
 ## 1.4.0-ship.8
 
 ### Patch Changes
