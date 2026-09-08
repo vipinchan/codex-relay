@@ -39,6 +39,15 @@ export const previewModels: CodexModel[] = [
   }),
 ];
 
+export function modelsForPicker(models: CodexModel[]) {
+  if (models.length !== 1 || models[0]?.model !== "gpt-6-astra") {
+    return models;
+  }
+
+  const serverAstra = models[0];
+  return previewModels.map((model) => (model.model === serverAstra.model ? serverAstra : model));
+}
+
 function previewModel({
   defaultReasoningEffort,
   description,

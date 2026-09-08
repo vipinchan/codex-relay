@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AppBottomSheet } from "@/components/ui/bottom-sheet";
 
 import { AdvancedModelOptions, type AdvancedSection } from "./AdvancedModelOptions";
+import { modelsForPicker } from "./chat-preview-models";
 import {
   defaultPowerSelection,
   fastServiceTierForModel,
@@ -39,8 +40,14 @@ export function ChatModelPickerSheet({
 }) {
   const [viewMode, setViewMode] = useState<"advanced" | "compact">();
   const [advancedSection, setAdvancedSection] = useState<AdvancedSection | undefined>();
-  const powerSelections = powerSelectionsForModels(models);
+  const pickerModels = modelsForPicker(models);
   const effectiveSelectedModel = selectedModel ?? activeModel?.model;
+  const pickerActiveModel =
+    pickerModels.find((model) => model.model === effectiveSelectedModel) ??
+    activeModel ??
+    pickerModels.find((model) => model.isDefault) ??
+    pickerModels[0];
+  const powerSelections = powerSelectionsForModels(pickerModels);
   const selectedPower = selectedPowerSelection(
     powerSelections,
     effectiveSelectedModel,
@@ -51,7 +58,7 @@ export function ChatModelPickerSheet({
   const showAdvanced =
     !hasCompactPower || viewMode === "advanced" || (viewMode !== "compact" && hasCustomSelection);
   const presentation = modelPickerSheetPresentation(showAdvanced, hasCompactPower);
-  const fastServiceTier = fastServiceTierForModel(activeModel);
+  const fastServiceTier = fastServiceTierForModel(pickerActiveModel);
   const isFastModeEnabled = Boolean(fastServiceTier && selectedServiceTier === fastServiceTier.id);
 
   useEffect(() => {
@@ -121,8 +128,8 @@ export function ChatModelPickerSheet({
       {showAdvanced ? (
         <AdvancedModelOptions
           activeSection={advancedSection}
-          activeModel={activeModel}
-          models={models}
+          activeModel={pickerActiveModel}
+          models={pickerModels}
           onModelSelect={onModelSelect}
           onReasoningSelect={onReasoningSelect}
           onSectionChange={setAdvancedSection}
