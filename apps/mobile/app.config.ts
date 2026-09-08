@@ -1,10 +1,16 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
+import { config } from "dotenv";
+
+config({ path: ".env.hotupdater", quiet: true });
+
+const hotUpdaterApiKey =
+  process.env.EXPO_PUBLIC_HOT_UPDATER_API_KEY?.trim() || process.env.HOT_UPDATER_API_KEY?.trim();
 
 export default function appConfig(_context: ConfigContext): ExpoConfig {
   return {
     name: "Codex Relay",
     slug: "codex-relay",
-    version: "1.4.0",
+    version: "1.5.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "codex-relay",
@@ -12,6 +18,7 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
     ios: {
       icon: "./assets/images/icon.png",
       bundleIdentifier: "com.gronstudio.codexrelay",
+      deploymentTarget: "16.4",
       supportsTablet: true,
       infoPlist: {
         NSAppTransportSecurity: {
@@ -86,8 +93,13 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
       "expo-notifications",
       "expo-system-ui",
       "expo-web-browser",
-      "@hot-updater/react-native",
-      "react-native-enriched-markdown",
+      [
+        "@hot-updater/expo",
+        {
+          channel: "production",
+          publicKeyPath: "./keys/public-key.pem",
+        },
+      ],
       [
         "expo-secure-store",
         {
@@ -97,9 +109,6 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
       [
         "expo-build-properties",
         {
-          ios: {
-            deploymentTarget: "16.4",
-          },
           android: {
             usesCleartextTraffic: true,
           },
@@ -111,6 +120,7 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
       reactCompiler: true,
     },
     extra: {
+      hotUpdaterApiKey,
       router: {},
       eas: {
         projectId: "6659e28f-2ac7-4055-8f56-7b4ca5e65847",

@@ -1,0 +1,139 @@
+name: iOS 1.5.0 Beta
+
+on:
+  push:
+    branches:
+      - sync/upstream-1.5.0-beta
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-1.5.0-beta-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  beta-ipa:
+    name: Build and publish 1.5.0 beta IPA
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build beta IPA
+        env:
+          IOS_IPA_NAME: CodexRelay-1.5.0-beta.1.ipa
+          MOBILE_RELEASE_VERSION: 1.5.0-beta.1
+        run: bash scripts/build-ios-ipa.sh
+
+      - name: Upload beta artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexRelay-1.5.0-beta.1-${{ github.sha }}
+          path: |
+            dist/ios/CodexRelay-1.5.0-beta.1.ipa
+            dist/ios/CodexRelay-1.5.0-beta.1.ipa.sha256
+            dist/ios/build-info.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Prepare beta release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit="${GITHUB_SHA:0:7}"
+          app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
+          min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
+          cat > /tmp/beta-release-notes.md <<EOF
+          ## Codex Relay iOS 1.5.0 Beta 1
+
+          Test build integrating upstream 1.5.0 runtime changes with the OpenMinis-style mobile interface and TrollStore/sideload IPA pipeline.
+
+          ### Included
+
+          - Upstream Codex SDK/CLI, GPT-6 Astra, streaming, history and pairing updates
+          - OpenMinis-style session-first navigation and conversation UI
+          - Full workspace selection for new chats
+          - Private sideload/TrollStore IPA packaging
+
+          ### Build
+
+          - App version: \`${app_version}\`
+          - Mobile beta: \`1.5.0-beta.1\`
+          - Minimum iOS: \`${min_ios}\`
+          - Commit: \`${commit}\`
+
+          ### Installation
+
+          Download **CodexRelay-1.5.0-beta.1.ipa** and install it with TrollStore on a compatible device.
+          EOF
+
+      - name: Publish beta prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='@codex-relay/mobile@1.5.0-beta.1'
+          ipa='dist/ios/CodexRelay-1.5.0-beta.1.ipa'
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" \
+              "$ipa" \
+              "$ipa.sha256" \
+              dist/ios/build-info.txt \
+              --clobber
+            gh release edit "$tag" \
+              --target "$GITHUB_SHA" \
+              --title 'Codex Relay iOS 1.5.0 Beta 1' \
+              --notes-file /tmp/beta-release-notes.md \
+              --prerelease
+          else
+            gh release create "$tag" \
+              "$ipa" \
+              "$ipa.sha256" \
+              dist/ios/build-info.txt \
+              --target "$GITHUB_SHA" \
+              --title 'Codex Relay iOS 1.5.0 Beta 1' \
+              --notes-file /tmp/beta-release-notes.md \
+              --prerelease
+          fi
+
+      - name: Verify published IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='@codex-relay/mobile@1.5.0-beta.1'
+          ipa='CodexRelay-1.5.0-beta.1.ipa'
+          rm -rf /tmp/codex-relay-beta-check
+          mkdir -p /tmp/codex-relay-beta-check
+          gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check
+          expected="$(awk '{print $1}' "dist/ios/$ipa.sha256")"
+          actual="$(shasum -a 256 "/tmp/codex-relay-beta-check/$ipa" | awk '{print $1}')"
+          test "$expected" = "$actual"
+          echo "Verified beta IPA SHA-256: $actual"

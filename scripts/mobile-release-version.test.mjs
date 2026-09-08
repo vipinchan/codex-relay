@@ -101,3 +101,41 @@ test("defines independent npm and mobile version commands", () => {
   assert.match(releaseWorkflow, /changeset-release\/mobile-main/);
   assert.doesNotMatch(releaseWorkflow, /changesets\/action/);
 });
+
+test("waits for the relay package release before preparing the mobile OTA", () => {
+  const releaseWorkflow = readFileSync(
+    new URL("../.github/workflows/release.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    releaseWorkflow,
+    /if: steps\.mobile-release-plan\.outputs\.deploy == 'true' && steps\.mobile-release-plan\.outputs\.relay-package-version == ''/,
+  );
+  assert.match(
+    releaseWorkflow,
+    /if \(process\.env\.MOBILE_RELEASE_VERSION && !process\.env\.RELAY_RELEASE_VERSION\)/,
+  );
+});
+
+test("prepares the production iOS App Store configuration", () => {
+  const easConfig = JSON.parse(
+    readFileSync(new URL("../apps/mobile/eas.json", import.meta.url), "utf8"),
+  );
+
+  assert.equal(easConfig.build.production.distribution, "store");
+  assert.equal(easConfig.build.production.autoIncrement, true);
+  assert.equal(easConfig.build.production.ios.buildConfiguration, "Release");
+  assert.equal(easConfig.submit.production.ios.ascAppId, "6764463488");
+});
+
+test("checks v1 infrastructure and Bundle state around an OTA deploy", () => {
+  const releaseWorkflow = readFileSync(
+    new URL("../.github/workflows/release.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(releaseWorkflow, /hot-updater doctor --server-base-url/);
+  assert.match(releaseWorkflow, /hot-updater bundle list -p ios --limit 5 --json/);
+  assert.doesNotMatch(releaseWorkflow, /hot-updater release list -p ios/);
+});

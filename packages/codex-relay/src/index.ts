@@ -20,6 +20,7 @@ import {
   type ConnectUrlCandidate,
 } from "./pairing-url-candidates.js";
 import { createTursoPairingSessionStore } from "./pairing-store.js";
+import { createTerminalPairingApprover } from "./terminal-pairing.js";
 import { codexRelayDataPath, legacyCodexRelayDataPath } from "./paths.js";
 import { createFileRuntimePreferencesStore } from "./preferences-store.js";
 import {
@@ -29,6 +30,7 @@ import {
 } from "./secure-transport.js";
 
 const port = Number(process.env.PORT ?? 8787);
+let activePort = port;
 const hostname = process.env.HOST ?? "0.0.0.0";
 const dangerouslyAutoApprove = process.env.CODEX_RELAY_DANGEROUSLY_AUTO_APPROVE === "1";
 const serverIdentity = await getServerIdentity();
@@ -56,6 +58,13 @@ const sessionStore = await createTursoPairingSessionStore(
   process.env.CODEX_RELAY_AUTH_DB_PATH ??
     (await prepareCodexRelayDataPath("auth.db", ["auth.db-shm", "auth.db-wal"])),
 );
+const terminalPairing = createTerminalPairingApprover({
+  input: process.stdin,
+  output: process.stdout,
+  sessions: sessionStore,
+  onApproved: () =>
+    logRuntimeEvent("Approved", "Pairing approved. Waiting for your phone to finish connecting."),
+});
 const preferencesStore = createFileRuntimePreferencesStore(
   process.env.CODEX_RELAY_PREFERENCES_PATH ?? (await prepareCodexRelayDataPath("preferences.json")),
 );
@@ -103,12 +112,13 @@ serve(
             `Handshake received${remoteAddress ? ` from ${remoteAddress}` : ""}.`,
           );
         },
-        onPairApprovalRequested: ({ clientName }) => {
+        onPairApprovalRequested: ({ approvalCode, clientName }) => {
           const name = clientName ? ` from ${clientName}` : "";
           logRuntimeEvent(
             "Approval",
-            `Pairing approval requested${name}. Use the code shown in the mobile app to approve locally.`,
+            `Pairing approval requested${name}. Command: ${formatApprovalCommand(approvalCode, activePort)}`,
           );
+          void terminalPairing.request(approvalCode);
         },
         onPairApproved: ({ clientName }) => {
           const name = clientName ? ` for ${clientName}` : "";
@@ -137,6 +147,7 @@ serve(
     port,
   },
   (info) => {
+    activePort = info.port;
     const listenUrl = `http://${info.address}:${info.port}`;
     const connectUrlCandidates = getConnectUrlCandidates({ listenUrl, port: info.port });
     const connectUrl = connectUrlCandidates[0]?.url ?? listenUrl;
@@ -182,7 +193,22 @@ serve(
       }),
     );
   },
-);
+).on("error", (error: NodeJS.ErrnoException) => {
+  if (error.code !== "EADDRINUSE") {
+    throw error;
+  }
+
+  console.error(`Codex Relay could not start: ${hostname}:${port} is already in use.`);
+  console.error("Another Codex Relay instance or another application may be listening there.");
+  console.error("If it is your existing relay, print its pairing QR with:");
+  console.error(`  ${npxCommand} qr`);
+  console.error("To stop a background relay using this data directory:");
+  console.error(`  ${npxCommand} stop`);
+  console.error("Otherwise, identify the listener before stopping it:");
+  console.error(`  lsof -nP -iTCP:${port} -sTCP:LISTEN`);
+  console.error("To run a separate relay, use a free PORT and a separate CODEX_RELAY_HOME.");
+  stopRelayAppServer(1);
+});
 
 function stopRelayAppServer(exitCode: number) {
   relayAppServer?.close();
@@ -227,9 +253,11 @@ function formatStartupInstructions(details: {
       : `${color.prompt("›")} Waiting for pairing requests`,
     details.dangerouslyAutoApprove
       ? `${color.prompt("›")} Disable this for normal use.`
-      : `${color.prompt("›")} Approve a device with ${color.command(
-          formatApprovalCommand("<code>", details.port),
-        )}`,
+      : process.stdin.isTTY && process.stdout.isTTY
+        ? `${color.prompt("›")} Approve a device here when prompted: type y and press Enter.`
+        : `${color.prompt("›")} Approve a device with ${color.command(
+            formatApprovalCommand("<code>", details.port),
+          )}`,
   ];
   return ["", ...lines, ""].join("\n");
 }

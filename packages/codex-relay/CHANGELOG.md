@@ -1,5 +1,63 @@
 # codex-relay
 
+## 1.5.2
+
+### Patch Changes
+
+- 81c3934: Approve pairing directly in the interactive relay terminal by confirming the code and typing y followed by Enter. Keep the approval command for background relays, and explain both options on the phone.
+
+  Make the pairing route own deep links, show connection progress immediately, probe candidate addresses concurrently, and preserve timeout details in network errors.
+
+- 28dfb8b: Read recent sessions from the Codex index and limit the list to 20 by default, avoiding mobile timeouts from repeatedly scanning large legacy histories. Add CODEX_RELAY_THREAD_LIST_LIMIT to control the visible history size without deleting history.
+
+## 1.5.1
+
+### Patch Changes
+
+- 7a18692: Report an occupied server port with recovery instructions instead of an unhandled Node error.
+
+## 1.5.0
+
+### Minor Changes
+
+- c5bfb32: Release codex-relay 1.5.0 with Codex SDK and bundled CLI 0.153.4. Warn in the mobile app when the connected relay is older than 1.5.0. Deliver the compatibility warning through the existing OTA release workflow for the current App Store binary.
+
+## 1.4.14
+
+### Patch Changes
+
+- 72af772: Keep started assistant messages in a streaming state, create missing messages before forwarding app-server deltas, and preserve whitespace-only deltas such as line breaks.
+
+## 1.4.13
+
+### Patch Changes
+
+- fe8e795: Resume persisted app-server threads before starting turns so mobile clients continue receiving streamed responses after relay reconnections.
+
+## 1.4.12
+
+### Patch Changes
+
+- d40b19e: Hide Codex-injected context blocks from thread history responses.
+
+## 1.4.11
+
+### Patch Changes
+
+- bdc4b5a: Restore fast thread history loading and keep relay version mismatches as sidebar warnings.
+
+## 1.4.10
+
+### Patch Changes
+
+- f764166: Keep relay and mobile thread history consistent with Codex 0.149 app-server and SDK behavior, and require the compatible relay release from the app.
+
+## 1.4.9
+
+### Patch Changes
+
+- 5d6da00: Update `@openai/codex-sdk` to `0.149.1`.
+
 ## 1.4.8
 
 ### Patch Changes

@@ -13,8 +13,9 @@ import { CodexAppServerClient } from "../src/app-server.js";
 import { relayDebugLog } from "../src/debug-log.js";
 
 type JsonRpcRequest = {
-  id: number;
+  id?: number;
   method: string;
+  params?: Record<string, unknown>;
 };
 
 type SharedSocketServer = {
@@ -45,6 +46,11 @@ describe("CodexAppServerClient shared socket mode", () => {
     try {
       await client.initialize();
       expect(server.connections).toHaveLength(1);
+      await vi.waitFor(() => {
+        expect(server.requests.filter((request) => request.method === "initialized")).toHaveLength(
+          1,
+        );
+      });
       expect(startSharedServer).not.toHaveBeenCalled();
       expect(relayDebugLog).toHaveBeenCalledWith("app_server.shared_socket.connected", {
         ownership: "attached",
@@ -54,6 +60,7 @@ describe("CodexAppServerClient shared socket mode", () => {
         ownership: "attached",
         socketPath,
       });
+      await client.resumeThread({ threadId: "thread-active" });
 
       server.connections[0]?.terminate();
 
@@ -65,6 +72,21 @@ describe("CodexAppServerClient shared socket mode", () => {
       );
       await expect(client.listModels()).resolves.toEqual([]);
       expect(server.requests.filter((request) => request.method === "initialize")).toHaveLength(2);
+      expect(server.requests.filter((request) => request.method === "thread/resume")).toHaveLength(
+        2,
+      );
+      expect(
+        server.requests.filter((request) => request.method === "thread/resume").at(-1)?.params,
+      ).toEqual({
+        excludeTurns: true,
+        initialTurnsPage: { itemsView: "summary", limit: 1, sortDirection: "desc" },
+        threadId: "thread-active",
+      });
+      await vi.waitFor(() => {
+        expect(server.requests.filter((request) => request.method === "initialized")).toHaveLength(
+          2,
+        );
+      });
       expect(startSharedServer).not.toHaveBeenCalled();
       expect(client.appServerMode).toBe("socket");
       expect(relayDebugLog).toHaveBeenCalledWith(
@@ -81,6 +103,181 @@ describe("CodexAppServerClient shared socket mode", () => {
       await rm(codexHome, { force: true, recursive: true });
     }
   });
+
+  it("replays a turn that completed while the shared socket was disconnected", async () => {
+    const codexHome = await mkdtemp(join(socketTempRoot, "codex-relay-app-server-gap-"));
+    const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");
+    const now = Date.now() / 1_000;
+    let resumedTurn: {
+      id: string;
+      items: Array<Record<string, unknown>>;
+      itemsView: string;
+      status: string;
+      error: null;
+      startedAt: number;
+      completedAt: number | null;
+      durationMs: number | null;
+    } = {
+      id: "turn-gap",
+      items: [],
+      itemsView: "notLoaded",
+      status: "inProgress",
+      error: null,
+      startedAt: now,
+      completedAt: null,
+      durationMs: null,
+    };
+    const server = await startSharedSocketServer(socketPath, (request) => {
+      if (request.method !== "thread/resume") {
+        return request.method === "model/list" ? { data: [] } : {};
+      }
+      return {
+        initialTurnsPage: { data: [resumedTurn] },
+        thread: {
+          id: "thread-gap",
+          status: { type: resumedTurn.status === "inProgress" ? "active" : "idle" },
+          turns: [],
+        },
+      };
+    });
+    vi.stubEnv("CODEX_HOME", codexHome);
+    vi.stubEnv("CODEX_RELAY_APP_SERVER_MODE", "socket");
+    const client = new CodexAppServerClient({
+      startSharedServer: async () => {
+        throw new Error("Expected the client to attach to the existing shared app-server.");
+      },
+    });
+    const notifications: Array<{ method: string; params: unknown }> = [];
+    client.onNotification((notification) => notifications.push(notification));
+
+    try {
+      await client.initialize();
+      await client.resumeThread({ excludeTurns: true, threadId: "thread-gap" });
+      resumedTurn = {
+        ...resumedTurn,
+        items: [
+          {
+            id: "assistant-gap",
+            text: "Recovered after reconnect",
+            type: "agentMessage",
+          },
+        ],
+        itemsView: "summary",
+        status: "completed",
+        completedAt: now + 1,
+        durationMs: 1_000,
+      };
+
+      server.connections[0]?.terminate();
+
+      await vi.waitFor(
+        () => {
+          expect(notifications).toContainEqual({
+            method: "turn/completed",
+            params: {
+              threadId: "thread-gap",
+              turn: resumedTurn,
+            },
+          });
+        },
+        { timeout: 5_000 },
+      );
+      expect(
+        server.requests.filter((request) => request.method === "thread/resume").at(-1)?.params,
+      ).toEqual({
+        excludeTurns: true,
+        initialTurnsPage: { itemsView: "summary", limit: 1, sortDirection: "desc" },
+        threadId: "thread-gap",
+      });
+    } finally {
+      client.close();
+      await server.close();
+      await rm(codexHome, { force: true, recursive: true });
+    }
+  });
+
+  it("bounds the recent thread list and never follows older history cursors", async () => {
+    const codexHome = await mkdtemp(join(socketTempRoot, "codex-relay-app-server-pages-"));
+    const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");
+    const server = await startSharedSocketServer(socketPath, (request) => {
+      if (request.method !== "thread/list") {
+        return {};
+      }
+      return request.params?.cursor === "page-2"
+        ? { data: [{ id: "thread-older" }], nextCursor: null }
+        : { data: [{ id: "thread-newer" }], nextCursor: "page-2" };
+    });
+    vi.stubEnv("CODEX_HOME", codexHome);
+    vi.stubEnv("CODEX_RELAY_APP_SERVER_MODE", "socket");
+    const client = new CodexAppServerClient({
+      startSharedServer: async () => {
+        throw new Error("Expected the client to attach to the existing shared app-server.");
+      },
+    });
+
+    try {
+      const threads = await client.listThreads(1);
+      const requests = server.requests.filter((request) => request.method === "thread/list");
+
+      expect(threads.map((thread) => thread.id)).toEqual(["thread-newer"]);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.params).toMatchObject({
+        limit: 1,
+        sortKey: "recency_at",
+        sortDirection: "desc",
+        sourceKinds: ["cli", "vscode", "exec", "appServer"],
+      });
+      expect(requests[0]?.params).toHaveProperty("useStateDbOnly", true);
+      expect(requests[0]?.params).not.toHaveProperty("cursor");
+    } finally {
+      client.close();
+      await server.close();
+      await rm(codexHome, { force: true, recursive: true });
+    }
+  });
+
+  it("discovers history for an empty index and defaults to twenty recent threads", async () => {
+    const codexHome = await mkdtemp(join(socketTempRoot, "codex-relay-empty-index-"));
+    const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");
+    const server = await startSharedSocketServer(socketPath, (request) => {
+      if (request.method !== "thread/list") return {};
+      return request.params?.useStateDbOnly
+        ? { data: [], nextCursor: null }
+        : { data: [{ id: "legacy-thread" }], nextCursor: "older" };
+    });
+    vi.stubEnv("CODEX_HOME", codexHome);
+    vi.stubEnv("CODEX_RELAY_APP_SERVER_MODE", "socket");
+    vi.stubEnv("CODEX_RELAY_THREAD_LIST_LIMIT", "20");
+    const client = new CodexAppServerClient();
+    try {
+      await expect(client.listThreads()).resolves.toEqual([{ id: "legacy-thread" }]);
+      const requests = server.requests.filter((request) => request.method === "thread/list");
+      expect(requests).toHaveLength(2);
+      expect(requests[0]?.params).toMatchObject({ limit: 20, useStateDbOnly: true });
+      expect(requests[1]?.params).toMatchObject({ limit: 20 });
+      expect(requests[1]?.params).not.toHaveProperty("useStateDbOnly");
+      expect(requests[1]?.params).not.toHaveProperty("cursor");
+      vi.stubEnv("CODEX_RELAY_THREAD_LIST_LIMIT", "10");
+      await client.listThreads();
+      expect(
+        server.requests.filter((request) => request.method === "thread/list").at(-1)?.params,
+      ).toHaveProperty("limit", 10);
+    } finally {
+      client.close();
+      await server.close();
+      await rm(codexHome, { force: true, recursive: true });
+    }
+  });
+
+  it.each(["0", "-1", "1.5", "NaN"])(
+    "rejects invalid thread limits before connecting: %s",
+    async (limit) => {
+      vi.stubEnv("CODEX_RELAY_THREAD_LIST_LIMIT", limit);
+      const client = new CodexAppServerClient();
+      await expect(client.listThreads()).rejects.toThrow("positive integer");
+      client.close();
+    },
+  );
 
   it.skipIf(process.platform === "win32")(
     "replaces a stale Unix socket after a slow shared app-server startup",
@@ -146,7 +343,15 @@ process.stdin.resume();
   );
 });
 
-async function startSharedSocketServer(socketPath: string): Promise<SharedSocketServer> {
+async function startSharedSocketServer(
+  socketPath: string,
+  responseForRequest: (request: JsonRpcRequest) => unknown = (request) =>
+    request.method === "model/list"
+      ? { data: [] }
+      : request.method === "thread/resume"
+        ? { thread: { id: request.params?.threadId } }
+        : {},
+): Promise<SharedSocketServer> {
   await mkdir(dirname(socketPath), { recursive: true });
   const connections: WebSocket[] = [];
   const requests: JsonRpcRequest[] = [];
@@ -157,10 +362,13 @@ async function startSharedSocketServer(socketPath: string): Promise<SharedSocket
     socket.on("message", (data) => {
       const request = JSON.parse(String(data)) as JsonRpcRequest;
       requests.push(request);
+      if (typeof request.id !== "number") {
+        return;
+      }
       socket.send(
         JSON.stringify({
           id: request.id,
-          result: request.method === "model/list" ? { data: [] } : {},
+          result: responseForRequest(request),
         }),
       );
     });

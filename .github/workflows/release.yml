@@ -128,7 +128,7 @@ jobs:
         run: pnpm release
 
       - name: Validate Hot Updater configuration
-        if: steps.mobile-release.outputs.deploy == 'true' && vars.ENABLE_MOBILE_OTA == 'true'
+        if: steps.mobile-release.outputs.deploy == 'true'
         env:
           MOBILE_ENV: ${{ secrets.MOBILE_ENV }}
           HOT_UPDATER_ENV: ${{ secrets.HOT_UPDATER_ENV }}
@@ -148,7 +148,7 @@ jobs:
           fi
 
       - name: Restore mobile deployment environment
-        if: steps.mobile-release.outputs.deploy == 'true' && vars.ENABLE_MOBILE_OTA == 'true'
+        if: steps.mobile-release.outputs.deploy == 'true'
         working-directory: apps/mobile
         env:
           MOBILE_ENV: ${{ secrets.MOBILE_ENV }}
@@ -161,14 +161,29 @@ jobs:
           install -d -m 700 keys
           printf '%s' "$HOT_UPDATER_PRIVATE_KEY" > keys/private-key.pem
 
+      - name: Verify Hot Updater v1 infrastructure
+        if: steps.mobile-release.outputs.deploy == 'true'
+        working-directory: apps/mobile
+        run: |
+          server_base_url="$(node -e '
+            const { parsed = {} } = require("dotenv").config({ path: ".env", quiet: true });
+            const value = parsed.EXPO_PUBLIC_HOT_UPDATER_BASE_URL?.trim();
+            if (!value) {
+              console.error("EXPO_PUBLIC_HOT_UPDATER_BASE_URL is missing");
+              process.exit(1);
+            }
+            process.stdout.write(value);
+          ')"
+          pnpm hot-updater doctor --server-base-url "$server_base_url"
+
       - name: Deploy iOS OTA update
-        if: steps.mobile-release.outputs.deploy == 'true' && vars.ENABLE_MOBILE_OTA == 'true'
+        if: steps.mobile-release.outputs.deploy == 'true'
         timeout-minutes: 30
         working-directory: apps/mobile
         run: pnpm hot-updater deploy -p ios -t "${{ steps.ios-app-version.outputs.version }}"
 
       - name: Verify iOS OTA update
-        if: steps.mobile-release.outputs.deploy == 'true' && vars.ENABLE_MOBILE_OTA == 'true'
+        if: steps.mobile-release.outputs.deploy == 'true'
         working-directory: apps/mobile
         run: pnpm hot-updater bundle list -p ios --limit 5 --json
 
@@ -188,7 +203,7 @@ jobs:
           git push --force-with-lease origin HEAD:refs/heads/changeset-release/npm-main
 
       - name: Update mobile release branch
-        if: steps.mobile-release-plan.outputs.deploy == 'true'
+        if: steps.mobile-release-plan.outputs.deploy == 'true' && steps.mobile-release-plan.outputs.relay-package-version == ''
         run: |
           git switch --detach "$GITHUB_SHA"
           git switch --create changeset-release/mobile-main "$GITHUB_SHA"
@@ -220,16 +235,16 @@ jobs:
                 ].join("\n"),
               });
             }
-            if (process.env.MOBILE_RELEASE_VERSION) {
+            if (process.env.MOBILE_RELEASE_VERSION && !process.env.RELAY_RELEASE_VERSION) {
               releases.push({
                 branch: "changeset-release/mobile-main",
                 title: `chore: release @codex-relay/mobile@${process.env.MOBILE_RELEASE_VERSION} (app-version ${process.env.IOS_APP_VERSION})`,
                 body: [
-                  "## Mobile release",
+                  "## iOS OTA deployment",
                   "",
-                  `- Package: \`@codex-relay/mobile@${process.env.MOBILE_RELEASE_VERSION}\``,
-                  `- App version: \`${process.env.IOS_APP_VERSION}\``,
-                  "- Deployment: versioned IPA release after merge",
+                  `- Mobile release: \`@codex-relay/mobile@${process.env.MOBILE_RELEASE_VERSION}\``,
+                  `- Target app-version: \`${process.env.IOS_APP_VERSION}\``,
+                  "- Deployment: Hot Updater after merge",
                 ].join("\n"),
               });
             }

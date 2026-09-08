@@ -1,23 +1,43 @@
 # @codex-relay/mobile
 
+## 1.4.0-ship.12
+
+### Patch Changes
+
+- 81c3934: Approve pairing directly in the interactive relay terminal by confirming the code and typing y followed by Enter. Keep the approval command for background relays, and explain both options on the phone.
+
+  Make the pairing route own deep links, show connection progress immediately, probe candidate addresses concurrently, and preserve timeout details in network errors.
+
+## 1.4.0-ship.11
+
+### Patch Changes
+
+- c5bfb32: Release codex-relay 1.5.0 with Codex SDK and bundled CLI 0.153.4. Warn in the mobile app when the connected relay is older than 1.5.0. Deliver the compatibility warning through the existing OTA release workflow for the current App Store binary.
+
+## 1.4.0-ship.10
+
+### Patch Changes
+
+- 72af772: Deliver iOS LAN stream callbacks progressively on the main queue, and preserve trailing Markdown whitespace and code-block newlines while assistant messages stream.
+
 ## 1.4.0-ship.9
 
 ### Patch Changes
 
-- 0832d38: Redesign the mobile chat experience with compact conversation styling, grouped runtime activity, reliable long-session scrolling, a streamlined composer, and focused approval states.
+- c005033: Render assistant text deltas immediately instead of revealing the full response after completion.
 
 ## 1.4.0-ship.8
 
 ### Patch Changes
 
-- da0e825: Restore full working-directory selection when creating a new chat while preserving the session-first mobile navigation.
+- bdc4b5a: Restore fast thread history loading and keep relay version mismatches as sidebar warnings.
 
 ## 1.4.0-ship.7
 
 ### Patch Changes
 
-- e194f13: Tighten the conversation history layout and refine the dark session list styling to match the OpenMinis-inspired mobile design.
-- e0a5593: Redesign the mobile app around session-first conversation history, native back navigation, and a dedicated settings home.
+- f764166: Keep relay and mobile thread history consistent with Codex 0.149 app-server and SDK behavior, and require the compatible relay release from the app.
+- 0d69564: Add a scroll-to-latest button above the composer
 
 ## 1.4.0-ship.6
 
