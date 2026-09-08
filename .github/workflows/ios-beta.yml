@@ -40,6 +40,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Build relay test exports
+        run: pnpm --filter codex-relay build
+
       - name: Test
         run: pnpm test
 
