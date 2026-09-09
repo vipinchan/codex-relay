@@ -44,6 +44,7 @@ export function ConversationsHome() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [groupingMode, setGroupingMode] = useState<GroupingMode>("time");
+  const [collapsedSectionKeys, setCollapsedSectionKeys] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     setHasPairedSession(hasCodexRelaySession());
@@ -81,6 +82,26 @@ export function ConversationsHome() {
     if (groupingMode === "project") return buildProjectSections(filteredThreads, zh);
     return buildTimeSections(filteredThreads, pinnedThreadIds, zh);
   }, [filteredThreads, groupingMode, pinnedThreadIds, zh]);
+  const sectionCounts = useMemo(
+    () => new Map(sections.map((section) => [section.key, section.data.length])),
+    [sections],
+  );
+  const displayedSections = useMemo(() => {
+    if (searchQuery.trim()) return sections;
+    return sections.map((section) =>
+      collapsedSectionKeys.has(section.key) ? { ...section, data: [] } : section,
+    );
+  }, [collapsedSectionKeys, searchQuery, sections]);
+
+  function toggleSection(sectionKey: string) {
+    hapticSelection();
+    setCollapsedSectionKeys((current) => {
+      const next = new Set(current);
+      if (next.has(sectionKey)) next.delete(sectionKey);
+      else next.add(sectionKey);
+      return next;
+    });
+  }
 
   function openThread(thread: ThreadSummary) {
     hapticSelection();
@@ -146,18 +167,34 @@ export function ConversationsHome() {
 
       <SectionList
         key={groupingMode}
-        sections={sections as readonly SectionListData<ThreadSummary, ThreadSection>[]}
+        sections={displayedSections as readonly SectionListData<ThreadSummary, ThreadSection>[]}
         keyExtractor={(item, index) => `${item.id}:${item.createdAt}:${index}`}
         contentContainerStyle={styles.listContent}
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
         onRefresh={() => void threadsQuery.refetch()}
         refreshing={threadsQuery.isFetching && threads.length > 0}
-        renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle}>{section.title}</ThemedText>
-          </View>
-        )}
+        renderSectionHeader={({ section }) => {
+          const collapsed = collapsedSectionKeys.has(section.key) && !searchQuery.trim();
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${section.title}, ${sectionCounts.get(section.key) ?? 0} conversations`}
+              accessibilityState={{ expanded: !collapsed }}
+              onPress={() => toggleSection(section.key)}
+              style={({ pressed }) => [styles.sectionHeader, pressed && styles.sectionHeaderPressed]}
+            >
+              <Icon
+                name={collapsed ? "chevronRight" : "expand"}
+                size={15}
+                tintColor="#77777D"
+                strokeWidth={2.2}
+              />
+              <ThemedText style={styles.sectionTitle}>{section.title}</ThemedText>
+              <ThemedText style={styles.sectionCount}>{sectionCounts.get(section.key) ?? 0}</ThemedText>
+            </Pressable>
+          );
+        }}
         renderItem={({ item }) => (
           <ThreadRow
             thread={item}
@@ -479,16 +516,28 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, color: "#FFFFFF", fontSize: 16, paddingVertical: 9 },
   listContent: { paddingBottom: 92 },
   sectionHeader: {
-    height: 34,
-    justifyContent: "center",
-    paddingHorizontal: 22,
+    alignItems: "center",
     backgroundColor: "#1C1C1E",
+    flexDirection: "row",
+    gap: 8,
+    height: 38,
+    paddingHorizontal: 22,
+  },
+  sectionHeaderPressed: {
+    backgroundColor: "#242426",
   },
   sectionTitle: {
-    fontSize: 15.5,
-    lineHeight: 19,
-    fontWeight: "600",
     color: "#8E8E93",
+    flex: 1,
+    fontSize: 15.5,
+    fontWeight: "600",
+    lineHeight: 19,
+  },
+  sectionCount: {
+    color: "#636366",
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
   },
   threadRow: {
     height: 66,

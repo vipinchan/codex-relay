@@ -1,17 +1,17 @@
-name: iOS 1.5.0 Beta
+name: iOS 1.5.0 UI Beta
 
 on:
   push:
     branches:
-      - sync/upstream-1.5.0-beta
+      - feat/mobile-history-navigation-beta
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: ios-1.5.0-beta-${{ github.ref }}
-  cancel-in-progress: true
+  group: ios-1.5.0-ui-beta-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   beta-ipa:
@@ -25,45 +25,82 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare clean feature commit
+        id: bootstrap
+        shell: bash
+        env:
+          BOOTSTRAP_PARENT: d49e2118b789f0e22daa62107082f0bf8155bd4b
+        run: |
+          set -euo pipefail
+          patch_script='scripts/apply-mobile-history-navigation-beta.py'
+          if [[ ! -f "$patch_script" ]]; then
+            echo 'bootstrapped=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          python3 "$patch_script"
+          rm -f "$patch_script"
+          git config user.name 'VipinChan'
+          git config user.email 'vipinchan@hotmail.com'
+          git add -A
+          tree="$(git write-tree)"
+          commit="$(printf '%s\n' 'feat: improve mobile history and timeline navigation' | git commit-tree "$tree" -p "$BOOTSTRAP_PARENT")"
+          git push --force origin "$commit:refs/heads/${GITHUB_REF_NAME}"
+          echo "Prepared clean feature commit: $commit"
+          echo 'bootstrapped=true' >> "$GITHUB_OUTPUT"
+
+      - name: Bootstrap completed
+        if: steps.bootstrap.outputs.bootstrapped == 'true'
+        run: echo 'A clean source commit was pushed; the next workflow run will build and publish it.'
+
       - name: Set up pnpm
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         uses: pnpm/action-setup@v4
 
       - name: Set up Node.js
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         run: pnpm typecheck
 
       - name: Build relay test exports
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         run: pnpm --filter codex-relay build
 
       - name: Test
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         run: pnpm test
 
       - name: Build beta IPA
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         env:
-          IOS_IPA_NAME: CodexRelay-1.5.0-beta.2.ipa
-          MOBILE_RELEASE_VERSION: 1.5.0-beta.2
+          IOS_IPA_NAME: CodexRelay-1.5.0-beta.3.ipa
+          MOBILE_RELEASE_VERSION: 1.5.0-beta.3
         run: bash scripts/build-ios-ipa.sh
 
       - name: Upload beta artifact
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: CodexRelay-1.5.0-beta.2-${{ github.sha }}
+          name: CodexRelay-1.5.0-beta.3-${{ github.sha }}
           path: |
-            dist/ios/CodexRelay-1.5.0-beta.2.ipa
-            dist/ios/CodexRelay-1.5.0-beta.2.ipa.sha256
+            dist/ios/CodexRelay-1.5.0-beta.3.ipa
+            dist/ios/CodexRelay-1.5.0-beta.3.ipa.sha256
             dist/ios/build-info.txt
           if-no-files-found: error
           retention-days: 30
 
       - name: Prepare beta release notes
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -71,39 +108,41 @@ jobs:
           app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
           min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
           cat > /tmp/beta-release-notes.md <<EOF
-          ## Codex Relay iOS 1.5.0 Beta 2
+          ## Codex Relay iOS 1.5.0 Beta 3
 
-          Test build integrating upstream 1.5.0 runtime changes with the OpenMinis-style mobile interface and TrollStore/sideload IPA pipeline.
+          UI/UX test build based on the upstream 1.5.0 integration and the OpenMinis-style mobile interface.
 
           ### Included
 
+          - New chats default to the workspace used by the most recent conversation
+          - Time and project groups on conversation history can be collapsed and expanded
+          - Links in conversation content can be tapped to open
+          - Timeline navigation pairs an upward jump to the previous user prompt with the existing Latest jump
           - Restores model switching when relay model discovery degrades to Astra-only fallback
           - GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, and GPT-5.5 picker fallback
-          - Upstream Codex SDK/CLI, streaming, history and pairing updates
-          - OpenMinis-style session-first navigation and conversation UI
-          - Full workspace selection for new chats
           - Private sideload/TrollStore IPA packaging
 
           ### Build
 
           - App version: \`${app_version}\`
-          - Mobile beta: \`1.5.0-beta.2\`
+          - Mobile beta: \`1.5.0-beta.3\`
           - Minimum iOS: \`${min_ios}\`
           - Commit: \`${commit}\`
 
           ### Installation
 
-          Download **CodexRelay-1.5.0-beta.2.ipa** and install it with TrollStore on a compatible device.
+          Download **CodexRelay-1.5.0-beta.3.ipa** and install it with TrollStore on a compatible device.
           EOF
 
       - name: Publish beta prerelease
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.2'
-          ipa='dist/ios/CodexRelay-1.5.0-beta.2.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.3'
+          ipa='dist/ios/CodexRelay-1.5.0-beta.3.ipa'
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" \
@@ -113,7 +152,7 @@ jobs:
               --clobber
             gh release edit "$tag" \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 2' \
+              --title 'Codex Relay iOS 1.5.0 Beta 3' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           else
@@ -122,19 +161,20 @@ jobs:
               "$ipa.sha256" \
               dist/ios/build-info.txt \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 2' \
+              --title 'Codex Relay iOS 1.5.0 Beta 3' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           fi
 
       - name: Verify published IPA
+        if: steps.bootstrap.outputs.bootstrapped != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.2'
-          ipa='CodexRelay-1.5.0-beta.2.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.3'
+          ipa='CodexRelay-1.5.0-beta.3.ipa'
           rm -rf /tmp/codex-relay-beta-check
           mkdir -p /tmp/codex-relay-beta-check
           gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check

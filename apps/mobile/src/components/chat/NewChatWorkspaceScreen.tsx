@@ -16,6 +16,7 @@ import {
   serverStateQueryFns,
 } from "@/lib/server-state";
 import { workspaceName } from "@/lib/workspace-name";
+import { preferredNewChatWorkspacePath } from "./new-chat-workspace";
 import { setActiveThread, setConnection, setHasPairedSession } from "@/state/chat-store";
 
 type WorkspaceBrowser = Awaited<ReturnType<typeof fetchWorkspaceDirectoriesState>>;
@@ -83,8 +84,14 @@ export function NewChatWorkspaceScreen() {
   useEffect(() => {
     if (initialLoadStartedRef.current || !statusQuery.isFetched) return;
     initialLoadStartedRef.current = true;
-    void loadWorkspaceDirectories(statusQuery.data?.workspacePath);
-  }, [loadWorkspaceDirectories, statusQuery.data?.workspacePath, statusQuery.isFetched]);
+    const recentThreads =
+      queryClient.getQueryData<Awaited<ReturnType<typeof serverStateQueryFns.threads>>>(
+        serverStateKeys.threads(),
+      )?.threads ?? [];
+    void loadWorkspaceDirectories(
+      preferredNewChatWorkspacePath(recentThreads, statusQuery.data?.workspacePath),
+    );
+  }, [loadWorkspaceDirectories, queryClient, statusQuery.data?.workspacePath, statusQuery.isFetched]);
 
   const currentPath = browser?.path ?? statusQuery.data?.workspacePath;
   const rows = useMemo<WorkspaceRow[]>(() => {

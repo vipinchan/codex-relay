@@ -6,6 +6,7 @@ import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Linking,
   Text as NativeText,
   Pressable,
   ScrollView,
@@ -179,6 +180,17 @@ export const MessageBubble = memo(function MessageBubble({
       Alert.alert("Copy failed", copyFailureMessage(caught));
     });
   }, [copyMarkdown, onMessageCopied]);
+  const handleLinkPress = useCallback((url: string) => {
+    if (!url || url.startsWith("https://codex.local/skills/")) {
+      return;
+    }
+    void Linking.openURL(url).catch((caught: unknown) => {
+      Alert.alert(
+        "Couldn't open link",
+        caught instanceof Error ? caught.message : "The link could not be opened on this device.",
+      );
+    });
+  }, []);
 
   useEffect(() => {
     if (!isCopied) {
@@ -313,6 +325,7 @@ export const MessageBubble = memo(function MessageBubble({
               fontSize={14}
               lineHeight={20}
               markdownStyle={userPromptMarkdownStyle}
+              onLinkPress={handleLinkPress}
               prompt={goalPrompt}
               selectable
               skills={[]}
@@ -373,6 +386,7 @@ export const MessageBubble = memo(function MessageBubble({
                   key={`markdown-${segment.content}`}
                   maxFontSizeMultiplier={1}
                   markdown={segment.content.trimEnd() || " "}
+                  onLinkPress={({ url }) => handleLinkPress(url)}
                   selectable
                   streamingAnimation={message.state === "streaming"}
                   markdownStyle={assistantMarkdownStyle}
@@ -405,6 +419,7 @@ export const MessageBubble = memo(function MessageBubble({
                 fontSize={14}
                 lineHeight={20}
                 markdownStyle={userPromptMarkdownStyle}
+                onLinkPress={handleLinkPress}
                 prompt={displayContent}
                 selectable
                 skills={[]}

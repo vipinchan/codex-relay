@@ -14,6 +14,7 @@ export const PromptMarkdownText = memo(function PromptMarkdownText({
   fontSize = 14,
   lineHeight,
   markdownStyle,
+  onLinkPress,
   prompt,
   selectable = false,
   skills,
@@ -22,6 +23,7 @@ export const PromptMarkdownText = memo(function PromptMarkdownText({
   fontSize?: number;
   lineHeight: number;
   markdownStyle?: MarkdownStyle;
+  onLinkPress?: (url: string) => void;
   prompt: string;
   selectable?: boolean;
   skills: PromptSkill[];
@@ -64,6 +66,7 @@ export const PromptMarkdownText = memo(function PromptMarkdownText({
       markdown={displayMarkdown || " "}
       markdownStyle={style}
       maxFontSizeMultiplier={1}
+      onLinkPress={onLinkPress ? ({ url }) => onLinkPress(url) : undefined}
       selectable={selectable}
     />
   );

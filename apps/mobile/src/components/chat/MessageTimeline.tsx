@@ -33,6 +33,7 @@ import {
   TIMELINE_WINDOW_INCREMENT,
   timelineFollowTrigger,
   timelineLatestRowIndex,
+  timelinePreviousUserRowIndex,
   type TimelineRow,
   visibleMessageWindow,
 } from "./timeline-rows";
@@ -85,6 +86,7 @@ export function MessageTimeline({
   const listRef = useRef<LegendListRef | null>(null);
   const isAtLatestRef = useRef(true);
   const isJumpingToLatestRef = useRef(false);
+  const pendingPreviousUserJumpAnchorRef = useRef<string | undefined>(undefined);
   const previousRowsRef = useRef<readonly TimelineRow[]>([]);
   const { bottom } = useSafeAreaInsets();
   const timelineKey = threadId ?? "no-thread";
@@ -99,6 +101,7 @@ export function MessageTimeline({
   );
   const [settledTimelineKey, setSettledTimelineKey] = useState<string | undefined>(undefined);
   const [isAtLatest, setAtLatest] = useState(true);
+  const [firstVisibleRowIndex, setFirstVisibleRowIndex] = useState(0);
   const extraContentPadding = useSharedValue(0);
   const contentRevealProgress = useSharedValue(0);
   const hasRows = rows.length > 0;
@@ -124,8 +127,10 @@ export function MessageTimeline({
   useEffect(() => {
     setSettledTimelineKey(undefined);
     setVisibleMessageCount(INITIAL_TIMELINE_WINDOW_SIZE);
+    pendingPreviousUserJumpAnchorRef.current = undefined;
     isAtLatestRef.current = true;
     setAtLatest(true);
+    setFirstVisibleRowIndex(0);
   }, [timelineKey]);
 
   useEffect(() => {
@@ -233,6 +238,38 @@ export function MessageTimeline({
     isAtLatestRef.current = nextIsAtLatest;
     setAtLatest(nextIsAtLatest);
   }, []);
+  const handleFirstVisibleItemChanged = useCallback((info: { index: number }) => {
+    setFirstVisibleRowIndex((current) => (current === info.index ? current : info.index));
+  }, []);
+  const scrollToUserRow = useCallback((index: number) => {
+    const list = listRef.current;
+    if (!list) return;
+    void list.scrollToIndex({ animated: true, index, viewPosition: 0.08 }).catch(() => undefined);
+  }, []);
+  const jumpToPreviousUserMessage = useCallback(() => {
+    const targetIndex = timelinePreviousUserRowIndex(rows, firstVisibleRowIndex);
+    if (targetIndex !== undefined) {
+      scrollToUserRow(targetIndex);
+      return;
+    }
+    if (messageWindow.hiddenCount <= 0) return;
+    pendingPreviousUserJumpAnchorRef.current =
+      rows[firstVisibleRowIndex]?.key ?? rows[0]?.key;
+    setVisibleMessageCount((current) => nextTimelineWindowSize(current, messages.length));
+  }, [firstVisibleRowIndex, messageWindow.hiddenCount, messages.length, rows, scrollToUserRow]);
+
+  useEffect(() => {
+    const anchorKey = pendingPreviousUserJumpAnchorRef.current;
+    if (!anchorKey) return;
+    const anchorIndex = rows.findIndex((row) => row.key === anchorKey);
+    if (anchorIndex < 0) return;
+    const targetIndex = timelinePreviousUserRowIndex(rows, anchorIndex);
+    pendingPreviousUserJumpAnchorRef.current = undefined;
+    if (targetIndex === undefined) return;
+    const frame = requestAnimationFrame(() => scrollToUserRow(targetIndex));
+    return () => cancelAnimationFrame(frame);
+  }, [rows, scrollToUserRow]);
+
   const jumpToLatest = useCallback(() => {
     const list = listRef.current;
     const latestRowIndex = timelineLatestRowIndex(rows.length);
@@ -264,6 +301,9 @@ export function MessageTimeline({
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount((current) => nextTimelineWindowSize(current, messages.length));
   }, [messages.length]);
+  const previousUserRowIndex = timelinePreviousUserRowIndex(rows, firstVisibleRowIndex);
+  const canJumpToPreviousUser =
+    previousUserRowIndex !== undefined || messageWindow.hiddenCount > 0;
 
   return (
     <View onTouchStart={onKeyboardDismissRequest} style={styles.transitionHost}>
@@ -306,6 +346,7 @@ export function MessageTimeline({
               maintainScrollAtEnd={isAtLatest ? MAINTAIN_SCROLL_AT_END : false}
               maintainScrollAtEndThreshold={MAINTAIN_SCROLL_AT_END_THRESHOLD}
               maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
+              onFirstVisibleItemChanged={handleFirstVisibleItemChanged}
               onLoad={handleTimelineLoad}
               onScroll={handleScroll}
               recycleItems={false}
@@ -325,17 +366,29 @@ export function MessageTimeline({
               }
             />
             {!isAtLatest ? (
-              <Pressable
-                accessibilityLabel="Jump to latest message"
-                accessibilityRole="button"
-                onPress={jumpToLatest}
-                style={({ pressed }) => [styles.jumpToLatest, pressed && styles.jumpPressed]}
-              >
-                <Icon name="expand" size={14} tintColor="#F5F5F7" strokeWidth={2.2} />
-                <ThemedText type="smallBold" style={styles.jumpLabel}>
-                  Latest
-                </ThemedText>
-              </Pressable>
+              <View style={styles.jumpNavigation}>
+                {canJumpToPreviousUser ? (
+                  <Pressable
+                    accessibilityLabel="Jump to previous message you sent"
+                    accessibilityRole="button"
+                    onPress={jumpToPreviousUserMessage}
+                    style={({ pressed }) => [styles.jumpToPrevious, pressed && styles.jumpPressed]}
+                  >
+                    <Icon name="up" size={17} tintColor="#F5F5F7" strokeWidth={2.2} />
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  accessibilityLabel="Jump to latest message"
+                  accessibilityRole="button"
+                  onPress={jumpToLatest}
+                  style={({ pressed }) => [styles.jumpToLatest, pressed && styles.jumpPressed]}
+                >
+                  <Icon name="expand" size={14} tintColor="#F5F5F7" strokeWidth={2.2} />
+                  <ThemedText type="smallBold" style={styles.jumpLabel}>
+                    Latest
+                  </ThemedText>
+                </Pressable>
+              </View>
             ) : null}
           </Animated.View>
         )
@@ -451,19 +504,33 @@ const styles = StyleSheet.create({
   listEndPad: {
     height: Spacing.two,
   },
-  jumpToLatest: {
+  jumpNavigation: {
     alignItems: "center",
     alignSelf: "center",
+    bottom: 12,
+    gap: 7,
+    position: "absolute",
+  },
+  jumpToPrevious: {
+    alignItems: "center",
     backgroundColor: "rgba(42, 42, 44, 0.96)",
     borderColor: "rgba(255, 255, 255, 0.16)",
     borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    bottom: 12,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  jumpToLatest: {
+    alignItems: "center",
+    backgroundColor: "rgba(42, 42, 44, 0.96)",
+    borderColor: "rgba(255, 255, 255, 0.16)",
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 5,
     minHeight: 36,
     paddingHorizontal: 13,
-    position: "absolute",
   },
   jumpLabel: {
     color: "#F5F5F7",

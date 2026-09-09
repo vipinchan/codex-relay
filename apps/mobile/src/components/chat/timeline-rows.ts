@@ -96,6 +96,16 @@ export function nextTimelineWindowSize(currentSize: number, totalMessages: numbe
   return Math.min(totalMessages, Math.max(0, currentSize) + TIMELINE_WINDOW_INCREMENT);
 }
 
+export function timelinePreviousUserRowIndex(rows: TimelineRow[], beforeIndex: number) {
+  for (let index = Math.min(rows.length - 1, beforeIndex - 1); index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row?.type === "message" && row.message.role === "user") {
+      return index;
+    }
+  }
+  return undefined;
+}
+
 export function timelineLatestRowIndex(rowCount: number) {
   return rowCount > 0 ? rowCount - 1 : undefined;
 }
