@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ios-1.5.0-ui-beta-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   beta-ipa:
@@ -25,70 +25,34 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare clean feature commit
-        id: bootstrap
-        shell: bash
-        env:
-          BOOTSTRAP_PARENT: d49e2118b789f0e22daa62107082f0bf8155bd4b
-        run: |
-          set -euo pipefail
-          patch_script='scripts/apply-mobile-history-navigation-beta.py'
-          if [[ ! -f "$patch_script" ]]; then
-            echo 'bootstrapped=false' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          python3 "$patch_script"
-          rm -f "$patch_script"
-          git config user.name 'VipinChan'
-          git config user.email 'vipinchan@hotmail.com'
-          git add -A
-          tree="$(git write-tree)"
-          commit="$(printf '%s\n' 'feat: improve mobile history and timeline navigation' | git commit-tree "$tree" -p "$BOOTSTRAP_PARENT")"
-          git push --force origin "$commit:refs/heads/${GITHUB_REF_NAME}"
-          echo "Prepared clean feature commit: $commit"
-          echo 'bootstrapped=true' >> "$GITHUB_OUTPUT"
-
-      - name: Bootstrap completed
-        if: steps.bootstrap.outputs.bootstrapped == 'true'
-        run: echo 'A clean source commit was pushed; the next workflow run will build and publish it.'
-
       - name: Set up pnpm
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         uses: pnpm/action-setup@v4
 
       - name: Set up Node.js
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install dependencies
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         run: pnpm typecheck
 
       - name: Build relay test exports
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         run: pnpm --filter codex-relay build
 
       - name: Test
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         run: pnpm test
 
       - name: Build beta IPA
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         env:
           IOS_IPA_NAME: CodexRelay-1.5.0-beta.3.ipa
           MOBILE_RELEASE_VERSION: 1.5.0-beta.3
         run: bash scripts/build-ios-ipa.sh
 
       - name: Upload beta artifact
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: CodexRelay-1.5.0-beta.3-${{ github.sha }}
@@ -100,7 +64,6 @@ jobs:
           retention-days: 30
 
       - name: Prepare beta release notes
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -135,7 +98,6 @@ jobs:
           EOF
 
       - name: Publish beta prerelease
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -167,7 +129,6 @@ jobs:
           fi
 
       - name: Verify published IPA
-        if: steps.bootstrap.outputs.bootstrapped != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
