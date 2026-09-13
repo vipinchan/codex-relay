@@ -77,7 +77,11 @@ import {
   hapticSuccess,
   hapticWarning,
 } from "@/lib/haptics";
-import { runtimePreferencesForWorkspace } from "@/lib/runtime-preferences";
+import {
+  runtimePreferencesForThread,
+  runtimePreferencesForWorkspace,
+  runtimePreferencesScope,
+} from "@/lib/runtime-preferences";
 import {
   applyStreamEventToServerState,
   checkoutWorkspaceBranchServerState,
@@ -112,6 +116,7 @@ import {
   submitThreadInputServerState,
   updateThreadGoalServerState,
   updateRuntimePreferencesServerState,
+  upsertThreadState,
 } from "@/lib/server-state";
 import { recordSuccessfulAiConversationForReviewPrompt } from "@/lib/store-review-prompt";
 import {
@@ -216,6 +221,10 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   const [optimisticRuntimePreferences, setOptimisticRuntimePreferences] = useState<
     RuntimePreferences | undefined
   >(undefined);
+  const [
+    optimisticRuntimePreferencesByThreadId,
+    setOptimisticRuntimePreferencesByThreadId,
+  ] = useState<Record<string, RuntimePreferences>>({});
   const [markdownPreviewTarget, setMarkdownPreviewTarget] = useState<
     WorkspaceMarkdownPreviewTarget | undefined
   >(undefined);
@@ -507,11 +516,18 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   const optimisticWorkspacePreferences = activeWorkspacePath
     ? optimisticRuntimePreferencesByWorkspacePath[activeWorkspacePath]
     : optimisticRuntimePreferences;
+  const workspaceRuntimePreferences = runtimePreferencesForWorkspace(
+    optimisticWorkspacePreferences ?? workspacePreferences,
+    statusPreferences,
+  );
   const activeRuntimePreferences = runtimePreferencesWithAvailableServiceTier(
-    runtimePreferencesForWorkspace(
-      optimisticWorkspacePreferences ?? workspacePreferences,
-      statusPreferences,
-    ),
+    activeThreadId
+      ? runtimePreferencesForThread(
+          optimisticRuntimePreferencesByThreadId[activeThreadId],
+          activeThread,
+          workspaceRuntimePreferences,
+        )
+      : workspaceRuntimePreferences,
   );
   const runtimeMode = activeRuntimePreferences.runtimeMode;
   const selectedModel = activeRuntimePreferences.model;
@@ -2009,10 +2025,6 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   function currentRuntimePreferences(): RuntimePreferences {
     const thread = activeThread;
     const targetWorkspacePath = thread?.cwd ?? workspacePath;
-    const stagedPreferences = runtimePreferencesCoordinator.current(targetWorkspacePath ?? "");
-    if (stagedPreferences) {
-      return runtimePreferencesWithAvailableServiceTier(stagedPreferences);
-    }
     const cachedStatus =
       queryClient.getQueryData<Awaited<ReturnType<typeof serverStateQueryFns.status>>>(
         serverStateKeys.status(),
@@ -2024,11 +2036,21 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
     const optimisticWorkspacePreferences = targetWorkspacePath
       ? optimisticRuntimePreferencesByWorkspacePath[targetWorkspacePath]
       : optimisticRuntimePreferences;
+    const stagedWorkspacePreferences = runtimePreferencesCoordinator.current(
+      targetWorkspacePath ?? "",
+    );
+    const workspaceRuntimePreferences = runtimePreferencesForWorkspace(
+      stagedWorkspacePreferences ?? optimisticWorkspacePreferences ?? cachedWorkspacePreferences,
+      cachedStatus?.preferences ?? { runtimeMode: "default" },
+    );
     return runtimePreferencesWithAvailableServiceTier(
-      runtimePreferencesForWorkspace(
-        optimisticWorkspacePreferences ?? cachedWorkspacePreferences,
-        cachedStatus?.preferences ?? { runtimeMode: "default" },
-      ),
+      activeThreadId
+        ? runtimePreferencesForThread(
+            optimisticRuntimePreferencesByThreadId[activeThreadId],
+            thread,
+            workspaceRuntimePreferences,
+          )
+        : workspaceRuntimePreferences,
     );
   }
 
@@ -2058,6 +2080,23 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   }
 
   function commitRuntimePreferences(preferences: RuntimePreferences) {
+    if (runtimePreferencesScope(activeThreadId) === "thread" && activeThreadId) {
+      setOptimisticRuntimePreferencesByThreadId((current) => ({
+        ...current,
+        [activeThreadId]: preferences,
+      }));
+      if (activeThread) {
+        upsertThreadState(queryClient, {
+          ...activeThread,
+          model: preferences.model,
+          serviceTier: preferences.serviceTier,
+          reasoningEffort: preferences.reasoningEffort,
+          runtimeMode: preferences.runtimeMode,
+        });
+      }
+      return;
+    }
+
     const targetWorkspacePath = activeWorkspacePath ?? workspacePath;
     if (targetWorkspacePath) {
       setOptimisticRuntimePreferencesByWorkspacePath((current) => ({
