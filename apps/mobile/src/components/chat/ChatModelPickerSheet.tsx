@@ -5,6 +5,7 @@ import { AppBottomSheet } from "@/components/ui/bottom-sheet";
 
 import { AdvancedModelOptions, type AdvancedSection } from "./AdvancedModelOptions";
 import { modelsForPicker } from "./chat-preview-models";
+import { navigateModelPickerBack } from "./model-picker-navigation";
 import {
   defaultPowerSelection,
   fastServiceTierForModel,
@@ -92,9 +93,17 @@ export function ChatModelPickerSheet({
     setAdvancedSection(undefined);
   }
 
+  function handleBack() {
+    navigateModelPickerBack(
+      advancedSection,
+      () => setAdvancedSection(undefined),
+      returnToCompactPower,
+    );
+  }
+
   return (
     <AppBottomSheet
-      backAccessibilityLabel="Back to Power"
+      backAccessibilityLabel={advancedSection ? "Back to Advanced" : "Back to Power"}
       title={showAdvanced ? "Advanced" : "Power"}
       subtitle={
         showAdvanced
@@ -104,7 +113,7 @@ export function ChatModelPickerSheet({
       enableDynamicSizing={presentation.enableDynamicSizing}
       expandedSnapPercent={presentation.expandedSnapPercent}
       initialSnapIndex={presentation.initialSnapIndex}
-      onBack={presentation.showBackButton ? returnToCompactPower : undefined}
+      onBack={presentation.showBackButton ? handleBack : undefined}
       onClose={onClose}
       scrollable={presentation.scrollable}
       visible={visible}
