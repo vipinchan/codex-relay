@@ -52,17 +52,17 @@ jobs:
 
       - name: Build beta IPA
         env:
-          IOS_IPA_NAME: CodexRelay-1.5.0-beta.4.ipa
-          MOBILE_RELEASE_VERSION: 1.5.0-beta.4
+          IOS_IPA_NAME: CodexRelay-1.5.0-beta.5.ipa
+          MOBILE_RELEASE_VERSION: 1.5.0-beta.5
         run: bash scripts/build-ios-ipa.sh
 
       - name: Upload beta artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodexRelay-1.5.0-beta.4-${{ github.sha }}
+          name: CodexRelay-1.5.0-beta.5-${{ github.sha }}
           path: |
-            dist/ios/CodexRelay-1.5.0-beta.4.ipa
-            dist/ios/CodexRelay-1.5.0-beta.4.ipa.sha256
+            dist/ios/CodexRelay-1.5.0-beta.5.ipa
+            dist/ios/CodexRelay-1.5.0-beta.5.ipa.sha256
             dist/ios/build-info.txt
           if-no-files-found: error
           retention-days: 30
@@ -75,7 +75,7 @@ jobs:
           app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
           min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
           cat > /tmp/beta-release-notes.md <<EOF
-          ## Codex Relay iOS 1.5.0 Beta 4
+          ## Codex Relay iOS 1.5.0 Beta 5
 
           UI/UX test build based on the upstream 1.5.0 integration and the OpenMinis-style mobile interface.
 
@@ -86,7 +86,8 @@ jobs:
           - Preserves selected models when navigating back from Advanced model options
           - New chats default to the workspace used by the most recent conversation
           - Time and project groups on conversation history can be collapsed and expanded
-          - Links in conversation content can be tapped to open
+          - Opens local Markdown links in the workspace preview instead of the iOS URL handler
+          - External conversation links continue to open with the platform URL handler
           - Timeline navigation pairs an upward jump to the previous user prompt with the existing Latest jump
           - GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, and GPT-5.5 picker fallback
           - Private sideload/TrollStore IPA packaging
@@ -94,13 +95,13 @@ jobs:
           ### Build
 
           - App version: \`${app_version}\`
-          - Mobile beta: \`1.5.0-beta.4\`
+          - Mobile beta: \`1.5.0-beta.5\`
           - Minimum iOS: \`${min_ios}\`
           - Commit: \`${commit}\`
 
           ### Installation
 
-          Download **CodexRelay-1.5.0-beta.4.ipa** and install it with TrollStore on a compatible device.
+          Download **CodexRelay-1.5.0-beta.5.ipa** and install it with TrollStore on a compatible device.
           EOF
 
       - name: Publish beta prerelease
@@ -109,8 +110,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.4'
-          ipa='dist/ios/CodexRelay-1.5.0-beta.4.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.5'
+          ipa='dist/ios/CodexRelay-1.5.0-beta.5.ipa'
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" \
@@ -120,7 +121,7 @@ jobs:
               --clobber
             gh release edit "$tag" \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 4' \
+              --title 'Codex Relay iOS 1.5.0 Beta 5' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           else
@@ -129,7 +130,7 @@ jobs:
               "$ipa.sha256" \
               dist/ios/build-info.txt \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 4' \
+              --title 'Codex Relay iOS 1.5.0 Beta 5' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           fi
@@ -140,8 +141,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.4'
-          ipa='CodexRelay-1.5.0-beta.4.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.5'
+          ipa='CodexRelay-1.5.0-beta.5.ipa'
           rm -rf /tmp/codex-relay-beta-check
           mkdir -p /tmp/codex-relay-beta-check
           gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check

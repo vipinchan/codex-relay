@@ -30,6 +30,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { codexRelayImageRequestHeaders, resolveCodexRelayImageUrl } from "@/lib/codex-relay-api";
 import { hapticSelection } from "@/lib/haptics";
 
+import { messageLinkAction } from "./message-markdown-content";
 import { PromptMarkdownText } from "./PromptMarkdownText";
 import { ProtocolActivityCard } from "./ProtocolActivityCard";
 import type { WorkspaceMarkdownPreviewTarget } from "./workspace-preview/markdown-target";
@@ -180,17 +181,29 @@ export const MessageBubble = memo(function MessageBubble({
       Alert.alert("Copy failed", copyFailureMessage(caught));
     });
   }, [copyMarkdown, onMessageCopied]);
-  const handleLinkPress = useCallback((url: string) => {
-    if (!url || url.startsWith("https://codex.local/skills/")) {
-      return;
-    }
-    void Linking.openURL(url).catch((caught: unknown) => {
-      Alert.alert(
-        "Couldn't open link",
-        caught instanceof Error ? caught.message : "The link could not be opened on this device.",
-      );
-    });
-  }, []);
+  const handleLinkPress = useCallback(
+    (url: string) => {
+      const action = messageLinkAction(url);
+      if (action.kind === "ignore") {
+        return;
+      }
+      if (action.kind === "workspace-markdown") {
+        if (!onOpenMarkdownAttachment) {
+          return;
+        }
+        hapticSelection();
+        onOpenMarkdownAttachment({ path: action.path });
+        return;
+      }
+      void Linking.openURL(action.url).catch((caught: unknown) => {
+        Alert.alert(
+          "Couldn't open link",
+          caught instanceof Error ? caught.message : "The link could not be opened on this device.",
+        );
+      });
+    },
+    [onOpenMarkdownAttachment],
+  );
 
   useEffect(() => {
     if (!isCopied) {
