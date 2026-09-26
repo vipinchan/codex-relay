@@ -75,7 +75,7 @@ jobs:
           app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
           min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
           cat > /tmp/beta-release-notes.md <<EOF
-          ## Codex Relay iOS 1.5.0 Beta 5
+          ## Codex Relay iOS 1.5.0 Beta 6
 
           UI/UX test build based on the upstream 1.5.0 integration and the OpenMinis-style mobile interface.
 
@@ -89,7 +89,9 @@ jobs:
           - Opens local Markdown links in the workspace preview instead of the iOS URL handler
           - External conversation links continue to open with the platform URL handler
           - Timeline navigation pairs an upward jump to the previous user prompt with the existing Latest jump
-          - GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, and GPT-5.5 picker fallback
+          - Syncs codex-relay 1.6.0 with Codex CLI/SDK 0.156.1 and GPT-6 Sol/Luna support
+          - GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, and GPT-5.5 picker fallback
+          - Push notifications show the originating thread title and can include remaining Codex usage
           - Private sideload/TrollStore IPA packaging
 
           ### Build
@@ -121,7 +123,7 @@ jobs:
               --clobber
             gh release edit "$tag" \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 5' \
+              --title 'Codex Relay iOS 1.5.0 Beta 6' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           else
@@ -130,7 +132,7 @@ jobs:
               "$ipa.sha256" \
               dist/ios/build-info.txt \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 5' \
+              --title 'Codex Relay iOS 1.5.0 Beta 6' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           fi
