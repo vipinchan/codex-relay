@@ -52,17 +52,17 @@ jobs:
 
       - name: Build beta IPA
         env:
-          IOS_IPA_NAME: CodexRelay-1.5.0-beta.5.ipa
-          MOBILE_RELEASE_VERSION: 1.5.0-beta.5
+          IOS_IPA_NAME: CodexRelay-1.5.0-beta.6.ipa
+          MOBILE_RELEASE_VERSION: 1.5.0-beta.6
         run: bash scripts/build-ios-ipa.sh
 
       - name: Upload beta artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodexRelay-1.5.0-beta.5-${{ github.sha }}
+          name: CodexRelay-1.5.0-beta.6-${{ github.sha }}
           path: |
-            dist/ios/CodexRelay-1.5.0-beta.5.ipa
-            dist/ios/CodexRelay-1.5.0-beta.5.ipa.sha256
+            dist/ios/CodexRelay-1.5.0-beta.6.ipa
+            dist/ios/CodexRelay-1.5.0-beta.6.ipa.sha256
             dist/ios/build-info.txt
           if-no-files-found: error
           retention-days: 30
@@ -95,13 +95,13 @@ jobs:
           ### Build
 
           - App version: \`${app_version}\`
-          - Mobile beta: \`1.5.0-beta.5\`
+          - Mobile beta: \`1.5.0-beta.6\`
           - Minimum iOS: \`${min_ios}\`
           - Commit: \`${commit}\`
 
           ### Installation
 
-          Download **CodexRelay-1.5.0-beta.5.ipa** and install it with TrollStore on a compatible device.
+          Download **CodexRelay-1.5.0-beta.6.ipa** and install it with TrollStore on a compatible device.
           EOF
 
       - name: Publish beta prerelease
@@ -110,8 +110,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.5'
-          ipa='dist/ios/CodexRelay-1.5.0-beta.5.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.6'
+          ipa='dist/ios/CodexRelay-1.5.0-beta.6.ipa'
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" \
@@ -141,8 +141,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.5'
-          ipa='CodexRelay-1.5.0-beta.5.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.6'
+          ipa='CodexRelay-1.5.0-beta.6.ipa'
           rm -rf /tmp/codex-relay-beta-check
           mkdir -p /tmp/codex-relay-beta-check
           gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check
