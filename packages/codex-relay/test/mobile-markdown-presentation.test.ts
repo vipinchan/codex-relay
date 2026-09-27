@@ -34,7 +34,7 @@ const fixture = [
   "> const value = 1;",
   "> ```",
   "",
-  "- First item"
+  "- First item",
   "- Second item",
   "  - Nested item",
   "",
@@ -44,7 +44,7 @@ const fixture = [
   "   pnpm install",
   "   ```",
   "",
-  "| Item | Value | Note |"
+  "| Item | Value | Note |",
   "| --- | ---: | --- |",
   "| Alpha | 42 | table cell |",
   "",
