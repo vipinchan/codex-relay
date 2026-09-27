@@ -18,6 +18,24 @@ describe("messageMarkdownContentForRender", () => {
   it("keeps an empty streaming message renderable", () => {
     expect(messageMarkdownContentForRender("")).toBe(" ");
   });
+
+  it("preserves nested fenced code inside blockquotes and list items", () => {
+    const content = [
+      "> Quoted explanation",
+      ">",
+      "> ```ts",
+      "> const value = 1;",
+      "> ```",
+      "",
+      "1. Install the package",
+      "",
+      "   ```bash",
+      "   pnpm install",
+      "   ```",
+    ].join("\n");
+
+    expect(messageMarkdownContentForRender(content)).toBe(content);
+  });
 });
 
 describe("messageCodeContentForRender", () => {

@@ -34,13 +34,12 @@ import {
   ASSISTANT_MARKDOWN_FLAVOR,
   createAssistantMarkdownStyle,
 } from "./assistant-markdown-presentation";
-import { messageLinkAction } from "./message-markdown-content";
+import { messageLinkAction, messageMarkdownContentForRender } from "./message-markdown-content";
 import { PromptMarkdownText } from "./PromptMarkdownText";
 import { ProtocolActivityCard } from "./ProtocolActivityCard";
 import type { WorkspaceMarkdownPreviewTarget } from "./workspace-preview/markdown-target";
 
 const DATA_URI_PATTERN = /data:[^;\s]+;base64,[A-Za-z0-9+/=\n\r]+/g;
-const FENCED_CODE_FENCE_PATTERN = /^```([^`]*)\s*$/;
 const MAX_DISPLAY_LENGTH = 4000;
 const MAX_LINE_LENGTH = 220;
 const SHIKI_CODE_BLOCK_FONT_SIZE = 11;
@@ -108,10 +107,6 @@ const userPromptMarkdownStyle = {
   },
 } satisfies MarkdownStyle;
 
-type MarkdownSegment =
-  | { content: string; kind: "markdown" }
-  | { code: string; kind: "code"; language: string };
-
 export const MessageBubble = memo(function MessageBubble({
   assistantBlock,
   message,
@@ -166,8 +161,8 @@ export const MessageBubble = memo(function MessageBubble({
     () => (isUser ? parseGoalPrompt(displayContent) : undefined),
     [isUser, displayContent],
   );
-  const markdownSegments = useMemo(
-    () => (isAssistant ? parseMarkdownSegments(message.content || " ") : []),
+  const assistantMarkdown = useMemo(
+    () => (isAssistant ? messageMarkdownContentForRender(message.content) : " "),
     [isAssistant, message.content],
   );
   const timestamp = useMemo(() => formatMessageTime(message.createdAt), [message.createdAt]);
@@ -318,29 +313,17 @@ export const MessageBubble = memo(function MessageBubble({
       >
         {isAssistant ? (
           <View style={styles.assistantContent}>
-            {markdownSegments.map((segment) =>
-              segment.kind === "code" ? (
-                <HighlightedCodeBlock
-                  key={`code-${segment.language}-${segment.code}`}
-                  code={segment.code}
-                  deferHighlight={message.state === "streaming"}
-                  language={segment.language}
-                />
-              ) : (
-                <EnrichedMarkdownText
-                  allowFontScaling={false}
-                  enableTaskListItemToggle={false}
-                  flavor={ASSISTANT_MARKDOWN_FLAVOR}
-                  key={`markdown-${segment.content}`}
-                  maxFontSizeMultiplier={1}
-                  markdown={segment.content.trimEnd() || " "}
-                  onLinkPress={({ url }) => handleLinkPress(url)}
-                  selectable
-                  streamingAnimation={message.state === "streaming"}
-                  markdownStyle={assistantMarkdownStyle}
-                />
-              ),
-            )}
+            <EnrichedMarkdownText
+              allowFontScaling={false}
+              enableTaskListItemToggle={false}
+              flavor={ASSISTANT_MARKDOWN_FLAVOR}
+              maxFontSizeMultiplier={1}
+              markdown={assistantMarkdown}
+              onLinkPress={({ url }) => handleLinkPress(url)}
+              selectable
+              streamingAnimation={message.state === "streaming"}
+              markdownStyle={assistantMarkdownStyle}
+            />
             {!assistantBlock || assistantBlock.isLast ? (
               <>
                 <MessageAttachments
@@ -939,73 +922,6 @@ function truncateLine(line: string) {
   const head = line.slice(0, 160).trimEnd();
   const tail = line.slice(-48).trimStart();
   return `${head} ... ${tail}`;
-}
-
-function parseMarkdownSegments(markdown: string): MarkdownSegment[] {
-  const segments: MarkdownSegment[] = [];
-  const markdownLines: string[] = [];
-  const codeLines: string[] = [];
-  let codeLanguage = "";
-  let isInCodeBlock = false;
-
-  for (const line of markdown.replace(/\r\n/g, "\n").split("\n")) {
-    const fenceMatch = line.match(FENCED_CODE_FENCE_PATTERN);
-    if (fenceMatch) {
-      if (isInCodeBlock) {
-        segments.push({
-          code: trimCodeFenceContent(codeLines.join("\n")),
-          kind: "code",
-          language: codeLanguage,
-        });
-        codeLines.length = 0;
-        codeLanguage = "";
-        isInCodeBlock = false;
-      } else {
-        if (markdownLines.length > 0) {
-          segments.push({
-            content: markdownLines.join("\n"),
-            kind: "markdown",
-          });
-          markdownLines.length = 0;
-        }
-        codeLanguage = normalizeCodeLanguage(fenceMatch[1] ?? "");
-        isInCodeBlock = true;
-      }
-
-      continue;
-    }
-
-    if (isInCodeBlock) {
-      codeLines.push(line);
-    } else {
-      markdownLines.push(line);
-    }
-  }
-
-  if (isInCodeBlock) {
-    segments.push({
-      code: trimCodeFenceContent(codeLines.join("\n")),
-      kind: "code",
-      language: codeLanguage,
-    });
-  }
-
-  if (markdownLines.length > 0) {
-    segments.push({
-      content: markdownLines.join("\n"),
-      kind: "markdown",
-    });
-  }
-
-  return segments.length > 0 ? segments : [{ content: markdown, kind: "markdown" }];
-}
-
-function trimCodeFenceContent(code: string) {
-  return code.replace(/^\n/, "").replace(/\n$/, "");
-}
-
-function normalizeCodeLanguage(value: string) {
-  return value.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
 }
 
 export const HighlightedCodeBlock = memo(function HighlightedCodeBlock({

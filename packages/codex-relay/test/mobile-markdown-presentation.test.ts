@@ -29,12 +29,22 @@ const fixture = [
   "A dense Chinese paragraph with **strong text**, *emphasis*, and [a link](https://example.com).",
   "",
   "> A blockquote that should read as a distinct information block.",
+  ">",
+  "> ```ts",
+  "> const value = 1;",
+  "> ```",
   "",
-  "- First item",
+  "- First item"
   "- Second item",
   "  - Nested item",
   "",
-  "| Item | Value | Note |",
+  "1. Install",
+  "",
+  "   ```bash",
+  "   pnpm install",
+  "   ```",
+  "",
+  "| Item | Value | Note |"
   "| --- | ---: | --- |",
   "| Alpha | 42 | table cell |",
   "",
@@ -64,6 +74,25 @@ describe("assistant markdown presentation", () => {
     expect(style.h3).toMatchObject({ fontSize: 18, lineHeight: 26, marginTop: 20 });
     expect(style.h3?.fontSize).toBeGreaterThan(style.paragraph?.fontSize ?? 0);
   });
+
+  it("styles native fenced code blocks with a dark syntax palette", () => {
+    const style = createAssistantMarkdownStyle(theme, fonts);
+
+    expect(style.codeBlock).toMatchObject({
+      fontSize: 13,
+      lineHeight: 20,
+      marginBottom: 16,
+      syntaxColors: {
+        keyword: "#FF7B72",
+        string: "#A5D6FF",
+        comment: "#8B949E",
+        function: "#D2A8FF",
+      },
+    });
+    expect(fixture).toContain("> ```ts");
+    expect(fixture).toContain("   ```bash");
+  });
+
 
   it("renders lists, quotes, and tables as separated blocks", () => {
     const style = createAssistantMarkdownStyle(theme, fonts);
