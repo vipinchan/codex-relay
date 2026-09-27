@@ -30,6 +30,10 @@ import { useTheme } from "@/hooks/use-theme";
 import { codexRelayImageRequestHeaders, resolveCodexRelayImageUrl } from "@/lib/codex-relay-api";
 import { hapticSelection } from "@/lib/haptics";
 
+import {
+  ASSISTANT_MARKDOWN_FLAVOR,
+  createAssistantMarkdownStyle,
+} from "./assistant-markdown-presentation";
 import { messageLinkAction } from "./message-markdown-content";
 import { PromptMarkdownText } from "./PromptMarkdownText";
 import { ProtocolActivityCard } from "./ProtocolActivityCard";
@@ -215,92 +219,21 @@ export const MessageBubble = memo(function MessageBubble({
   }, [isCopied]);
 
   const assistantMarkdownStyle = useMemo<MarkdownStyle>(
-    () => ({
-      blockquote: {
-        backgroundColor: "rgba(95, 167, 255, 0.08)",
-        borderColor: "#5fa7ff",
-        borderWidth: 2,
-        color: theme.text,
-        fontFamily: Fonts.sans,
-        fontSize: 14,
-        gapWidth: 8,
-        lineHeight: 21,
-        marginBottom: 10,
-        marginTop: 0,
-      },
-      code: {
-        backgroundColor: "rgba(255, 255, 255, 0.07)",
-        borderColor: "rgba(255, 255, 255, 0.12)",
-        color: "#D7E0EA",
-        fontFamily: Fonts.monoMedium,
-        fontSize: 13,
-      },
-      codeBlock: {
-        backgroundColor: theme.backgroundSelected,
-        borderColor: "rgba(132, 145, 165, 0.25)",
-        borderRadius: 8,
-        borderWidth: 1,
-        color: theme.text,
-        fontFamily: Fonts.mono,
-        fontSize: 13,
-        lineHeight: 19,
-        padding: 10,
-      },
-      h1: {
-        color: theme.text,
-        fontFamily: Fonts.sansSemiBold,
-        fontSize: 18,
-        lineHeight: 24,
-        marginBottom: 10,
-        marginTop: 0,
-      },
-      h2: {
-        color: theme.text,
-        fontFamily: Fonts.sansSemiBold,
-        fontSize: 16,
-        lineHeight: 22,
-        marginBottom: 6,
-        marginTop: 10,
-      },
-      h3: {
-        color: theme.text,
-        fontFamily: Fonts.sansSemiBold,
-        fontSize: 14,
-        lineHeight: 20,
-        marginBottom: 5,
-        marginTop: 8,
-      },
-      link: {
-        color: "#5fa7ff",
-        fontFamily: Fonts.sans,
-        underline: false,
-      },
-      list: {
-        color: theme.text,
-        fontFamily: Fonts.sans,
-        fontSize: 14,
-        gapWidth: 8,
-        lineHeight: 21,
-        markerColor: theme.textSecondary,
-        markerMinWidth: 14,
-        marginBottom: 8,
-        marginLeft: 16,
-        marginTop: 0,
-      },
-      paragraph: {
-        color: theme.text,
-        fontFamily: Fonts.sans,
-        fontSize: 14,
-        lineHeight: 21,
-        marginBottom: 8,
-        marginTop: 0,
-      },
-      strong: {
-        color: theme.text,
-        fontFamily: Fonts.sansSemiBold,
-        fontWeight: "normal",
-      },
-    }),
+    () =>
+      createAssistantMarkdownStyle(
+        {
+          backgroundSelected: theme.backgroundSelected,
+          text: theme.text,
+          textSecondary: theme.textSecondary,
+        },
+        {
+          mono: Fonts.mono,
+          monoMedium: Fonts.monoMedium,
+          sans: Fonts.sans,
+          sansMedium: Fonts.sansMedium,
+          sansSemiBold: Fonts.sansSemiBold,
+        },
+      ),
     [theme.backgroundSelected, theme.text, theme.textSecondary],
   );
 
@@ -396,6 +329,8 @@ export const MessageBubble = memo(function MessageBubble({
               ) : (
                 <EnrichedMarkdownText
                   allowFontScaling={false}
+                  enableTaskListItemToggle={false}
+                  flavor={ASSISTANT_MARKDOWN_FLAVOR}
                   key={`markdown-${segment.content}`}
                   maxFontSizeMultiplier={1}
                   markdown={segment.content.trimEnd() || " "}
