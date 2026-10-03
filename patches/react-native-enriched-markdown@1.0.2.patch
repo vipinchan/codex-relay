@@ -1,6 +1,7 @@
+diff --git a/cpp/md4c/md4c.c b/cpp/md4c/md4c.c
 --- a/cpp/md4c/md4c.c
 +++ b/cpp/md4c/md4c.c
-@@ -598,6 +598,13 @@
+@@ -622,6 +622,13 @@
              return ISWHITESPACE_(codepoint);
  
          return (md_unicode_bsearch__(codepoint, WHITESPACE_MAP, SIZEOF_ARRAY(WHITESPACE_MAP)) >= 0);
@@ -14,7 +15,7 @@
      }
  
      static int
-@@ -866,6 +873,8 @@
+@@ -898,6 +905,8 @@
  
      #define ISUNICODEPUNCT(off)             md_is_unicode_punct__(md_decode_utf16le__(STR(off), ctx->size - (off), NULL))
      #define ISUNICODEPUNCTBEFORE(off)       md_is_unicode_punct__(md_decode_utf16le_before__(ctx, off))
@@ -23,7 +24,7 @@
  
      static inline int
      md_decode_unicode(const CHAR* str, OFF off, SZ str_size, SZ* p_char_size)
-@@ -947,6 +956,8 @@
+@@ -979,6 +988,8 @@
  
      #define ISUNICODEPUNCT(off)             md_is_unicode_punct__(md_decode_utf8__(STR(off), ctx->size - (off), NULL))
      #define ISUNICODEPUNCTBEFORE(off)       md_is_unicode_punct__(md_decode_utf8_before__(ctx, off))
@@ -32,7 +33,7 @@
  
      static inline unsigned
      md_decode_unicode(const CHAR* str, OFF off, SZ str_size, SZ* p_char_size)
-@@ -960,6 +971,8 @@
+@@ -992,6 +1003,8 @@
  
      #define ISUNICODEPUNCT(off)             ISPUNCT(off)
      #define ISUNICODEPUNCTBEFORE(off)       ISPUNCT((off)-1)
@@ -41,7 +42,7 @@
  
      static inline void
      md_get_unicode_fold_info(unsigned codepoint, MD_UNICODE_FOLD_INFO* info)
-@@ -3075,6 +3088,13 @@
+@@ -3301,6 +3314,13 @@
                  else
                      right_level = 2;
  
