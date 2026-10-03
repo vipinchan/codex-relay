@@ -37,8 +37,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint and check formatting
-        run: pnpm lint
+      - name: Lint
+        run: pnpm exec oxlint apps packages --import-plugin --react-plugin --jsx-a11y-plugin --vitest-plugin
+
+      - name: Check Markdown change formatting
+        run: >-
+          pnpm exec oxfmt --check package.json pnpm-workspace.yaml
+          scripts/markdown-strong.test.mjs .github/workflows/ci.yml
+          .github/workflows/ios-beta.yml .changeset/fix-cjk-markdown-bold.md
 
       - name: Test Markdown parsing
         run: pnpm test:markdown
