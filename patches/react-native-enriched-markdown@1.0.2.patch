@@ -1,0 +1,57 @@
+--- a/cpp/md4c/md4c.c
++++ b/cpp/md4c/md4c.c
+@@ -598,6 +598,13 @@
+             return ISWHITESPACE_(codepoint);
+ 
+         return (md_unicode_bsearch__(codepoint, WHITESPACE_MAP, SIZEOF_ARRAY(WHITESPACE_MAP)) >= 0);
++    }
++
++    static int
++    md_is_cjk_punct__(unsigned codepoint)
++    {
++        return (codepoint >= 0x3001 && codepoint <= 0x303f) ||
++               (codepoint >= 0xff01 && codepoint <= 0xff65);
+     }
+ 
+     static int
+@@ -866,6 +873,8 @@
+ 
+     #define ISUNICODEPUNCT(off)             md_is_unicode_punct__(md_decode_utf16le__(STR(off), ctx->size - (off), NULL))
+     #define ISUNICODEPUNCTBEFORE(off)       md_is_unicode_punct__(md_decode_utf16le_before__(ctx, off))
++    #define ISCJKPUNCT(off)                md_is_cjk_punct__(md_decode_utf16le__(STR(off), ctx->size - (off), NULL))
++    #define ISCJKPUNCTBEFORE(off)          md_is_cjk_punct__(md_decode_utf16le_before__(ctx, off))
+ 
+     static inline int
+     md_decode_unicode(const CHAR* str, OFF off, SZ str_size, SZ* p_char_size)
+@@ -947,6 +956,8 @@
+ 
+     #define ISUNICODEPUNCT(off)             md_is_unicode_punct__(md_decode_utf8__(STR(off), ctx->size - (off), NULL))
+     #define ISUNICODEPUNCTBEFORE(off)       md_is_unicode_punct__(md_decode_utf8_before__(ctx, off))
++    #define ISCJKPUNCT(off)                md_is_cjk_punct__(md_decode_utf8__(STR(off), ctx->size - (off), NULL))
++    #define ISCJKPUNCTBEFORE(off)          md_is_cjk_punct__(md_decode_utf8_before__(ctx, off))
+ 
+     static inline unsigned
+     md_decode_unicode(const CHAR* str, OFF off, SZ str_size, SZ* p_char_size)
+@@ -960,6 +971,8 @@
+ 
+     #define ISUNICODEPUNCT(off)             ISPUNCT(off)
+     #define ISUNICODEPUNCTBEFORE(off)       ISPUNCT((off)-1)
++    #define ISCJKPUNCT(off)                0
++    #define ISCJKPUNCTBEFORE(off)          0
+ 
+     static inline void
+     md_get_unicode_fold_info(unsigned codepoint, MD_UNICODE_FOLD_INFO* info)
+@@ -3075,6 +3088,13 @@
+                 else
+                     right_level = 2;
+ 
++                if(ch == _T('*') && tmp - off == 2) {
++                    if(left_level == 1 && ISCJKPUNCTBEFORE(off))
++                        left_level = 2;
++                    if(right_level == 1 && ISCJKPUNCT(tmp))
++                        right_level = 2;
++                }
++
+                 /* Intra-word underscore doesn't have special meaning. */
+                 if(ch == _T('_')  &&  left_level == 2  &&  right_level == 2) {
+                     left_level = 0;

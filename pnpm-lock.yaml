@@ -165,6 +165,11 @@ settings:
 overrides:
   '@libsql/isomorphic-ws>ws': 8.21.0
 
+patchedDependencies:
+  react-native-enriched-markdown@1.0.2:
+    hash: 8bcd94e016382dd3b4232cd27f1f2c35316708653edc0bfda3f5ae6b2d542df8
+    path: patches/react-native-enriched-markdown@1.0.2.patch
+
 importers:
 
   .:
@@ -336,7 +341,7 @@ importers:
         version: link:../../packages/react-native-direct-fetch
       react-native-enriched-markdown:
         specifier: 1.0.2
-        version: 1.0.2(react-native@0.86.3(@babel/core@7.29.0)(@react-native/metro-config@0.86.3(@babel/core@7.29.0))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
+        version: 1.0.2(patch_hash=8bcd94e016382dd3b4232cd27f1f2c35316708653edc0bfda3f5ae6b2d542df8)(react-native@0.86.3(@babel/core@7.29.0)(@react-native/metro-config@0.86.3(@babel/core@7.29.0))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       react-native-gesture-handler:
         specifier: ~2.32.0
         version: 2.32.0(react-native@0.86.3(@babel/core@7.29.0)(@react-native/metro-config@0.86.3(@babel/core@7.29.0))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
@@ -16774,7 +16779,7 @@ snapshots:
       react-native-reanimated: 4.5.1(react-native-worklets@0.10.1(@babel/core@7.29.0)(@react-native/metro-config@0.86.3(@babel/core@7.29.0))(react-native@0.86.3(@babel/core@7.29.0)(@react-native/metro-config@0.86.3(@babel/core@7.29.0))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.0)(@react-native/metro-config@0.86.3(@babel/core@7.29.0))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       use-latest-callback: 0.2.6(react@19.2.3)
 
-  react-native-enriched-markdown@1.0.2(react-native@0.86.3(@babel/core@7.29.0)(@react-native/metro-config@0.86.3(@babel/core@7.29.0))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3):
+  react-native-enriched-markdown@1.0.2(patch_hash=8bcd94e016382dd3b4232cd27f1f2c35316708653edc0bfda3f5ae6b2d542df8)(react-native@0.86.3(@babel/core@7.29.0)(@react-native/metro-config@0.86.3(@babel/core@7.29.0))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3):
     dependencies:
       react: 19.2.3
       react-native: 0.86.3(@babel/core@7.29.0)(@react-native/metro-config@0.86.3(@babel/core@7.29.0))(@types/react@19.2.18)(react@19.2.3)
