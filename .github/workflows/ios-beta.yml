@@ -58,23 +58,21 @@ jobs:
       - name: Test
         run: |
           pnpm test
-          pnpm --filter @codex-relay/mobile exec vitest run \
-            src/components/chat/chat-preview-models.test.ts \
-            src/components/chat/model-picker-navigation.test.ts
+          pnpm --filter @codex-relay/mobile exec vitest run
 
       - name: Build beta IPA
         env:
-          IOS_IPA_NAME: CodexRelay-1.5.0-beta.9.ipa
-          MOBILE_RELEASE_VERSION: 1.5.0-beta.9
+          IOS_IPA_NAME: CodexRelay-1.5.0-beta.10.ipa
+          MOBILE_RELEASE_VERSION: 1.5.0-beta.10
         run: bash scripts/build-ios-ipa.sh
 
       - name: Upload beta artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodexRelay-1.5.0-beta.9-${{ github.sha }}
+          name: CodexRelay-1.5.0-beta.10-${{ github.sha }}
           path: |
-            dist/ios/CodexRelay-1.5.0-beta.9.ipa
-            dist/ios/CodexRelay-1.5.0-beta.9.ipa.sha256
+            dist/ios/CodexRelay-1.5.0-beta.10.ipa
+            dist/ios/CodexRelay-1.5.0-beta.10.ipa.sha256
             dist/ios/build-info.txt
           if-no-files-found: error
           retention-days: 30
@@ -87,40 +85,39 @@ jobs:
           app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
           min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
           cat > /tmp/beta-release-notes.md <<EOF
-          ## Codex Relay iOS 1.5.0 Beta 9
+          ## Codex Relay iOS 1.5.0 Beta 10
 
-          UI/UX test build based on the upstream 1.5.0 integration and the OpenMinis-style mobile interface.
+          Fixes long conversations remaining stuck on loading when reopened.
 
           ### Included
 
-          - Fixes bold Markdown labels ending in CJK punctuation when followed immediately by text
-          - Preserves code blocks, escaped asterisks, links, and standard CommonMark emphasis behavior
+          - Opens recent conversation turns first and loads earlier history on demand
+          - Stops indefinite loading after a failed request and provides retry while preserving cached messages
+          - Preserves history pagination during streaming and prevents stale requests from restoring rewound history
+          - Loads earlier pages when jumping to a previous user prompt
+          - Reads recent legacy JSONL history without parsing the entire conversation
+          - Preserves per-conversation runtime preferences, Markdown rendering, and workspace previews
 
-          - Keeps model, reasoning effort, speed, and runtime mode isolated per conversation
-          - Workspace runtime preferences remain defaults for new conversations
-          - Preserves selected models when navigating back from Advanced model options
-          - New chats default to the workspace used by the most recent conversation
-          - Time and project groups on conversation history can be collapsed and expanded
-          - Opens local Markdown links in the workspace preview instead of the iOS URL handler
-          - Improves assistant Markdown readability with GitHub-flavored tables/task lists, stronger heading hierarchy, wider body line height, and dedicated list/quote/table spacing
-          - Renders assistant Markdown as one native GFM block tree so nested code blocks stay inside quotes and list items; native fenced-code highlighting replaces chat-only Shiki segmentation
-          - External conversation links continue to open with the platform URL handler
-          - Timeline navigation pairs an upward jump to the previous user prompt with the existing Latest jump
-          - Syncs codex-relay 1.6.0 with Codex CLI/SDK 0.156.1 and GPT-6 Sol/Luna support
-          - GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, and GPT-5.5 picker fallback
-          - Push notifications show the originating thread title and can include remaining Codex usage
-          - Private sideload/TrollStore IPA packaging
+          ### Relay compatibility
+
+          Update the Mac relay to this release commit and restart it to enable paged history loading.
+          The IPA does not update the relay server. Existing clients remain compatible with the updated relay.
+          Build the relay from this tag with \`pnpm install --frozen-lockfile\` and \`pnpm --filter codex-relay build\`.
+          Run the built \`packages/codex-relay/dist/cli.js\` from your usual workspace with your existing options.
+          The npm \`codex-relay@latest\` release does not contain this fork-specific fix.
 
           ### Build
 
           - App version: \`${app_version}\`
-          - Mobile beta: \`1.5.0-beta.9\`
+          - Mobile beta: \`1.5.0-beta.10\`
           - Minimum iOS: \`${min_ios}\`
           - Commit: \`${commit}\`
 
           ### Installation
 
-          Download **CodexRelay-1.5.0-beta.9.ipa** and install it with TrollStore on a compatible device.
+          Download **CodexRelay-1.5.0-beta.10.ipa** and install it with TrollStore on a compatible device.
+          This is an ad-hoc signed sideload build, not an Apple distribution-signed or notarized release.
+          Automated checks and IPA build run in CI; physical-device validation remains pending.
           EOF
 
       - name: Publish beta prerelease
@@ -129,8 +126,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.9'
-          ipa='dist/ios/CodexRelay-1.5.0-beta.9.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.10'
+          ipa='dist/ios/CodexRelay-1.5.0-beta.10.ipa'
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" \
@@ -140,7 +137,7 @@ jobs:
               --clobber
             gh release edit "$tag" \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 9' \
+              --title 'Codex Relay iOS 1.5.0 Beta 10' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           else
@@ -149,7 +146,7 @@ jobs:
               "$ipa.sha256" \
               dist/ios/build-info.txt \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 9' \
+              --title 'Codex Relay iOS 1.5.0 Beta 10' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           fi
@@ -160,8 +157,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.9'
-          ipa='CodexRelay-1.5.0-beta.9.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.10'
+          ipa='CodexRelay-1.5.0-beta.10.ipa'
           rm -rf /tmp/codex-relay-beta-check
           mkdir -p /tmp/codex-relay-beta-check
           gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check
