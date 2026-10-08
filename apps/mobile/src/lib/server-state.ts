@@ -52,6 +52,7 @@ import {
 } from "@/lib/workspace-runtime-preferences-cache";
 import {
   appendOptimisticSteeringMessageToDetail,
+  mergeOlderThreadDetailState,
   mergeThreadDetailState,
   preferredThreadSnapshot,
   upsertMessage,
@@ -59,6 +60,21 @@ import {
 
 const rootKey = "codex-relay-server-state";
 const persistableServerStateScopes = new Set(["models", "status", "threads"]);
+const olderThreadRequests = new WeakMap<
+  QueryClient,
+  Map<string, Promise<ThreadDetailResponse | undefined>>
+>();
+const threadHistoryGenerations = new WeakMap<QueryClient, Map<string, number>>();
+
+function threadHistoryGeneration(queryClient: QueryClient, requestKey: string) {
+  return threadHistoryGenerations.get(queryClient)?.get(requestKey) ?? 0;
+}
+
+function advanceThreadHistoryGeneration(queryClient: QueryClient, requestKey: string) {
+  const generations = threadHistoryGenerations.get(queryClient) ?? new Map<string, number>();
+  generations.set(requestKey, threadHistoryGeneration(queryClient, requestKey) + 1);
+  threadHistoryGenerations.set(queryClient, generations);
+}
 
 export const serverStateKeys = {
   all: () => [rootKey, getCodexRelayServerUrl()] as const,
@@ -117,14 +133,15 @@ export async function fetchThreadState(
   options: { refresh?: boolean } = {},
 ) {
   if (options.refresh) {
+    const queryKey = serverStateKeys.thread(threadId);
+    const requestKey = JSON.stringify(queryKey);
     const response = await getThread(threadId, { refresh: true });
-    setThreadDetailState(
-      queryClient,
-      response.thread,
-      response.messages,
-      response.pendingInputRequests,
-      { replaceMessages: true },
-    );
+    advanceThreadHistoryGeneration(queryClient, requestKey);
+    olderThreadRequests.get(queryClient)?.delete(requestKey);
+    queryClient.setQueryData<ThreadDetailResponse>(queryKey, response);
+    if (serverStateKeys.thread(threadId)[1] === queryKey[1]) {
+      upsertThreadState(queryClient, response.thread);
+    }
     return response;
   }
   return queryClient.fetchQuery({
@@ -134,13 +151,70 @@ export async function fetchThreadState(
 }
 
 export async function fetchThreadQueryState(queryClient: QueryClient, threadId: string) {
+  const queryKey = serverStateKeys.thread(threadId);
+  const requestKey = JSON.stringify(queryKey);
+  const generation = threadHistoryGeneration(queryClient, requestKey);
   const response = await getThread(threadId);
-  const merged = mergeThreadDetailState(
-    queryClient.getQueryData<ThreadDetailResponse>(serverStateKeys.thread(threadId)),
-    response,
-  );
-  upsertThreadState(queryClient, merged.thread);
+  const current = queryClient.getQueryData<ThreadDetailResponse>(queryKey);
+  if (threadHistoryGeneration(queryClient, requestKey) !== generation) {
+    return current ?? response;
+  }
+  const merged = mergeThreadDetailState(current, response);
+  if (serverStateKeys.thread(threadId)[1] === queryKey[1]) {
+    upsertThreadState(queryClient, merged.thread);
+  }
   return merged;
+}
+
+export function fetchOlderThreadMessagesState(
+  queryClient: QueryClient,
+  threadId: string,
+): Promise<ThreadDetailResponse | undefined> {
+  const queryKey = serverStateKeys.thread(threadId);
+  const requestKey = JSON.stringify(queryKey);
+  const inFlightByThread = olderThreadRequests.get(queryClient) ?? new Map();
+  olderThreadRequests.set(queryClient, inFlightByThread);
+  const inFlight = inFlightByThread.get(requestKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const cursor = queryClient.getQueryData<ThreadDetailResponse>(queryKey)?.olderMessagesCursor;
+  if (!cursor) {
+    return Promise.resolve(undefined);
+  }
+  const generation = threadHistoryGeneration(queryClient, requestKey);
+
+  const request = getThread(threadId, { cursor }).then(async (response) => {
+    await queryClient
+      .getQueryCache()
+      .find({ queryKey, exact: true })
+      ?.promise?.catch(() => undefined);
+    if (threadHistoryGeneration(queryClient, requestKey) !== generation) {
+      return undefined;
+    }
+    let merged: ThreadDetailResponse | undefined;
+    let applied = false;
+    queryClient.setQueryData<ThreadDetailResponse>(queryKey, (current) => {
+      applied = current?.thread.id === response.thread.id && current.olderMessagesCursor === cursor;
+      merged = mergeOlderThreadDetailState(current, response, cursor);
+      return merged;
+    });
+    if (!applied || serverStateKeys.thread(threadId)[1] !== queryKey[1]) {
+      return undefined;
+    }
+    if (merged) {
+      upsertThreadState(queryClient, merged.thread);
+    }
+    return merged;
+  });
+  const tracked = request.finally(() => {
+    if (inFlightByThread.get(requestKey) === tracked) {
+      inFlightByThread.delete(requestKey);
+    }
+  });
+  inFlightByThread.set(requestKey, tracked);
+  return tracked;
 }
 
 export function fetchQueuedInputsState(queryClient: QueryClient, threadId: string) {
@@ -441,6 +515,7 @@ export function setThreadDetailState(
     thread,
     messages,
     pendingInputRequests,
+    olderMessagesCursor: options.replaceMessages ? null : undefined,
   };
   queryClient.setQueryData<ThreadDetailResponse>(serverStateKeys.thread(thread.id), (current) =>
     options.replaceMessages ? response : mergeThreadDetailState(current, response),
@@ -689,6 +764,7 @@ function upsertPendingInputRequestState(
 
 function upsertMessageState(queryClient: QueryClient, thread: ThreadSummary, message: ChatMessage) {
   queryClient.setQueryData<ThreadDetailResponse>(serverStateKeys.thread(thread.id), (current) => ({
+    ...current,
     thread,
     messages: upsertMessage(current?.messages ?? [], message),
     pendingInputRequests: current?.pendingInputRequests ?? [],

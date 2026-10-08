@@ -25,6 +25,7 @@ import { Colors, Spacing } from "@/constants/theme";
 
 import { MessageBubble } from "./MessageBubble";
 import { ActivityGroupCard } from "./ActivityGroupCard";
+import { previousUserJumpStep } from "./previous-user-jump-step";
 import { messageItemType } from "./timeline-message-items";
 import {
   buildTimelineRows,
@@ -33,7 +34,6 @@ import {
   TIMELINE_WINDOW_INCREMENT,
   timelineFollowTrigger,
   timelineLatestRowIndex,
-  timelinePreviousUserRowIndex,
   type TimelineRow,
   visibleMessageWindow,
 } from "./timeline-rows";
@@ -62,25 +62,37 @@ const TIMELINE_CONTENT_SETTLE_OFFSET = 10;
 
 export function MessageTimeline({
   bottomAccessoryHeight = 0,
+  hasEarlierMessages = false,
   isLoading,
+  isLoadingEarlierMessages = false,
   isRunning,
   keyboardLayoutFrozen = false,
+  loadError,
   messages,
+  olderMessagesError,
   onKeyboardDismissRequest,
   onMessageCopied,
   onMessageRewind,
+  onLoadEarlierMessages,
   onOpenMarkdownAttachment,
+  onRetry,
   threadId,
 }: {
   bottomAccessoryHeight?: number;
+  hasEarlierMessages?: boolean;
   isLoading?: boolean;
+  isLoadingEarlierMessages?: boolean;
   isRunning: boolean;
   keyboardLayoutFrozen?: boolean;
+  loadError?: string;
   messages: ChatMessage[];
+  olderMessagesError?: string;
   onKeyboardDismissRequest?: () => void;
   onMessageCopied?: () => void;
   onMessageRewind?: (message: ChatMessage) => void;
+  onLoadEarlierMessages?: () => Promise<boolean>;
   onOpenMarkdownAttachment?: (target: WorkspaceMarkdownPreviewTarget) => void;
+  onRetry?: () => void;
   threadId?: string;
 }) {
   const listRef = useRef<LegendListRef | null>(null);
@@ -90,6 +102,8 @@ export function MessageTimeline({
   const previousRowsRef = useRef<readonly TimelineRow[]>([]);
   const { bottom } = useSafeAreaInsets();
   const timelineKey = threadId ?? "no-thread";
+  const timelineKeyRef = useRef(timelineKey);
+  timelineKeyRef.current = timelineKey;
   const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_TIMELINE_WINDOW_SIZE);
   const messageWindow = useMemo(
     () => visibleMessageWindow(messages, visibleMessageCount),
@@ -246,30 +260,6 @@ export function MessageTimeline({
     if (!list) return;
     void list.scrollToIndex({ animated: true, index, viewPosition: 0.08 }).catch(() => undefined);
   }, []);
-  const jumpToPreviousUserMessage = useCallback(() => {
-    const targetIndex = timelinePreviousUserRowIndex(rows, firstVisibleRowIndex);
-    if (targetIndex !== undefined) {
-      scrollToUserRow(targetIndex);
-      return;
-    }
-    if (messageWindow.hiddenCount <= 0) return;
-    pendingPreviousUserJumpAnchorRef.current =
-      rows[firstVisibleRowIndex]?.key ?? rows[0]?.key;
-    setVisibleMessageCount((current) => nextTimelineWindowSize(current, messages.length));
-  }, [firstVisibleRowIndex, messageWindow.hiddenCount, messages.length, rows, scrollToUserRow]);
-
-  useEffect(() => {
-    const anchorKey = pendingPreviousUserJumpAnchorRef.current;
-    if (!anchorKey) return;
-    const anchorIndex = rows.findIndex((row) => row.key === anchorKey);
-    if (anchorIndex < 0) return;
-    const targetIndex = timelinePreviousUserRowIndex(rows, anchorIndex);
-    pendingPreviousUserJumpAnchorRef.current = undefined;
-    if (targetIndex === undefined) return;
-    const frame = requestAnimationFrame(() => scrollToUserRow(targetIndex));
-    return () => cancelAnimationFrame(frame);
-  }, [rows, scrollToUserRow]);
-
   const jumpToLatest = useCallback(() => {
     const list = listRef.current;
     const latestRowIndex = timelineLatestRowIndex(rows.length);
@@ -298,32 +288,122 @@ export function MessageTimeline({
       });
     })();
   }, [rows.length]);
-  const loadEarlierMessages = useCallback(() => {
-    setVisibleMessageCount((current) => nextTimelineWindowSize(current, messages.length));
-  }, [messages.length]);
-  const previousUserRowIndex = timelinePreviousUserRowIndex(rows, firstVisibleRowIndex);
+  const loadEarlierMessages = useCallback(async () => {
+    if (messageWindow.hiddenCount > 0) {
+      setVisibleMessageCount((current) => nextTimelineWindowSize(current, messages.length));
+      return true;
+    }
+    if (!hasEarlierMessages || !onLoadEarlierMessages || isLoadingEarlierMessages) {
+      return false;
+    }
+    const requestedTimelineKey = timelineKey;
+    const loaded = await onLoadEarlierMessages();
+    if (loaded && timelineKeyRef.current === requestedTimelineKey) {
+      setVisibleMessageCount((current) => current + TIMELINE_WINDOW_INCREMENT);
+    }
+    return loaded && timelineKeyRef.current === requestedTimelineKey;
+  }, [
+    hasEarlierMessages,
+    isLoadingEarlierMessages,
+    messageWindow.hiddenCount,
+    messages.length,
+    onLoadEarlierMessages,
+    timelineKey,
+  ]);
+  const jumpToPreviousUserMessage = useCallback(() => {
+    const step = previousUserJumpStep(
+      rows,
+      firstVisibleRowIndex,
+      messageWindow.hiddenCount,
+      hasEarlierMessages,
+    );
+    if (step.kind === "jump") {
+      scrollToUserRow(step.index);
+      return;
+    }
+    if (step.kind === "end") return;
+    pendingPreviousUserJumpAnchorRef.current = rows[firstVisibleRowIndex]?.key ?? rows[0]?.key;
+    if (isLoadingEarlierMessages) return;
+    void loadEarlierMessages();
+  }, [
+    firstVisibleRowIndex,
+    hasEarlierMessages,
+    isLoadingEarlierMessages,
+    loadEarlierMessages,
+    messageWindow.hiddenCount,
+    rows,
+    scrollToUserRow,
+  ]);
+
+  useEffect(() => {
+    const anchorKey = pendingPreviousUserJumpAnchorRef.current;
+    if (!anchorKey) return;
+    if (isLoadingEarlierMessages) return;
+    if (olderMessagesError) return;
+    const anchorIndex = rows.findIndex((row) => row.key === anchorKey);
+    if (anchorIndex < 0) return;
+    const step = previousUserJumpStep(
+      rows,
+      anchorIndex,
+      messageWindow.hiddenCount,
+      hasEarlierMessages,
+    );
+    if (step.kind === "jump") {
+      pendingPreviousUserJumpAnchorRef.current = undefined;
+      const frame = requestAnimationFrame(() => scrollToUserRow(step.index));
+      return () => cancelAnimationFrame(frame);
+    }
+    if (step.kind !== "end") {
+      const requestedTimelineKey = timelineKey;
+      void loadEarlierMessages().then((loaded) => {
+        if (!loaded && timelineKeyRef.current === requestedTimelineKey) {
+          pendingPreviousUserJumpAnchorRef.current = undefined;
+        }
+      });
+      return;
+    }
+    pendingPreviousUserJumpAnchorRef.current = undefined;
+  }, [
+    hasEarlierMessages,
+    isLoadingEarlierMessages,
+    loadEarlierMessages,
+    messageWindow.hiddenCount,
+    olderMessagesError,
+    rows,
+    scrollToUserRow,
+    timelineKey,
+    visibleMessageCount,
+  ]);
   const canJumpToPreviousUser =
-    previousUserRowIndex !== undefined || messageWindow.hiddenCount > 0;
+    previousUserJumpStep(rows, firstVisibleRowIndex, messageWindow.hiddenCount, hasEarlierMessages)
+      .kind !== "end";
 
   return (
     <View onTouchStart={onKeyboardDismissRequest} style={styles.transitionHost}>
       {!isLoading ? (
-        rows.length === 0 && !isRunning ? (
+        rows.length === 0 && !isRunning && !hasEarlierMessages ? (
           <Animated.View style={[styles.transitionScene, timelineContentStyle]}>
-            <View style={styles.empty}>
-              <View style={styles.emptyMark}>
-                <Icon name="model" size={20} tintColor="#F5F5F7" />
+            {loadError ? (
+              <ConversationLoadError error={loadError} onRetry={onRetry} />
+            ) : (
+              <View style={styles.empty}>
+                <View style={styles.emptyMark}>
+                  <Icon name="model" size={20} tintColor="#F5F5F7" />
+                </View>
+                <ThemedText type="smallBold" style={styles.emptyTitle}>
+                  What do you want to build?
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+                  Message Codex to start working in this workspace.
+                </ThemedText>
               </View>
-              <ThemedText type="smallBold" style={styles.emptyTitle}>
-                What do you want to build?
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-                Message Codex to start working in this workspace.
-              </ThemedText>
-            </View>
+            )}
           </Animated.View>
         ) : (
           <Animated.View style={[styles.transitionScene, timelineContentStyle]}>
+            {loadError ? (
+              <ConversationLoadError compact error={loadError} onRetry={onRetry} />
+            ) : null}
             <KeyboardAwareLegendList
               key={timelineKey}
               ref={listRef}
@@ -357,10 +437,12 @@ export function MessageTimeline({
                 isRunning ? <RunningFooter /> : <View style={styles.listEndPad} />
               }
               ListHeaderComponent={
-                messageWindow.hiddenCount > 0 ? (
+                messageWindow.hiddenCount > 0 || hasEarlierMessages ? (
                   <EarlierMessagesButton
                     hiddenCount={messageWindow.hiddenCount}
-                    onPress={loadEarlierMessages}
+                    isLoading={isLoadingEarlierMessages}
+                    error={olderMessagesError}
+                    onPress={() => void loadEarlierMessages()}
                   />
                 ) : null
               }
@@ -418,24 +500,71 @@ function LoadingConversation() {
   );
 }
 
+function ConversationLoadError({
+  compact = false,
+  error,
+  onRetry,
+}: {
+  compact?: boolean;
+  error: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <View style={compact ? styles.loadErrorBanner : styles.empty} accessibilityRole="alert">
+      <ThemedText type="smallBold" style={styles.emptyTitle}>
+        Could not load conversation
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+        {error}
+      </ThemedText>
+      {onRetry ? (
+        <Pressable
+          accessibilityLabel="Retry loading conversation"
+          accessibilityRole="button"
+          onPress={onRetry}
+          style={({ pressed }) => [styles.retryButton, pressed && styles.jumpPressed]}
+        >
+          <ThemedText type="smallBold">Retry</ThemedText>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function EarlierMessagesButton({
   hiddenCount,
+  isLoading,
+  error,
   onPress,
 }: {
   hiddenCount: number;
+  isLoading?: boolean;
+  error?: string;
   onPress: () => void;
 }) {
   const nextCount = Math.min(TIMELINE_WINDOW_INCREMENT, hiddenCount);
   return (
     <Pressable
-      accessibilityLabel={`Load ${nextCount} earlier messages`}
+      accessibilityLabel={
+        hiddenCount > 0 ? `Load ${nextCount} earlier messages` : "Load earlier messages"
+      }
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.earlierMessages, pressed && styles.jumpPressed]}
     >
-      <Icon name="expand" size={13} tintColor={Colors.dark.textSecondary} strokeWidth={2.1} />
+      {isLoading && hiddenCount === 0 ? (
+        <ActivityIndicator size="small" color={Colors.dark.textSecondary} />
+      ) : (
+        <Icon name="expand" size={13} tintColor={Colors.dark.textSecondary} strokeWidth={2.1} />
+      )}
       <ThemedText type="code" themeColor="textSecondary" style={styles.earlierMessagesLabel}>
-        Show {nextCount} earlier · {hiddenCount} hidden
+        {hiddenCount > 0
+          ? `Show ${nextCount} earlier · ${hiddenCount} hidden`
+          : isLoading
+            ? "Loading earlier messages…"
+            : error
+              ? `Could not load earlier messages: ${error} · Retry`
+              : "Show earlier messages"}
       </ThemedText>
     </Pressable>
   );
@@ -503,6 +632,19 @@ const styles = StyleSheet.create({
   },
   listEndPad: {
     height: Spacing.two,
+  },
+  loadErrorBanner: {
+    alignItems: "center",
+    gap: Spacing.one,
+    padding: Spacing.three,
+  },
+  retryButton: {
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
   },
   jumpNavigation: {
     alignItems: "center",

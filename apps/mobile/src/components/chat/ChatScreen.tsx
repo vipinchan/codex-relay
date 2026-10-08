@@ -11,6 +11,7 @@ import type {
   RuntimePreferences,
   StreamThreadRunEvent,
   ThreadCollaborationMode,
+  ThreadDetailResponse,
   ThreadSummary,
   WebPreviewTarget,
   WorkspaceChangesResponse,
@@ -90,6 +91,7 @@ import {
   commitPushWorkspaceServerState,
   createThreadServerState,
   fetchContextWindowState,
+  fetchOlderThreadMessagesState,
   fetchModelsState,
   fetchQueuedInputsState,
   fetchRateLimitsState,
@@ -154,6 +156,8 @@ import { addWorkspacePreviewTab } from "@/state/workspace-preview-store";
 
 import { ChatControls } from "./ChatControls";
 import { runConnectionRefresh } from "./connection-refresh";
+import { earlierPageProgressed } from "./previous-user-jump-step";
+import { threadMessageLoadState } from "./thread-message-load-state";
 import {
   modelForSelection,
   normalizeRuntimePreferencesForModels,
@@ -207,6 +211,12 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   const [isPastePairOpen, setPastePairOpen] = useState(false);
   const [isPastePairing, setPastePairing] = useState(false);
   const [isAttachingImages, setAttachingImages] = useState(false);
+  const [threadLoadError, setThreadLoadError] = useState<
+    { threadId: string; message: string; snapshotUpdateCount: number } | undefined
+  >(undefined);
+  const [olderMessagesRequest, setOlderMessagesRequest] = useState<
+    { threadId: string; isLoading: boolean; error?: string } | undefined
+  >(undefined);
   const composerFocusRequestKey = 0;
   const [isScannerOpen, setScannerOpen] = useState(false);
   const [isLoadingChanges, setLoadingChanges] = useState(false);
@@ -221,10 +231,8 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   const [optimisticRuntimePreferences, setOptimisticRuntimePreferences] = useState<
     RuntimePreferences | undefined
   >(undefined);
-  const [
-    optimisticRuntimePreferencesByThreadId,
-    setOptimisticRuntimePreferencesByThreadId,
-  ] = useState<Record<string, RuntimePreferences>>({});
+  const [optimisticRuntimePreferencesByThreadId, setOptimisticRuntimePreferencesByThreadId] =
+    useState<Record<string, RuntimePreferences>>({});
   const [markdownPreviewTarget, setMarkdownPreviewTarget] = useState<
     WorkspaceMarkdownPreviewTarget | undefined
   >(undefined);
@@ -543,11 +551,24 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   const isLoadingSelectedThreadMessages = activeThreadId
     ? threadMessagesLoadingByThreadId[activeThreadId] === true
     : false;
-  const isLoadingMessages =
-    !!activeThreadId &&
-    !activeThreadDetailQuery.data &&
-    !isRunningAppThread &&
-    (isLoadingSelectedThreadMessages || (activeThread?.messageCount ?? 0) > 0);
+  const activeThreadSnapshotUpdateCount = activeThreadId
+    ? (queryClient.getQueryState(serverStateKeys.thread(activeThreadId))?.dataUpdateCount ?? 0)
+    : 0;
+  const { isLoading: isLoadingMessages, error: messageLoadError } = threadMessageLoadState({
+    hasActiveThread: Boolean(activeThreadId),
+    hasSnapshot: Boolean(activeThreadDetailQuery.data),
+    isFetching: activeThreadDetailQuery.isFetching,
+    isPending: activeThreadDetailQuery.isPending,
+    isRunningAppThread,
+    snapshotUpdateCount: activeThreadSnapshotUpdateCount,
+    queryError: activeThreadDetailQuery.error
+      ? errorMessage(activeThreadDetailQuery.error)
+      : undefined,
+    syncError: threadLoadError?.threadId === activeThreadId ? threadLoadError : undefined,
+    syncLoading: isLoadingSelectedThreadMessages,
+  });
+  const activeOlderMessagesRequest =
+    olderMessagesRequest?.threadId === activeThreadId ? olderMessagesRequest : undefined;
   const contextWindowUsage = contextWindowQuery.data?.usage ?? undefined;
   const queuedPrompts = useMemo(
     () => queuedInputsQuery.data?.inputs ?? [],
@@ -638,6 +659,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   const syncThreadSnapshot = useCallback(
     async (threadId: string, options: { refresh?: boolean; setOfflineOnError?: boolean } = {}) => {
       const setOfflineOnError = options.setOfflineOnError ?? true;
+      setThreadLoadError((current) => (current?.threadId === threadId ? undefined : current));
       setThreadMessagesLoading(threadId, true);
       try {
         const response = await fetchThreadState(queryClient, threadId, {
@@ -656,6 +678,14 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         return response.thread.state;
       } catch (caught) {
         syncPairedSessionState();
+        if (chatStore$.activeThreadId.peek() === threadId) {
+          setThreadLoadError({
+            threadId,
+            message: errorMessage(caught),
+            snapshotUpdateCount:
+              queryClient.getQueryState(serverStateKeys.thread(threadId))?.dataUpdateCount ?? 0,
+          });
+        }
         if (setOfflineOnError && chatStore$.activeThreadId.peek() === threadId) {
           setConnection("offline", errorMessage(caught));
         }
@@ -699,6 +729,50 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       }
     },
     [clearThreadStatusPoll, queryClient, syncThreadSnapshot],
+  );
+
+  const loadEarlierThreadMessages = useCallback(
+    async (threadId: string) => {
+      const previous = queryClient.getQueryData<ThreadDetailResponse>(
+        serverStateKeys.thread(threadId),
+      );
+      setOlderMessagesRequest({ threadId, isLoading: true });
+      try {
+        const response = await fetchOlderThreadMessagesState(queryClient, threadId);
+        const progressed =
+          response !== undefined &&
+          earlierPageProgressed(
+            previous?.olderMessagesCursor,
+            response.olderMessagesCursor,
+            previous?.messages.length ?? 0,
+            response.messages.length,
+          );
+        setOlderMessagesRequest((current) =>
+          current?.threadId === threadId
+            ? progressed
+              ? undefined
+              : {
+                  threadId,
+                  isLoading: false,
+                  error: "Earlier history did not advance. Retry loading earlier messages.",
+                }
+            : current,
+        );
+        return progressed;
+      } catch (caught) {
+        setOlderMessagesRequest((current) =>
+          current?.threadId === threadId
+            ? { threadId, isLoading: false, error: errorMessage(caught) }
+            : current,
+        );
+        return false;
+      }
+    },
+    [queryClient],
+  );
+  const handleLoadEarlierMessages = useCallback(
+    () => (activeThreadId ? loadEarlierThreadMessages(activeThreadId) : Promise.resolve(false)),
+    [activeThreadId, loadEarlierThreadMessages],
   );
 
   const refreshUsageStatus = useCallback(
@@ -2324,6 +2398,10 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       inputNativeID={CHAT_INPUT_NATIVE_ID}
       isAttachingImage={isAttachingImages}
       isLoadingMessages={isLoadingMessages}
+      hasEarlierMessages={Boolean(activeThreadDetailQuery.data?.olderMessagesCursor)}
+      isLoadingEarlierMessages={activeOlderMessagesRequest?.isLoading === true}
+      messageLoadError={messageLoadError}
+      olderMessagesError={activeOlderMessagesRequest?.error}
       isRunning={isRunning}
       leadingAction={{
         icon: usesExpandedSidebar ? (isSidebarVisible ? "sidebarHide" : "sidebarShow") : "menu",
@@ -2342,6 +2420,12 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       onImplementPlan={implementPlan}
       onIgnoreInputRequest={(request) => void ignoreInputRequest(request)}
       onMessageCopied={showMessageCopiedToast}
+      onLoadEarlierMessages={handleLoadEarlierMessages}
+      onRetryMessages={() => {
+        if (activeThreadId) {
+          void loadThread(activeThreadId);
+        }
+      }}
       onMessageRewind={
         canMutateActiveThread && !isRunning && !rewindThreadMutation.isPending
           ? confirmRewind

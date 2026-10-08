@@ -236,6 +236,68 @@ describe("CodexAppServerClient shared socket mode", () => {
     }
   });
 
+  it("loads full turn pages from newest to oldest using the returned cursor", async () => {
+    const codexHome = await mkdtemp(join(socketTempRoot, "codex-relay-turn-pages-"));
+    const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");
+    const newerTurn = {
+      id: "turn-newer",
+      items: [{ id: "message-newer", type: "agentMessage", text: "Recent reply" }],
+      status: "completed",
+      startedAt: 2,
+      completedAt: 3,
+    };
+    const olderTurn = {
+      id: "turn-older",
+      items: [{ id: "message-older", type: "userMessage", content: [] }],
+      status: "completed",
+      startedAt: 0,
+      completedAt: 1,
+    };
+    const server = await startSharedSocketServer(socketPath, (request) => {
+      if (request.method !== "thread/turns/list") return {};
+      return request.params?.cursor === "older-cursor"
+        ? { data: [olderTurn], nextCursor: null, backwardsCursor: "backwards-older" }
+        : { data: [newerTurn], nextCursor: "older-cursor", backwardsCursor: "backwards-newer" };
+    });
+    vi.stubEnv("CODEX_HOME", codexHome);
+    vi.stubEnv("CODEX_RELAY_APP_SERVER_MODE", "socket");
+    const client = new CodexAppServerClient();
+
+    try {
+      await expect(client.listThreadTurns("long-thread")).resolves.toEqual({
+        data: [newerTurn],
+        nextCursor: "older-cursor",
+      });
+      await expect(
+        client.listThreadTurns("long-thread", { cursor: "older-cursor", limit: 10 }),
+      ).resolves.toEqual({ data: [olderTurn], nextCursor: null });
+      expect(server.requests.filter((request) => request.method === "thread/turns/list")).toEqual([
+        expect.objectContaining({
+          params: {
+            threadId: "long-thread",
+            limit: 20,
+            sortDirection: "desc",
+            itemsView: "full",
+          },
+        }),
+        expect.objectContaining({
+          params: {
+            threadId: "long-thread",
+            cursor: "older-cursor",
+            limit: 10,
+            sortDirection: "desc",
+            itemsView: "full",
+          },
+        }),
+      ]);
+      expect(server.requests.some((request) => request.method === "thread/read")).toBe(false);
+    } finally {
+      client.close();
+      await server.close();
+      await rm(codexHome, { force: true, recursive: true });
+    }
+  });
+
   it("discovers history for an empty index and defaults to twenty recent threads", async () => {
     const codexHome = await mkdtemp(join(socketTempRoot, "codex-relay-empty-index-"));
     const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");

@@ -155,6 +155,8 @@ import {
 import { readLatestContextWindowUsage } from "./context-window.js";
 import { codexRelayDataPath } from "./paths.js";
 import { relayDebugLog } from "./debug-log.js";
+import { historyCursor, localHistoryPage, parseHistoryPage } from "./thread-history-pagination.js";
+import { readRolloutHistoryPage } from "./rollout-history-page.js";
 import { permanentClientSessionExpiresAt, type PairingSessionStore } from "./pairing-store.js";
 import {
   createExpoPushNotificationSender,
@@ -2059,6 +2061,35 @@ export function createApp(options: AppOptions = {}) {
     const threadId = c.req.param("threadId");
     const forceRefresh = c.req.query("refresh") === "true";
     const detailStartedAt = Date.now();
+    let historyPage: ReturnType<typeof parseHistoryPage>;
+    try {
+      historyPage = parseHistoryPage(threadId, c.req.query("limit"), c.req.query("cursor"));
+    } catch (error) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_request", errorMessage(error)),
+        400,
+      );
+    }
+    const respondWithDetail = (input: Parameters<typeof threadDetailResponse>[0]) => {
+      try {
+        const response = threadDetailResponse({
+          ...input,
+          ...(historyPage ? localHistoryPage(threadId, input.messages, historyPage) : {}),
+        });
+        return secureJson(c, options.pairing, secureSessionsByTokenHash, response);
+      } catch (error) {
+        return secureJson(
+          c,
+          options.pairing,
+          secureSessionsByTokenHash,
+          apiError("invalid_request", errorMessage(error)),
+          400,
+        );
+      }
+    };
     relayDebugLog("thread.detail.requested", {
       threadId,
     });
@@ -2074,6 +2105,122 @@ export function createApp(options: AppOptions = {}) {
     }
     const wasKnownRunning =
       knownThread?.state === "running" || activeAppServerTurnIdsByThreadId.has(threadId);
+    if (historyPage && appServer && historyPage.cursor?.source !== "local") {
+      try {
+        const thread = await appServer.readThread(threadId, { includeTurns: false });
+        if (isSubagentThread(thread)) {
+          return secureJson(
+            c,
+            options.pairing,
+            secureSessionsByTokenHash,
+            apiError("not_found", `Thread ${threadId} is not known to this server.`),
+            404,
+          );
+        }
+        if (thread.path) {
+          const previousPath = appServerRolloutPathsByThreadId.get(threadId);
+          if (previousPath && previousPath !== thread.path) invalidateAppServerHistory(threadId);
+        }
+        const rolloutPath =
+          thread.historyMode !== "paginated" &&
+          thread.path?.endsWith(".jsonl") &&
+          existsSync(thread.path) &&
+          !isPaginatedRolloutFile(thread.path)
+            ? thread.path
+            : undefined;
+        let pageMessages: ChatMessage[];
+        let olderMessagesCursor: string | null;
+        let pageThread = thread;
+        if (rolloutPath && historyPage.cursor?.source !== "app-server") {
+          const fileStat = await stat(rolloutPath);
+          const fileIdentity = createHash("sha256")
+            .update(`${rolloutPath}:${fileStat.ino}:${fileStat.birthtimeMs}`)
+            .digest("hex");
+          const [cursorIdentity, offset] = historyPage.cursor?.value.split(":") ?? [];
+          if (historyPage.cursor && cursorIdentity !== fileIdentity) {
+            throw new RangeError("History changed. Reload the conversation and try again.");
+          }
+          const page = await readRolloutHistoryPage(rolloutPath, {
+            limit: historyPage.limit,
+            ...(offset !== undefined ? { cursor: Number(offset) } : {}),
+          });
+          pageMessages = parseRolloutMessages(
+            threadId,
+            workspacePath,
+            page.lines.map((line) => ({ text: line.text, key: `rollout:byte:${line.offset}` })),
+          );
+          olderMessagesCursor =
+            page.olderOffset !== null
+              ? historyCursor({
+                  source: "rollout",
+                  threadId,
+                  value: `${fileIdentity}:${page.olderOffset}`,
+                })
+              : null;
+        } else {
+          if (historyPage.cursor?.source === "rollout") {
+            throw new RangeError("History changed. Reload the conversation and try again.");
+          }
+          const page = await appServer.listThreadTurns(threadId, {
+            limit: historyPage.limit,
+            ...(historyPage.cursor ? { cursor: historyPage.cursor.value } : {}),
+          });
+          pageThread = { ...thread, turns: [...page.data].reverse() };
+          pageMessages = mapAppServerMessages(pageThread);
+          olderMessagesCursor = page.nextCursor
+            ? historyCursor({ source: "app-server", threadId, value: page.nextCursor })
+            : null;
+        }
+        const cachedMessages = messagesByThreadId.get(threadId) ?? [];
+        const oldestPageMessage = pageMessages[0];
+        const recentLocalMessages = historyPage.cursor
+          ? []
+          : cachedMessages.filter(
+              (message) => !oldestPageMessage || message.createdAt >= oldestPageMessage.createdAt,
+            );
+        const messages = mergeThreadMessagePages(pageMessages, recentLocalMessages);
+        messagesByThreadId.set(threadId, mergeThreadMessagePages(messages, cachedMessages));
+        if (thread.path) appServerRolloutPathsByThreadId.set(threadId, thread.path);
+        const responseThread = preserveKnownRunningThreadState(
+          rememberRolloutThreadMessages(
+            threads,
+            rememberAppServerThread(threads, pageThread),
+            messagesByThreadId.get(threadId) ?? messages,
+            messages.length,
+          ),
+          wasKnownRunning,
+        );
+        const response = threadDetailResponse({
+          thread: responseThread,
+          messages,
+          pendingInputRequests: pendingInputRequestsForThread(pendingApprovals, threadId),
+          olderMessagesCursor,
+        });
+        relayDebugLog("thread.detail.responded", {
+          durationMs: Date.now() - detailStartedAt,
+          fastPath: rolloutPath ? "rollout-page" : "turn-page",
+          messageCount: messages.length,
+          threadId,
+        });
+        return secureJson(c, options.pairing, secureSessionsByTokenHash, response);
+      } catch (error) {
+        const message = errorMessage(error);
+        const unsupported = /method (?:not found|not supported)|unknown method/i.test(message);
+        if (!unsupported || historyPage.cursor) {
+          return secureJson(
+            c,
+            options.pairing,
+            secureSessionsByTokenHash,
+            apiError("history_unavailable", message),
+            error instanceof RangeError
+              ? 400
+              : /not found|no rollout found/i.test(message) && !unsupported
+                ? 404
+                : 502,
+          );
+        }
+      }
+    }
     if (appServer) {
       try {
         const thread = await appServer.readThread(threadId, {
@@ -2163,11 +2310,11 @@ export function createApp(options: AppOptions = {}) {
           scheduleAppServerHistoryLoad(threadId, cachedMessages);
         }
 
-        const response = threadDetailResponse({
+        const responseInput = {
           thread: responseThread,
           messages,
           pendingInputRequests: pendingInputRequestsForThread(pendingApprovals, threadId),
-        });
+        };
         relayDebugLog("thread.detail.responded", {
           durationMs: Date.now() - detailStartedAt,
           loadedMessages,
@@ -2175,7 +2322,7 @@ export function createApp(options: AppOptions = {}) {
           state: responseThread.state,
           threadId,
         });
-        return secureJson(c, options.pairing, secureSessionsByTokenHash, response);
+        return respondWithDetail(responseInput);
       } catch (caught) {
         relayDebugLog("thread.detail.app_server_failed", {
           error: caught instanceof Error ? caught.message : String(caught),
@@ -2208,11 +2355,11 @@ export function createApp(options: AppOptions = {}) {
         rolloutHistory.messageCountLowerBound,
       );
       messagesByThreadId.set(threadId, messages);
-      const response = threadDetailResponse({
+      const responseInput = {
         thread: responseThread,
         messages,
         pendingInputRequests: pendingInputRequestsForThread(pendingApprovals, threadId),
-      });
+      };
       relayDebugLog("thread.detail.responded", {
         durationMs: Date.now() - detailStartedAt,
         fastPath: "rollout",
@@ -2221,7 +2368,7 @@ export function createApp(options: AppOptions = {}) {
         state: responseThread.state,
         threadId,
       });
-      return secureJson(c, options.pairing, secureSessionsByTokenHash, response);
+      return respondWithDetail(responseInput);
     }
 
     const thread = threads.get(threadId);
@@ -2235,16 +2382,11 @@ export function createApp(options: AppOptions = {}) {
       );
     }
 
-    return secureJson(
-      c,
-      options.pairing,
-      secureSessionsByTokenHash,
-      threadDetailResponse({
-        thread,
-        messages: messagesByThreadId.get(threadId) ?? [],
-        pendingInputRequests: pendingInputRequestsForThread(pendingApprovals, threadId),
-      }),
-    );
+    return respondWithDetail({
+      thread,
+      messages: messagesByThreadId.get(threadId) ?? [],
+      pendingInputRequests: pendingInputRequestsForThread(pendingApprovals, threadId),
+    });
   });
 
   app.get("/v1/threads/:threadId/messages/:messageId/details/:field", async (c) => {
@@ -7023,19 +7165,30 @@ function readRolloutThreadMessages(
     return { messageCountLowerBound: 0, messages: [], rolloutPath };
   }
 
+  const lines = readFileSync(rolloutPath, "utf8").split("\n");
+  const messages = parseRolloutMessages(
+    threadId,
+    workspacePath,
+    lines.map((text, index) => ({ text, key: `rollout:${index + 1}` })),
+  );
+  return { messageCountLowerBound: messages.length, messages, rolloutPath };
+}
+
+function parseRolloutMessages(
+  threadId: string,
+  workspacePath: string,
+  lines: { text: string; key: string }[],
+) {
   const collected: ChatMessage[] = [];
   const applyPatchInputs = new Map<string, string>();
   const handledApplyPatchCallIds = new Set<string>();
   const pendingApplyPatchChanges: RolloutPatchChange[] = [];
   let activeTurnId: string | undefined;
-  const lines = readFileSync(rolloutPath, "utf8").split("\n");
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]!;
-    const lineNumber = index + 1;
+  for (const { text: line, key } of lines) {
     if (!line.trim()) {
       continue;
     }
-    if (!isRolloutMessageLine(line)) {
+    if (!isRolloutMessageLine(line) && !line.includes('"type":"turn_context"')) {
       continue;
     }
     try {
@@ -7058,7 +7211,7 @@ function readRolloutThreadMessages(
           rolloutApplyPatchSummaryMessage(
             threadId,
             record,
-            `rollout:${lineNumber}:apply_patch`,
+            `${key}:apply_patch`,
             pendingApplyPatchChanges,
           ),
         );
@@ -7066,13 +7219,7 @@ function readRolloutThreadMessages(
         activeTurnId = undefined;
         continue;
       }
-      const message = rolloutRecordMessage(
-        threadId,
-        record,
-        `rollout:${lineNumber}`,
-        workspacePath,
-        activeTurnId,
-      );
+      const message = rolloutRecordMessage(threadId, record, key, workspacePath, activeTurnId);
       if (isRolloutTaskComplete(record)) {
         activeTurnId = undefined;
       }
@@ -7093,11 +7240,7 @@ function readRolloutThreadMessages(
       // Ignore corrupt/incomplete JSONL lines; the active writer can append while we read.
     }
   }
-  return {
-    messageCountLowerBound: collected.length,
-    messages: collected,
-    rolloutPath,
-  };
+  return collected;
 }
 
 function isPaginatedRolloutFile(rolloutPath: string) {
@@ -7585,11 +7728,15 @@ function threadDetailResponse(input: {
   messages: ChatMessage[];
   pendingInputRequests: PendingInputRequest[];
   thread: ThreadMetadata;
+  olderMessagesCursor?: string | null;
 }) {
   return ThreadDetailResponseSchema.parse({
     thread: input.thread,
     messages: input.messages,
     pendingInputRequests: input.pendingInputRequests,
+    ...(input.olderMessagesCursor !== undefined
+      ? { olderMessagesCursor: input.olderMessagesCursor }
+      : {}),
   });
 }
 

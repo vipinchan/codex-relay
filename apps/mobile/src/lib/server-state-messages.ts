@@ -37,6 +37,7 @@ export function appendOptimisticSteeringMessageToDetail(
     state: "completed",
   };
   return {
+    ...current,
     thread,
     messages: upsertMessage(current?.messages ?? [], message),
     pendingInputRequests: current?.pendingInputRequests ?? [],
@@ -55,6 +56,28 @@ export function mergeThreadDetailState(
     ...response,
     thread: preferredThreadSnapshot(current.thread, response.thread),
     messages,
+    olderMessagesCursor:
+      current.olderMessagesCursor === undefined
+        ? response.olderMessagesCursor
+        : current.olderMessagesCursor,
+  };
+}
+
+export function mergeOlderThreadDetailState(
+  current: ThreadDetailResponse | undefined,
+  response: ThreadDetailResponse,
+  requestedCursor: string,
+): ThreadDetailResponse | undefined {
+  if (
+    !current ||
+    current.thread.id !== response.thread.id ||
+    current.olderMessagesCursor !== requestedCursor
+  ) {
+    return current;
+  }
+  return {
+    ...mergeThreadDetailState(current, response),
+    olderMessagesCursor: response.olderMessagesCursor ?? null,
   };
 }
 

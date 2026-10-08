@@ -918,11 +918,16 @@ export async function getRateLimits(): Promise<RateLimitsResponse> {
 
 export async function getThread(
   threadId: string,
-  options: { refresh?: boolean } = {},
+  options: { refresh?: boolean; cursor?: string } = {},
 ): Promise<ThreadDetailResponse> {
-  const path = options.refresh
-    ? `${apiPaths.thread(threadId)}?refresh=true`
-    : apiPaths.thread(threadId);
+  const params = new URLSearchParams({ limit: "20" });
+  if (options.refresh) {
+    params.set("refresh", "true");
+  }
+  if (options.cursor) {
+    params.set("cursor", options.cursor);
+  }
+  const path = `${apiPaths.thread(threadId)}?${params.toString()}`;
   return request(path, undefined, ThreadDetailResponseSchema.parse);
 }
 

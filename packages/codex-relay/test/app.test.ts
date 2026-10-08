@@ -7214,6 +7214,22 @@ describe("Codex Relay server routes", () => {
       "Second",
       "result: Second",
     ]);
+    const latestPage = await (await app.request("/v1/threads/thread-1?limit=2")).json();
+    expect(latestPage.messages.map((message: { content: string }) => message.content)).toEqual([
+      "Second",
+      "result: Second",
+    ]);
+    expect(latestPage.olderMessagesCursor).toEqual(expect.any(String));
+    const olderPage = await (
+      await app.request(
+        `/v1/threads/thread-1?limit=2&cursor=${encodeURIComponent(latestPage.olderMessagesCursor)}`,
+      )
+    ).json();
+    expect(olderPage.messages.map((message: { content: string }) => message.content)).toEqual([
+      "First",
+      "result: First",
+    ]);
+    expect(olderPage.olderMessagesCursor).toBeNull();
   });
 
   it("loads all app-server thread messages on thread detail", async () => {

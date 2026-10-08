@@ -358,6 +358,20 @@ export class CodexAppServerClient {
     return response.thread;
   }
 
+  async listThreadTurns(threadId: string, options: { cursor?: string; limit?: number } = {}) {
+    const response = await this.request<{ data: AppServerTurn[]; nextCursor: string | null }>(
+      "thread/turns/list",
+      {
+        threadId,
+        ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+        limit: options.limit ?? 20,
+        sortDirection: "desc",
+        itemsView: "full",
+      },
+    );
+    return { data: response.data, nextCursor: response.nextCursor };
+  }
+
   async listModels(limit = 80) {
     const response = await this.request<{ data: AppServerModel[] }>("model/list", {
       limit,

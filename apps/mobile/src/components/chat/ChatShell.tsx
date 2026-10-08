@@ -39,9 +39,13 @@ export function ChatShell({
   contextWindowUsage,
   collaborationMode,
   goal,
+  hasEarlierMessages,
   inputNativeID,
   isAttachingImage,
   isLoadingMessages,
+  isLoadingEarlierMessages,
+  messageLoadError,
+  olderMessagesError,
   isRunning,
   leadingAction,
   messages,
@@ -54,6 +58,8 @@ export function ChatShell({
   onOpenMarkdownAttachment,
   onMessageCopied,
   onMessageRewind,
+  onLoadEarlierMessages,
+  onRetryMessages,
   onRefreshUsageStatus,
   onSubmitInputRequest,
   onRemoveQueuedPrompt,
@@ -84,9 +90,13 @@ export function ChatShell({
   contextWindowUsage?: ContextWindowUsage;
   collaborationMode: ThreadCollaborationMode;
   goal?: ThreadGoal | null;
+  hasEarlierMessages?: boolean;
   inputNativeID: string;
   isAttachingImage: boolean;
   isLoadingMessages?: boolean;
+  isLoadingEarlierMessages?: boolean;
+  messageLoadError?: string;
+  olderMessagesError?: string;
   isRunning: boolean;
   leadingAction: ChatShellAction;
   messages: ChatMessage[];
@@ -98,6 +108,8 @@ export function ChatShell({
   onIgnoreInputRequest?: (request: PendingInputRequest) => void;
   onMessageCopied?: () => void;
   onMessageRewind?: (message: ChatMessage) => void;
+  onLoadEarlierMessages?: () => Promise<boolean>;
+  onRetryMessages?: () => void;
   onOpenMarkdownAttachment?: (target: WorkspaceMarkdownPreviewTarget) => void;
   onRefreshUsageStatus?: () => Promise<void> | void;
   onSubmitInputRequest?: (request: PendingInputRequest, answers: string[]) => void;
@@ -168,12 +180,18 @@ export function ChatShell({
           >
             <View style={styles.timeline}>
               <MessageTimeline
+                hasEarlierMessages={hasEarlierMessages}
                 isLoading={isLoadingMessages}
+                isLoadingEarlierMessages={isLoadingEarlierMessages}
+                loadError={messageLoadError}
+                olderMessagesError={olderMessagesError}
                 isRunning={isRunning}
                 keyboardLayoutFrozen={isKeyboardLayoutFrozen}
                 messages={visibleMessages}
                 onMessageCopied={onMessageCopied}
                 onMessageRewind={onMessageRewind}
+                onLoadEarlierMessages={onLoadEarlierMessages}
+                onRetry={onRetryMessages}
                 onOpenMarkdownAttachment={onOpenMarkdownAttachment}
                 onKeyboardDismissRequest={handleTimelineKeyboardDismissRequest}
                 bottomAccessoryHeight={queuedPromptPanelHeight}

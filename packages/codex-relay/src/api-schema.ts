@@ -720,6 +720,7 @@ export const ThreadDetailResponseSchema = z.object({
   thread: ThreadSummarySchema,
   messages: z.array(ChatMessageSchema),
   pendingInputRequests: z.array(PendingInputRequestSchema).default([]),
+  olderMessagesCursor: z.string().nullable().optional(),
 });
 
 export const ThreadMessageDetailFieldSchema = z.enum(["output", "patch"]);
