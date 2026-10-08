@@ -920,7 +920,7 @@ export async function getThread(
   threadId: string,
   options: { refresh?: boolean; cursor?: string } = {},
 ): Promise<ThreadDetailResponse> {
-  const params = new URLSearchParams({ limit: "20" });
+  const params = new URLSearchParams({ limit: "5" });
   if (options.refresh) {
     params.set("refresh", "true");
   }

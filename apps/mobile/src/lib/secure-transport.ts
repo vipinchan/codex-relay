@@ -13,6 +13,7 @@ import {
 } from "codex-relay/api-schema";
 import { fromByteArray, toByteArray } from "base64-js";
 import { createMMKV } from "react-native-mmkv";
+import { z } from "zod";
 
 const secureProtocolVersion = 1;
 const handshakeTag = "codex-relay-e2ee-v1";
@@ -22,6 +23,13 @@ const mobileToServerKeyStorageKey = "mobile-to-server-key";
 const serverToMobileKeyStorageKey = "server-to-mobile-key";
 const nextMobileCounterStorageKey = "next-mobile-counter";
 const lastServerCounterStorageKey = "last-server-counter";
+const serverReplayWindowStorageKey = "server-replay-window";
+const serverReplayWindowSize = 4096;
+const ServerReplayWindowSchema = z.object({
+  highest: z.number().int().nonnegative(),
+  floor: z.number().int().nonnegative(),
+  received: z.array(z.number().int().nonnegative()).max(serverReplayWindowSize),
+});
 
 export type SecurePairingAttempt = {
   approvalCode?: string;
@@ -38,6 +46,7 @@ type SecureSession = {
   mobileToServerKey: Uint8Array;
   nextMobileCounter: number;
   serverToMobileKey: Uint8Array;
+  serverReplayWindow?: z.infer<typeof ServerReplayWindowSchema>;
 };
 
 export function createSecurePairingAttempt(input: {
@@ -123,10 +132,16 @@ export function decryptResponsePayload(payload: unknown) {
   if (!session || !envelope.success) {
     return payload;
   }
+  const window = session.serverReplayWindow ?? {
+    highest: session.lastServerCounter,
+    floor: session.lastServerCounter,
+    received: [],
+  };
   if (
     envelope.data.sender !== "server" ||
     envelope.data.keyEpoch !== session.keyEpoch ||
-    envelope.data.counter <= session.lastServerCounter
+    envelope.data.counter <= window.floor ||
+    window.received.includes(envelope.data.counter)
   ) {
     throw new Error("Server returned an invalid encrypted payload.");
   }
@@ -137,9 +152,17 @@ export function decryptResponsePayload(payload: unknown) {
     envelope.data.counter,
     envelope.data.ciphertext,
   );
-  session.lastServerCounter = envelope.data.counter;
+  const result: unknown = JSON.parse(decrypted);
+  const highest = Math.max(window.highest, envelope.data.counter);
+  const floor = Math.max(window.floor, highest - serverReplayWindowSize);
+  session.lastServerCounter = highest;
+  session.serverReplayWindow = {
+    highest,
+    floor,
+    received: [...window.received.filter((counter) => counter > floor), envelope.data.counter],
+  };
   saveSecureSession(session);
-  return JSON.parse(decrypted);
+  return result;
 }
 
 export function clearSecureSession() {
@@ -239,6 +262,16 @@ function saveSecureSession(session: SecureSession) {
   storage.set(serverToMobileKeyStorageKey, bytesToBase64(session.serverToMobileKey));
   storage.set(nextMobileCounterStorageKey, session.nextMobileCounter);
   storage.set(lastServerCounterStorageKey, session.lastServerCounter);
+  storage.set(
+    serverReplayWindowStorageKey,
+    JSON.stringify(
+      session.serverReplayWindow ?? {
+        highest: session.lastServerCounter,
+        floor: session.lastServerCounter,
+        received: [],
+      },
+    ),
+  );
 }
 
 function readSecureSession() {
@@ -249,9 +282,23 @@ function readSecureSession() {
     return undefined;
   }
 
+  const lastServerCounter = storage.getNumber(lastServerCounterStorageKey) ?? 0;
+  let serverReplayWindow: SecureSession["serverReplayWindow"];
+  try {
+    const parsed = ServerReplayWindowSchema.safeParse(
+      JSON.parse(storage.getString(serverReplayWindowStorageKey) ?? "null"),
+    );
+    if (parsed.success && parsed.data.highest >= lastServerCounter) {
+      serverReplayWindow = parsed.data;
+    }
+  } catch {
+    // Fall back to the stored high water mark if the replay window cannot be read.
+  }
+
   return {
     keyEpoch,
-    lastServerCounter: storage.getNumber(lastServerCounterStorageKey) ?? 0,
+    lastServerCounter,
+    serverReplayWindow,
     mobileToServerKey: base64ToBytes(mobileToServerKey),
     nextMobileCounter: storage.getNumber(nextMobileCounterStorageKey) ?? 0,
     serverToMobileKey: base64ToBytes(serverToMobileKey),
