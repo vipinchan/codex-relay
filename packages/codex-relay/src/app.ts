@@ -156,7 +156,7 @@ import {
   type CodexClient,
 } from "./codex.js";
 import { readLatestContextWindowUsage } from "./context-window.js";
-import { generateTitleWithAppServer } from "./title-generation.js";
+import { generateTitleWithAppServer, selectTitleGenerationModel } from "./title-generation.js";
 import { codexRelayDataPath } from "./paths.js";
 import { relayDebugLog } from "./debug-log.js";
 import { historyCursor, localHistoryPage, parseHistoryPage } from "./thread-history-pagination.js";
@@ -445,8 +445,7 @@ export function createApp(options: AppOptions = {}) {
     return result;
   }
   async function generateAndStoreThreadTitle(input: {
-    context: { firstPrompt: string; recentPrompt?: string; recentResponse?: string };
-    effort?: string;
+    context: { firstPrompt: string; recentPrompt?: string };
     expectedTitle: string;
     model?: string;
     serviceTier?: string;
@@ -462,21 +461,32 @@ export function createApp(options: AppOptions = {}) {
 
     let titleGenerationThreadId: string | undefined;
     try {
-      const model =
-        input.model ??
-        threads.get(input.threadId)?.model ??
-        (await appServer.listModels()).find((item) => item.isDefault)?.id;
+      const availableModels = await appServer.listModels().catch(() => []);
+      const titleModel = selectTitleGenerationModel(
+        availableModels,
+        input.model ?? threads.get(input.threadId)?.model,
+      );
+      const startedAt = Date.now();
+      relayDebugLog("thread.title.generation.started", {
+        effort: titleModel.effort,
+        model: titleModel.model ?? "app-server-default",
+        threadId: input.threadId,
+      });
       const title = await generateTitleWithAppServer({
         appServer,
         context: input.context,
         cwd: initialThread.cwd || threads.get(input.threadId)?.cwd || workspacePath,
-        effort: input.effort ?? threads.get(input.threadId)?.reasoningEffort,
-        model,
+        effort: titleModel.effort,
+        model: titleModel.model,
         onThreadCreated(threadId) {
           titleGenerationThreadId = threadId;
           titleGenerationThreadIds.add(threadId);
         },
         serviceTier: input.serviceTier ?? threads.get(input.threadId)?.serviceTier,
+      });
+      relayDebugLog("thread.title.generation.completed", {
+        elapsedMs: Date.now() - startedAt,
+        threadId: input.threadId,
       });
 
       return await runAppServerMutation(input.threadId, async () => {
@@ -2027,7 +2037,6 @@ export function createApp(options: AppOptions = {}) {
       }
       const thread = await generateAndStoreThreadTitle({
         context,
-        effort: knownThread.reasoningEffort,
         expectedTitle: appServerThreadTitle(currentThread),
         model: knownThread.model,
         serviceTier: knownThread.serviceTier,
@@ -7076,19 +7085,9 @@ async function titleGenerationContextFromThread(appServer: CodexAppServerClient,
     )
     .map(appServerUserMessageText)
     .find((text) => text.trim());
-  const recentResponse = [...latestTurn.items]
-    .reverse()
-    .find(
-      (item): item is Extract<AppServerThreadItem, { type: "agentMessage" }> =>
-        item.type === "agentMessage" &&
-        "text" in item &&
-        (!("delivery" in item) || item.delivery !== "async"),
-    );
-
   return {
     firstPrompt,
     recentPrompt,
-    recentResponse: recentResponse?.type === "agentMessage" ? recentResponse.text : undefined,
   };
 }
 

@@ -121,10 +121,13 @@ export function ConversationsHome() {
       await regenerateTitleMutation.mutateAsync(threadWithActions.id);
       hapticSuccess();
       closeThreadActions();
-    } catch (caught) {
+    } catch {
+      void queryClient.invalidateQueries({ queryKey: serverStateKeys.threads() });
       Alert.alert(
         zh ? "无法重新生成标题" : "Couldn’t regenerate title",
-        caught instanceof Error ? caught.message : "Unable to regenerate this title.",
+        zh
+          ? "标题生成失败，请检查连接后重试。"
+          : "Title generation failed. Check your connection and try again.",
       );
     }
   }
@@ -410,7 +413,15 @@ export function ConversationsHome() {
                   }
                   icon="refresh"
                   onPress={() => void regenerateThreadTitle()}
-                  title={zh ? "重新生成标题" : "Regenerate title"}
+                  title={
+                    regenerateTitleMutation.isPending
+                      ? zh
+                        ? "正在生成标题…"
+                        : "Generating title…"
+                      : zh
+                        ? "重新生成标题"
+                        : "Regenerate title"
+                  }
                 />
               </>
             ) : null}
@@ -729,33 +740,34 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   threadRow: {
-    height: 66,
+    minHeight: 66,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 22,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 10,
     borderBottomWidth: 0.5,
     borderBottomColor: "#1C1C1E",
   },
   rowPressed: { backgroundColor: "#111113" },
   threadIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
   threadCopy: { flex: 1, minWidth: 0 },
-  threadTitle: { color: "#FFFFFF", fontSize: 17.5, lineHeight: 22, fontWeight: "700" },
-  threadPreview: { color: "#8E8E93", fontSize: 14.5, lineHeight: 18, marginTop: 1 },
+  threadTitle: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  threadPreview: { color: "#8E8E93", fontSize: 13.5, marginTop: 1 },
   threadMeta: {
-    width: 58,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 4,
+    minWidth: 58,
+    flexDirection: "column",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 3,
   },
-  threadDate: { color: "#77777D", fontSize: 13.5, lineHeight: 17 },
+  threadDate: { color: "#77777D", fontSize: 12.5, flexShrink: 0 },
   emptyState: { alignItems: "center", justifyContent: "center", paddingTop: 110, gap: 12 },
   emptyIcon: {
     width: 54,

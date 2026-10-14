@@ -1922,7 +1922,16 @@ describe("Codex Relay server routes", () => {
     const appServer = {
       archiveThread: vi.fn<() => Promise<void>>(async () => undefined),
       listModels: vi.fn<() => Promise<unknown[]>>(async () => [
-        { id: "gpt-default", isDefault: true },
+        {
+          id: "gpt-default",
+          isDefault: true,
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low" },
+            { reasoningEffort: "medium" },
+            { reasoningEffort: "high" },
+            { reasoningEffort: "max" },
+          ],
+        },
       ]),
       listThreadTurns,
       onNotification() {
@@ -1964,7 +1973,11 @@ describe("Codex Relay server routes", () => {
       expect.objectContaining({ model: "gpt-default", sandbox: "read-only" }),
     );
     expect(startTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "gpt-default", threadId: "app-thread-title-helper" }),
+      expect.objectContaining({
+        effort: "low",
+        model: "gpt-default",
+        threadId: "app-thread-title-helper",
+      }),
     );
     expect(body.thread).toMatchObject({ id: "app-thread-title", title: "项目变更与风险总结" });
   });

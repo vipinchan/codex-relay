@@ -1,30 +1,52 @@
-import type { CodexAppServerClient, AppServerTurn } from "./app-server.js";
+import type { AppServerModel, CodexAppServerClient, AppServerTurn } from "./app-server.js";
 
 const maxContextCharacters = 1_200;
-const maxTitleCharacters = 120;
+const maxTitleDisplayUnits = 24;
 const titleTurnTimeoutMs = 45_000;
+type TitleModelOption = Pick<
+  AppServerModel,
+  "defaultReasoningEffort" | "id" | "isDefault" | "supportedReasoningEfforts"
+>;
 
 export type TitleGenerationContext = {
   firstPrompt: string;
   recentPrompt?: string;
-  recentResponse?: string;
 };
+
+export function selectTitleGenerationModel(models: TitleModelOption[], conversationModel?: string) {
+  const supportsLowEffort = (model: TitleModelOption) =>
+    model.supportedReasoningEfforts?.some((option) => option.reasoningEffort === "low") ?? false;
+  const defaultModel = models.find((model) => model.isDefault);
+  const model =
+    (defaultModel && supportsLowEffort(defaultModel) ? defaultModel : undefined) ??
+    models.find(supportsLowEffort) ??
+    defaultModel ??
+    models.find((candidate) => candidate.id === conversationModel) ??
+    models[0];
+  const supportedEfforts = model?.supportedReasoningEfforts?.map(
+    (option) => option.reasoningEffort,
+  );
+
+  return {
+    effort: supportedEfforts?.includes("low")
+      ? "low"
+      : (model?.defaultReasoningEffort ?? supportedEfforts?.[0] ?? "low"),
+    model: model?.id ?? conversationModel,
+  };
+}
 
 export function buildTitleGenerationPrompt(context: TitleGenerationContext) {
   const sections = [
-    "Generate a concise, specific title for this Codex conversation.",
+    "Generate a concise, specific title for this Codex conversation. Keep it short enough to fit on one line in a mobile conversation list.",
     "Use only the supplied excerpts. Do not inspect files or use tools.",
     "Use the same language as the first user message. Return only the title, without quotes or explanation.",
+    "Aim for 10–12 Chinese characters or at most 24 English characters including spaces.",
     `First user message:\n${boundedText(context.firstPrompt)}`,
   ];
 
   if (context.recentPrompt && context.recentPrompt !== context.firstPrompt) {
     sections.push(`Latest user message:\n${boundedText(context.recentPrompt)}`);
   }
-  if (context.recentResponse) {
-    sections.push(`Latest assistant response:\n${boundedText(context.recentResponse)}`);
-  }
-
   return sections.join("\n\n");
 }
 
@@ -38,7 +60,35 @@ export function normalizeGeneratedTitle(value: string) {
   if (!firstLine) {
     return undefined;
   }
-  return Array.from(firstLine).slice(0, maxTitleCharacters).join("");
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  const characters: string[] = [];
+  let displayUnits = 0;
+  let wasTruncated = false;
+
+  for (const { segment } of segmenter.segment(firstLine)) {
+    const units = isWideTitleCharacter(segment) ? 2 : 1;
+    if (displayUnits + units > maxTitleDisplayUnits) {
+      wasTruncated = true;
+      break;
+    }
+    characters.push(segment);
+    displayUnits += units;
+  }
+
+  let title = characters.join("").trim();
+  if (wasTruncated && /[A-Za-z0-9]/u.test(title)) {
+    const lastWordBoundary = title.lastIndexOf(" ");
+    if (lastWordBoundary > 0) {
+      title = title.slice(0, lastWordBoundary).trimEnd();
+    }
+  }
+  return title.replace(/[\s,.;:!?—–-]+$/u, "") || undefined;
+}
+
+function isWideTitleCharacter(value: string) {
+  return /[\u1100-\u115f\u2329\u232a\u2e80-\ua4c6\ua960-\ua97c\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6\u{1f000}-\u{1faff}\u{20000}-\u{3fffd}]/u.test(
+    value,
+  );
 }
 
 export async function generateTitleWithAppServer(input: {

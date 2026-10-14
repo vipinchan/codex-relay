@@ -4,35 +4,76 @@ import {
   buildTitleGenerationPrompt,
   generateTitleWithAppServer,
   normalizeGeneratedTitle,
+  selectTitleGenerationModel,
 } from "../src/title-generation.js";
 
 describe("title generation", () => {
   it("builds a bounded prompt from the first and latest conversation turns", () => {
     const firstPrompt = `首条提问 ${"a".repeat(2_000)}`;
     const recentPrompt = `最近提问 ${"b".repeat(2_000)}`;
-    const recentResponse = `最近回复 ${"c".repeat(2_000)}`;
-
-    const prompt = buildTitleGenerationPrompt({
-      firstPrompt,
-      recentPrompt,
-      recentResponse,
-    });
+    const prompt = buildTitleGenerationPrompt({ firstPrompt, recentPrompt });
 
     expect(prompt).toContain("Use the same language as the first user message.");
     expect(prompt).toContain("First user message:\n首条提问");
     expect(prompt).toContain("Latest user message:\n最近提问");
-    expect(prompt).toContain("Latest assistant response:\n最近回复");
     expect(prompt.length).toBeLessThan(4_000);
     expect(prompt).toContain("Return only the title");
     expect(prompt).toContain("Do not inspect files or use tools.");
+    expect(prompt).toContain("10–12 Chinese characters");
+    expect(prompt).toContain("24 English characters");
   });
 
-  it("normalizes model output into a single title within the thread title limit", () => {
+  it("normalizes model output into a compact title that fits the home list", () => {
     expect(normalizeGeneratedTitle("  “Fix long-session loading”\nExplanation")).toBe(
       "Fix long-session loading",
     );
     expect(normalizeGeneratedTitle("\n  ")).toBeUndefined();
-    expect(normalizeGeneratedTitle("x".repeat(121))).toHaveLength(120);
+    expect(normalizeGeneratedTitle("会".repeat(20))).toBe("会".repeat(12));
+    expect(normalizeGeneratedTitle("x".repeat(30))).toHaveLength(24);
+    expect(normalizeGeneratedTitle("regenerate-super-long conversation title")).toBe(
+      "regenerate-super-long",
+    );
+    expect(normalizeGeneratedTitle("🧑‍💻".repeat(20))).toBe("🧑‍💻".repeat(12));
+  });
+
+  it("prefers the app-server default model and selects a low title effort", () => {
+    expect(
+      selectTitleGenerationModel(
+        [
+          {
+            id: "thread-model",
+            isDefault: false,
+            supportedReasoningEfforts: [{ reasoningEffort: "max" }],
+          },
+          {
+            id: "title-model",
+            isDefault: true,
+            supportedReasoningEfforts: [
+              { reasoningEffort: "low" },
+              { reasoningEffort: "medium" },
+              { reasoningEffort: "high" },
+              { reasoningEffort: "max" },
+            ],
+          },
+        ],
+        "thread-model",
+      ),
+    ).toEqual({ effort: "low", model: "title-model" });
+  });
+
+  it("falls back to the conversation model when there is no app-server default", () => {
+    expect(
+      selectTitleGenerationModel(
+        [
+          {
+            id: "thread-model",
+            isDefault: false,
+            supportedReasoningEfforts: [{ reasoningEffort: "medium" }],
+          },
+        ],
+        "thread-model",
+      ),
+    ).toEqual({ effort: "medium", model: "thread-model" });
   });
 
   it("uses the selected model in a temporary read-only thread and archives it", async () => {
