@@ -20,6 +20,8 @@ import {
   RateLimitsResponseSchema,
   RenameThreadRequestSchema,
   RenameThreadResponseSchema,
+  RegenerateThreadTitleRequestSchema,
+  RegenerateThreadTitleResponseSchema,
   RewindThreadRequestSchema,
   KnownReasoningEffortSchema,
   ReasoningEffortSchema,
@@ -77,6 +79,7 @@ import {
   type PromptSkill,
   type ReasoningEffort,
   type RenameThreadRequest,
+  type RegenerateThreadTitleResponse,
   type RunThreadResponse,
   type RuntimeMode,
   type RuntimePreferences,
@@ -153,6 +156,7 @@ import {
   type CodexClient,
 } from "./codex.js";
 import { readLatestContextWindowUsage } from "./context-window.js";
+import { generateTitleWithAppServer } from "./title-generation.js";
 import { codexRelayDataPath } from "./paths.js";
 import { relayDebugLog } from "./debug-log.js";
 import { historyCursor, localHistoryPage, parseHistoryPage } from "./thread-history-pagination.js";
@@ -349,6 +353,7 @@ export function createApp(options: AppOptions = {}) {
   const appServerHistoryGenerationsByThreadId = new Map<string, number>();
   const appServerHistoryLoadsByThreadId = new Map<string, Promise<void>>();
   const appServerRolloutPathsByThreadId = new Map<string, string>();
+  const titleGenerationThreadIds = new Set<string>();
   const steeringThreads = new Set<string>();
   const secureSessionsByTokenHash = new Map<string, SecureSession>();
   const activeStreamControllers = new Map<
@@ -372,7 +377,7 @@ export function createApp(options: AppOptions = {}) {
     appServer.onNotification((notification) => {
       const params = recordParams(notification);
       const threadId = firstString(params, ["threadId"]);
-      if (!threadId) {
+      if (!threadId || titleGenerationThreadIds.has(threadId)) {
         return;
       }
       if (notification.method === "thread/reverted") {
@@ -438,6 +443,58 @@ export function createApp(options: AppOptions = {}) {
       }
     });
     return result;
+  }
+  async function generateAndStoreThreadTitle(input: {
+    context: { firstPrompt: string; recentPrompt?: string; recentResponse?: string };
+    effort?: string;
+    expectedTitle: string;
+    model?: string;
+    serviceTier?: string;
+    threadId: string;
+  }) {
+    if (!appServer) {
+      throw new Error("Generating thread titles requires the Codex app-server.");
+    }
+    const initialThread = await appServer.readThread(input.threadId, { includeTurns: false });
+    if (appServerThreadTitle(initialThread) !== input.expectedTitle) {
+      return undefined;
+    }
+
+    let titleGenerationThreadId: string | undefined;
+    try {
+      const model =
+        input.model ??
+        threads.get(input.threadId)?.model ??
+        (await appServer.listModels()).find((item) => item.isDefault)?.id;
+      const title = await generateTitleWithAppServer({
+        appServer,
+        context: input.context,
+        cwd: initialThread.cwd || threads.get(input.threadId)?.cwd || workspacePath,
+        effort: input.effort ?? threads.get(input.threadId)?.reasoningEffort,
+        model,
+        onThreadCreated(threadId) {
+          titleGenerationThreadId = threadId;
+          titleGenerationThreadIds.add(threadId);
+        },
+        serviceTier: input.serviceTier ?? threads.get(input.threadId)?.serviceTier,
+      });
+
+      return await runAppServerMutation(input.threadId, async () => {
+        const currentThread = await appServer.readThread(input.threadId, { includeTurns: false });
+        if (appServerThreadTitle(currentThread) !== input.expectedTitle) {
+          return undefined;
+        }
+        await appServer.setThreadName({ name: title, threadId: input.threadId });
+        return rememberAppServerThread(
+          threads,
+          await appServer.readThread(input.threadId, { includeTurns: false }),
+        );
+      });
+    } finally {
+      if (titleGenerationThreadId) {
+        titleGenerationThreadIds.delete(titleGenerationThreadId);
+      }
+    }
   }
   const pushNotificationDispatcher = options.pairing
     ? createPushNotificationDispatcher({
@@ -1764,7 +1821,9 @@ export function createApp(options: AppOptions = {}) {
         const appServerThreads = await appServer.listThreads();
         const response: ListThreadsResponse = ListThreadsResponseSchema.parse({
           threads: appServerThreads
-            .filter((thread) => !isSubagentThread(thread))
+            .filter(
+              (thread) => !isSubagentThread(thread) && !titleGenerationThreadIds.has(thread.id),
+            )
             .map((thread) => rememberAppServerThread(threads, thread)),
           source: "app-server",
         });
@@ -1797,7 +1856,9 @@ export function createApp(options: AppOptions = {}) {
         const response: ArchiveThreadResponse = ArchiveThreadResponseSchema.parse({
           archivedThreadId: threadId,
           threads: appServerThreads
-            .filter((thread) => !isSubagentThread(thread))
+            .filter(
+              (thread) => !isSubagentThread(thread) && !titleGenerationThreadIds.has(thread.id),
+            )
             .map((thread) => rememberAppServerThread(threads, thread)),
           source: "app-server",
         });
@@ -1904,6 +1965,95 @@ export function createApp(options: AppOptions = {}) {
         options.pairing,
         secureSessionsByTokenHash,
         apiError(status === 404 ? "not_found" : "rename_unavailable", message),
+        status,
+      );
+    }
+  });
+
+  app.post("/v1/threads/:threadId/title/regenerate", async (c) => {
+    const threadId = c.req.param("threadId");
+    if (!appServer) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("unsupported", "Regenerating thread titles requires the Codex app-server."),
+        409,
+      );
+    }
+    const knownThread = await ensureKnownThread({
+      appServer,
+      threadId,
+      messagesByThreadId,
+      threads,
+    });
+    if (!knownThread) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", `Thread ${threadId} is not known to this server.`),
+        404,
+      );
+    }
+
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      RegenerateThreadTitleRequestSchema,
+    );
+    if (!parsed.success) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        validationError(parsed.error),
+        400,
+      );
+    }
+
+    try {
+      const currentThread = await appServer.readThread(threadId, { includeTurns: false });
+      const context = await titleGenerationContextFromThread(appServer, threadId);
+      if (!context) {
+        return secureJson(
+          c,
+          options.pairing,
+          secureSessionsByTokenHash,
+          apiError("title_generation_unavailable", "This conversation has no usable messages."),
+          409,
+        );
+      }
+      const thread = await generateAndStoreThreadTitle({
+        context,
+        effort: knownThread.reasoningEffort,
+        expectedTitle: appServerThreadTitle(currentThread),
+        model: knownThread.model,
+        serviceTier: knownThread.serviceTier,
+        threadId,
+      });
+      if (!thread) {
+        return secureJson(
+          c,
+          options.pairing,
+          secureSessionsByTokenHash,
+          apiError("title_changed", "The conversation title changed while it was regenerating."),
+          409,
+        );
+      }
+      const response: RegenerateThreadTitleResponse = RegenerateThreadTitleResponseSchema.parse({
+        thread,
+      });
+      return secureJson(c, options.pairing, secureSessionsByTokenHash, response);
+    } catch (error) {
+      const message = errorMessage(error);
+      const status = /not found|no rollout found/i.test(message) ? 404 : 502;
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("title_generation_failed", message),
         status,
       );
     }
@@ -3296,6 +3446,7 @@ export function createApp(options: AppOptions = {}) {
           queuedInputsByThreadId,
           runAppServerMutation,
           runThreadOperation,
+          generateThreadTitle: generateAndStoreThreadTitle,
           prompt,
           attachments: runOptions.attachments ?? [],
           secureSession,
@@ -3474,6 +3625,9 @@ async function createAppServerThreadRecord(input: {
     serviceTier: input.options.serviceTier ?? null,
     threadSource: "codex-relay",
   });
+  if (input.title && typeof input.appServer.setThreadName === "function") {
+    await input.appServer.setThreadName({ name: input.title, threadId: thread.id });
+  }
   const metadata = ThreadSummarySchema.parse({
     ...mapAppServerThread({
       ...thread,
@@ -3601,6 +3755,14 @@ async function runPromptStreamed(input: {
   queuedInputsByThreadId: Map<string, QueuedThreadInput[]>;
   runAppServerMutation: <T>(threadId: string, operation: () => Promise<T>) => Promise<T>;
   runThreadOperation: <T>(threadId: string, operation: () => Promise<T>) => Promise<T>;
+  generateThreadTitle: (input: {
+    context: { firstPrompt: string; recentPrompt?: string; recentResponse?: string };
+    effort?: string;
+    expectedTitle: string;
+    model?: string;
+    serviceTier?: string;
+    threadId: string;
+  }) => Promise<ThreadMetadata | undefined>;
   prompt: string;
   secureSession?: SecureSessionHandle;
   steeringThreads: Set<string>;
@@ -3630,6 +3792,7 @@ async function runPromptStreamed(input: {
       queuedInputsByThreadId: input.queuedInputsByThreadId,
       runAppServerMutation: input.runAppServerMutation,
       runThreadOperation: input.runThreadOperation,
+      generateThreadTitle: input.generateThreadTitle,
       prompt: input.prompt,
       runOptions: input.runOptions,
       secureSession: input.secureSession,
@@ -4518,6 +4681,14 @@ async function runAppServerPromptStreamed(input: {
   queuedInputsByThreadId: Map<string, QueuedThreadInput[]>;
   runAppServerMutation: <T>(threadId: string, operation: () => Promise<T>) => Promise<T>;
   runThreadOperation: <T>(threadId: string, operation: () => Promise<T>) => Promise<T>;
+  generateThreadTitle: (input: {
+    context: { firstPrompt: string; recentPrompt?: string; recentResponse?: string };
+    effort?: string;
+    expectedTitle: string;
+    model?: string;
+    serviceTier?: string;
+    threadId: string;
+  }) => Promise<ThreadMetadata | undefined>;
   prompt: string;
   runOptions: {
     model?: string;
@@ -4544,6 +4715,12 @@ async function runAppServerPromptStreamed(input: {
     input.skills,
   );
   const prompt = input.prompt;
+  const initialThread = input.threads.get(activeThreadId);
+  const initialTitle = initialThread?.title;
+  const shouldGenerateInitialTitle =
+    initialThread?.messageCount === 0 &&
+    Boolean(initialTitle) &&
+    initialTitle === titleFromPrompt(prompt);
   let handedOffToQueuedTurn = false;
   let observedInputRequest = false;
   let producedTurnOutput = false;
@@ -4736,6 +4913,45 @@ async function runAppServerPromptStreamed(input: {
       type: "thread.state.changed",
       thread: threadSummary,
     });
+
+    if (
+      options.state === "completed" &&
+      shouldGenerateInitialTitle &&
+      initialTitle &&
+      assistantMessage?.content.trim()
+    ) {
+      try {
+        const titledThread = await input.generateThreadTitle({
+          context: {
+            firstPrompt: prompt,
+            recentPrompt: prompt,
+            recentResponse: assistantMessage.content,
+          },
+          effort: input.runOptions.reasoningEffort,
+          expectedTitle: initialTitle,
+          model: input.runOptions.model,
+          serviceTier: input.runOptions.serviceTier,
+          threadId: activeThreadId,
+        });
+        if (titledThread) {
+          threadSummary = {
+            ...titledThread,
+            state: nextQueuedInput ? "running" : options.state,
+            ...(nextQueuedInput ? { lastPrompt: threadSummary.lastPrompt } : {}),
+          };
+          input.threads.set(activeThreadId, threadSummary);
+          sendSse(input.controller, input.encoder, input.secureSession, {
+            type: "thread.state.changed",
+            thread: threadSummary,
+          });
+        }
+      } catch (error) {
+        relayDebugLog("thread.title.initial_generation_failed", {
+          threadId: activeThreadId,
+          error: errorMessage(error),
+        });
+      }
+    }
 
     if (options.state === "failed") {
       const errorBody = apiError(
@@ -6829,6 +7045,51 @@ function mapAppServerThread(
 
 function appServerThreadTitle(thread: Pick<AppServerThread, "name" | "preview">) {
   return thread.name ?? preview(thread.preview || "Untitled thread");
+}
+
+async function titleGenerationContextFromThread(appServer: CodexAppServerClient, threadId: string) {
+  const [firstPage, latestPage] = await Promise.all([
+    appServer.listThreadTurns(threadId, { limit: 1, sortDirection: "asc" }),
+    appServer.listThreadTurns(threadId, { limit: 1, sortDirection: "desc" }),
+  ]);
+  const firstTurn = firstPage.data[0];
+  const latestTurn = latestPage.data[0];
+  if (!firstTurn || !latestTurn) {
+    return undefined;
+  }
+
+  const firstPrompt = firstTurn.items
+    .filter(
+      (item): item is Extract<AppServerThreadItem, { type: "userMessage" }> =>
+        item.type === "userMessage",
+    )
+    .map(appServerUserMessageText)
+    .find((text) => text.trim());
+  if (!firstPrompt) {
+    return undefined;
+  }
+  const recentPrompt = [...latestTurn.items]
+    .reverse()
+    .filter(
+      (item): item is Extract<AppServerThreadItem, { type: "userMessage" }> =>
+        item.type === "userMessage",
+    )
+    .map(appServerUserMessageText)
+    .find((text) => text.trim());
+  const recentResponse = [...latestTurn.items]
+    .reverse()
+    .find(
+      (item): item is Extract<AppServerThreadItem, { type: "agentMessage" }> =>
+        item.type === "agentMessage" &&
+        "text" in item &&
+        (!("delivery" in item) || item.delivery !== "async"),
+    );
+
+  return {
+    firstPrompt,
+    recentPrompt,
+    recentResponse: recentResponse?.type === "agentMessage" ? recentResponse.text : undefined,
+  };
 }
 
 function rememberAppServerThread(

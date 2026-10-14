@@ -20,6 +20,8 @@ import {
   PushNotificationSettingsResponseSchema,
   QueuedThreadInputActionResponseSchema,
   RateLimitsResponseSchema,
+  RegenerateThreadTitleRequestSchema,
+  RegenerateThreadTitleResponseSchema,
   RenameThreadRequestSchema,
   RenameThreadResponseSchema,
   ResolveApprovalResponseSchema,
@@ -60,6 +62,7 @@ import {
   type PushNotificationSettingsResponse,
   type QueuedThreadInputActionResponse,
   type RateLimitsResponse,
+  type RegenerateThreadTitleResponse,
   type RenameThreadRequest,
   type RenameThreadResponse,
   type ResolveApprovalRequest,
@@ -585,6 +588,19 @@ export async function renameThread(
       body: encryptRequestPayload(RenameThreadRequestSchema.parse(body)),
     },
     RenameThreadResponseSchema.parse,
+  );
+}
+
+export async function regenerateThreadTitle(
+  threadId: string,
+): Promise<RegenerateThreadTitleResponse> {
+  return request(
+    apiPaths.threadTitleRegenerate(threadId),
+    {
+      method: "POST",
+      body: encryptRequestPayload(RegenerateThreadTitleRequestSchema.parse({})),
+    },
+    RegenerateThreadTitleResponseSchema.parse,
   );
 }
 

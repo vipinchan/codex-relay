@@ -704,6 +704,10 @@ export const RenameThreadResponseSchema = z.object({
   thread: ThreadSummarySchema,
 });
 
+export const RegenerateThreadTitleRequestSchema = z.object({});
+
+export const RegenerateThreadTitleResponseSchema = RenameThreadResponseSchema;
+
 export const RewindThreadRequestSchema = z.object({
   turnId: z.string().trim().min(1),
 });
@@ -874,6 +878,8 @@ export type ListThreadsResponse = z.infer<typeof ListThreadsResponseSchema>;
 export type ArchiveThreadResponse = z.infer<typeof ArchiveThreadResponseSchema>;
 export type RenameThreadRequest = z.infer<typeof RenameThreadRequestSchema>;
 export type RenameThreadResponse = z.infer<typeof RenameThreadResponseSchema>;
+export type RegenerateThreadTitleRequest = z.infer<typeof RegenerateThreadTitleRequestSchema>;
+export type RegenerateThreadTitleResponse = z.infer<typeof RegenerateThreadTitleResponseSchema>;
 export type RewindThreadRequest = z.infer<typeof RewindThreadRequestSchema>;
 export type ListModelsResponse = z.infer<typeof ListModelsResponseSchema>;
 export type ListSkillsResponse = z.infer<typeof ListSkillsResponseSchema>;
@@ -1121,6 +1127,8 @@ export const apiPaths = {
   thread: (threadId: string) => `/v1/threads/${encodeURIComponent(threadId)}`,
   threadArchive: (threadId: string) => `/v1/threads/${encodeURIComponent(threadId)}`,
   threadName: (threadId: string) => `/v1/threads/${encodeURIComponent(threadId)}/name`,
+  threadTitleRegenerate: (threadId: string) =>
+    `/v1/threads/${encodeURIComponent(threadId)}/title/regenerate`,
   threadRollback: (threadId: string) => `/v1/threads/${encodeURIComponent(threadId)}/rollback`,
   threadContextWindow: (threadId: string) =>
     `/v1/threads/${encodeURIComponent(threadId)}/context-window`,
@@ -1266,6 +1274,27 @@ export function createOpenApiDocument() {
           requestBody: jsonRequest("RenameThreadRequest"),
           responses: {
             "200": jsonResponse("RenameThreadResponse"),
+            "400": jsonResponse("ErrorResponse"),
+            "404": jsonResponse("ErrorResponse"),
+            "409": jsonResponse("ErrorResponse"),
+            "502": jsonResponse("ErrorResponse"),
+          },
+        },
+      },
+      "/v1/threads/{threadId}/title/regenerate": {
+        post: {
+          summary: "Regenerate a Codex app-server thread title",
+          parameters: [
+            {
+              name: "threadId",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          requestBody: jsonRequest("RegenerateThreadTitleRequest"),
+          responses: {
+            "200": jsonResponse("RegenerateThreadTitleResponse"),
             "400": jsonResponse("ErrorResponse"),
             "404": jsonResponse("ErrorResponse"),
             "409": jsonResponse("ErrorResponse"),
@@ -1540,6 +1569,17 @@ export function createOpenApiDocument() {
           },
         },
         RenameThreadResponse: {
+          type: "object",
+          required: ["thread"],
+          properties: {
+            thread: { $ref: "#/components/schemas/ThreadSummary" },
+          },
+        },
+        RegenerateThreadTitleRequest: {
+          type: "object",
+          properties: {},
+        },
+        RegenerateThreadTitleResponse: {
           type: "object",
           required: ["thread"],
           properties: {

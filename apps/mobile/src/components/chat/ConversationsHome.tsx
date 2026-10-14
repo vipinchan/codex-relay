@@ -1,18 +1,31 @@
 import { useSelector } from "@legendapp/state/react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ThreadSummary } from "codex-relay/api-schema";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, SectionList, TextInput, View, type SectionListData } from "react-native";
+import { Alert, Pressable, SectionList, TextInput, View, type SectionListData } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
 import { Icon, type AppIconName } from "@/components/ui/icon";
+import {
+  AppBottomSheet,
+  AppBottomSheetTextInput,
+  SheetActionRow,
+} from "@/components/ui/bottom-sheet";
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
 import { hasCodexRelaySession } from "@/lib/codex-relay-api";
-import { hapticLightImpact, hapticSelection } from "@/lib/haptics";
-import { serverStateKeys, serverStateQueryFns } from "@/lib/server-state";
+import { hapticLightImpact, hapticSelection, hapticSuccess } from "@/lib/haptics";
+import {
+  regenerateThreadTitleServerState,
+  renameThreadServerState,
+  serverStateKeys,
+  serverStateQueryFns,
+} from "@/lib/server-state";
 import { workspaceName } from "@/lib/workspace-name";
 import {
   chatStore$,
@@ -37,6 +50,8 @@ const iconPalettes = [
 ] as const;
 
 export function ConversationsHome() {
+  const queryClient = useQueryClient();
+  const theme = useTheme();
   const hasPairedSession = useSelector(() => chatStore$.hasPairedSession.get());
   const pinnedThreadIds = useSelector(() => pinnedThreadStore$.threadIds.get());
   const cachedThreadIds = useSelector(() => chatStore$.threadIds.get());
@@ -45,6 +60,17 @@ export function ConversationsHome() {
   const [searchQuery, setSearchQuery] = useState("");
   const [groupingMode, setGroupingMode] = useState<GroupingMode>("time");
   const [collapsedSectionKeys, setCollapsedSectionKeys] = useState<Set<string>>(() => new Set());
+  const [threadWithActions, setThreadWithActions] = useState<ThreadSummary>();
+  const [isRenamingThread, setIsRenamingThread] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+
+  const renameThreadMutation = useMutation({
+    mutationFn: ({ threadId, title }: { threadId: string; title: string }) =>
+      renameThreadServerState(queryClient, threadId, { title }),
+  });
+  const regenerateTitleMutation = useMutation({
+    mutationFn: (threadId: string) => regenerateThreadTitleServerState(queryClient, threadId),
+  });
 
   useEffect(() => {
     setHasPairedSession(hasCodexRelaySession());
@@ -56,6 +82,52 @@ export function ConversationsHome() {
     enabled: hasPairedSession,
     staleTime: 5_000,
   });
+  const canMutateAppServerThreads = threadsQuery.data?.source === "app-server";
+  const isPinnedThreadWithActions = Boolean(
+    threadWithActions && pinnedThreadIds.includes(threadWithActions.id),
+  );
+
+  function closeThreadActions() {
+    setThreadWithActions(undefined);
+    setIsRenamingThread(false);
+    setRenameDraft("");
+  }
+
+  function openThreadActions(thread: ThreadSummary) {
+    hapticLightImpact();
+    setThreadWithActions(thread);
+    setRenameDraft(thread.title);
+    setIsRenamingThread(false);
+  }
+
+  async function saveThreadTitle() {
+    const title = renameDraft.trim();
+    if (!threadWithActions || !canMutateAppServerThreads || !title) return;
+    try {
+      await renameThreadMutation.mutateAsync({ threadId: threadWithActions.id, title });
+      hapticSuccess();
+      closeThreadActions();
+    } catch (caught) {
+      Alert.alert(
+        zh ? "无法修改标题" : "Couldn’t rename chat",
+        caught instanceof Error ? caught.message : "Unable to rename this chat.",
+      );
+    }
+  }
+
+  async function regenerateThreadTitle() {
+    if (!threadWithActions || !canMutateAppServerThreads) return;
+    try {
+      await regenerateTitleMutation.mutateAsync(threadWithActions.id);
+      hapticSuccess();
+      closeThreadActions();
+    } catch (caught) {
+      Alert.alert(
+        zh ? "无法重新生成标题" : "Couldn’t regenerate title",
+        caught instanceof Error ? caught.message : "Unable to regenerate this title.",
+      );
+    }
+  }
 
   const locale = useMemo(() => Intl.DateTimeFormat().resolvedOptions().locale || "en", []);
   const zh = locale.toLowerCase().startsWith("zh");
@@ -182,7 +254,10 @@ export function ConversationsHome() {
               accessibilityLabel={`${section.title}, ${sectionCounts.get(section.key) ?? 0} conversations`}
               accessibilityState={{ expanded: !collapsed }}
               onPress={() => toggleSection(section.key)}
-              style={({ pressed }) => [styles.sectionHeader, pressed && styles.sectionHeaderPressed]}
+              style={({ pressed }) => [
+                styles.sectionHeader,
+                pressed && styles.sectionHeaderPressed,
+              ]}
             >
               <Icon
                 name={collapsed ? "chevronRight" : "expand"}
@@ -191,7 +266,9 @@ export function ConversationsHome() {
                 strokeWidth={2.2}
               />
               <ThemedText style={styles.sectionTitle}>{section.title}</ThemedText>
-              <ThemedText style={styles.sectionCount}>{sectionCounts.get(section.key) ?? 0}</ThemedText>
+              <ThemedText style={styles.sectionCount}>
+                {sectionCounts.get(section.key) ?? 0}
+              </ThemedText>
             </Pressable>
           );
         }}
@@ -201,10 +278,7 @@ export function ConversationsHome() {
             pinned={pinnedThreadIds.includes(item.id)}
             zh={zh}
             onPress={() => openThread(item)}
-            onLongPress={() => {
-              hapticLightImpact();
-              togglePinnedThread(item.id);
-            }}
+            onLongPress={() => openThreadActions(item)}
           />
         )}
         ListEmptyComponent={
@@ -243,6 +317,106 @@ export function ConversationsHome() {
           <Icon name="newChat" size={26} tintColor="#FFFFFF" />
         </Pressable>
       </View>
+      <AppBottomSheet
+        onBack={isRenamingThread ? () => setIsRenamingThread(false) : undefined}
+        onClose={closeThreadActions}
+        scrollable={false}
+        subtitle={
+          isRenamingThread
+            ? zh
+              ? "为此会话设置一个标题。"
+              : "Choose a clear title for this chat."
+            : threadWithActions?.title
+        }
+        title={
+          isRenamingThread ? (zh ? "编辑标题" : "Rename chat") : zh ? "会话操作" : "Chat actions"
+        }
+        visible={Boolean(threadWithActions)}
+      >
+        {isRenamingThread ? (
+          <View style={styles.renameSheet}>
+            <AppBottomSheetTextInput
+              autoCapitalize="sentences"
+              autoCorrect
+              cursorColor={theme.text}
+              editable={!renameThreadMutation.isPending}
+              onChangeText={setRenameDraft}
+              onSubmitEditing={() => void saveThreadTitle()}
+              placeholder={zh ? "会话标题" : "Chat title"}
+              placeholderTextColor={theme.textSecondary}
+              returnKeyType="done"
+              selectionColor="rgba(124, 199, 255, 0.28)"
+              style={[
+                styles.renameSheetInput,
+                { borderColor: "rgba(255, 255, 255, 0.14)", color: theme.text },
+              ]}
+              value={renameDraft}
+            />
+            <View style={styles.renameSheetActions}>
+              <Button
+                accessibilityLabel={zh ? "取消修改标题" : "Cancel chat rename"}
+                disabled={renameThreadMutation.isPending}
+                onPress={() => setIsRenamingThread(false)}
+                size="default"
+                variant="ghost"
+              >
+                <Text style={{ color: theme.textSecondary }}>{zh ? "取消" : "Cancel"}</Text>
+              </Button>
+              <Button
+                accessibilityLabel={zh ? "保存标题" : "Save chat name"}
+                disabled={
+                  !renameDraft.trim() ||
+                  renameDraft.trim() === threadWithActions?.title ||
+                  renameThreadMutation.isPending
+                }
+                onPress={() => void saveThreadTitle()}
+                size="default"
+              >
+                <Text>{zh ? "保存" : "Save"}</Text>
+              </Button>
+            </View>
+          </View>
+        ) : threadWithActions ? (
+          <>
+            <SheetActionRow
+              accessibilityLabel={isPinnedThreadWithActions ? "Unpin chat" : "Pin chat"}
+              icon="pin"
+              onPress={() => {
+                togglePinnedThread(threadWithActions.id);
+                closeThreadActions();
+              }}
+              title={
+                isPinnedThreadWithActions
+                  ? zh
+                    ? "取消置顶"
+                    : "Unpin chat"
+                  : zh
+                    ? "置顶"
+                    : "Pin chat"
+              }
+            />
+            {canMutateAppServerThreads ? (
+              <>
+                <SheetActionRow
+                  accessibilityLabel={zh ? "编辑标题" : "Rename chat"}
+                  icon="newChat"
+                  onPress={() => setIsRenamingThread(true)}
+                  title={zh ? "编辑标题" : "Rename chat"}
+                />
+                <SheetActionRow
+                  accessibilityLabel={zh ? "重新生成标题" : "Regenerate title"}
+                  disabled={
+                    regenerateTitleMutation.isPending || threadWithActions.state === "running"
+                  }
+                  icon="refresh"
+                  onPress={() => void regenerateThreadTitle()}
+                  title={zh ? "重新生成标题" : "Regenerate title"}
+                />
+              </>
+            ) : null}
+          </>
+        ) : null}
+      </AppBottomSheet>
     </SafeAreaView>
   );
 }
@@ -466,6 +640,21 @@ function relativeDate(date: Date, zh: boolean) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#000000" },
+  renameSheet: { gap: 14 },
+  renameSheetInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    fontSize: 15,
+    lineHeight: 20,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  renameSheetActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
   topBar: {
     height: 64,
     alignItems: "center",

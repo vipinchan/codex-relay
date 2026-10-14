@@ -271,6 +271,7 @@ describe("CodexAppServerClient shared socket mode", () => {
       await expect(
         client.listThreadTurns("long-thread", { cursor: "older-cursor", limit: 10 }),
       ).resolves.toEqual({ data: [olderTurn], nextCursor: null });
+      await client.listThreadTurns("long-thread", { limit: 1, sortDirection: "asc" });
       expect(server.requests.filter((request) => request.method === "thread/turns/list")).toEqual([
         expect.objectContaining({
           params: {
@@ -286,6 +287,14 @@ describe("CodexAppServerClient shared socket mode", () => {
             cursor: "older-cursor",
             limit: 10,
             sortDirection: "desc",
+            itemsView: "full",
+          },
+        }),
+        expect.objectContaining({
+          params: {
+            threadId: "long-thread",
+            limit: 1,
+            sortDirection: "asc",
             itemsView: "full",
           },
         }),

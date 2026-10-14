@@ -39,6 +39,7 @@ import {
   listThreads,
   listWorkspaceDirectories,
   removeQueuedThreadInput,
+  regenerateThreadTitle,
   renameThread,
   rewindThread,
   steerQueuedThreadInput,
@@ -288,6 +289,12 @@ export async function renameThreadServerState(
   body: RenameThreadRequest,
 ) {
   const response = await renameThread(threadId, body);
+  upsertThreadState(queryClient, response.thread);
+  return response;
+}
+
+export async function regenerateThreadTitleServerState(queryClient: QueryClient, threadId: string) {
+  const response = await regenerateThreadTitle(threadId);
   upsertThreadState(queryClient, response.thread);
   return response;
 }

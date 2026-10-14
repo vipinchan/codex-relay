@@ -1891,6 +1891,84 @@ describe("Codex Relay server routes", () => {
     expect(body.thread).toMatchObject({ id: "app-thread-rename", title: "Renamed chat" });
   });
 
+  it("regenerates an app-server thread title with its default model", async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), "codex-relay-workspace-"));
+    const originalThread = appServerHistoryThread({
+      id: "app-thread-title",
+      name: "Current title",
+      turns: [],
+      workspacePath,
+    });
+    const firstTurn = appServerTurn("turn-first", "请整理最近的项目变更", 1);
+    const latestTurn = appServerTurn("turn-latest", "再总结一下主要风险", 10);
+    const listThreadTurns = vi.fn<
+      (_threadId: string, options: { sortDirection?: "asc" | "desc" }) => Promise<unknown>
+    >(async (_threadId, options) => ({
+      data: [options.sortDirection === "asc" ? firstTurn : latestTurn],
+      nextCursor: null,
+    }));
+    const startThread = vi.fn<() => Promise<unknown>>(async () => ({
+      id: "app-thread-title-helper",
+      cwd: workspacePath,
+    }));
+    const startTurn = vi.fn<() => Promise<unknown>>(async () => ({
+      id: "title-turn",
+      items: [{ id: "title-item", type: "agentMessage", text: "项目变更与风险总结" }],
+      status: "completed",
+      startedAt: 1,
+      completedAt: 2,
+    }));
+    let currentThread = originalThread;
+    const appServer = {
+      archiveThread: vi.fn<() => Promise<void>>(async () => undefined),
+      listModels: vi.fn<() => Promise<unknown[]>>(async () => [
+        { id: "gpt-default", isDefault: true },
+      ]),
+      listThreadTurns,
+      onNotification() {
+        return () => undefined;
+      },
+      onRequest() {
+        return () => undefined;
+      },
+      readThread: vi.fn<() => Promise<unknown>>(async () => currentThread),
+      setThreadName: vi.fn<() => Promise<void>>(async () => {
+        currentThread = { ...originalThread, name: "项目变更与风险总结" };
+      }),
+      startThread,
+      startTurn,
+    };
+    const app = createApp({
+      appServer: appServer as never,
+      codex: createMockCodex(),
+      workspacePath,
+    });
+
+    const response = await app.request("/v1/threads/app-thread-title/title/regenerate", {
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(listThreadTurns).toHaveBeenCalledWith("app-thread-title", {
+      limit: 1,
+      sortDirection: "asc",
+    });
+    expect(listThreadTurns).toHaveBeenCalledWith("app-thread-title", {
+      limit: 1,
+      sortDirection: "desc",
+    });
+    expect(startThread).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-default", sandbox: "read-only" }),
+    );
+    expect(startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-default", threadId: "app-thread-title-helper" }),
+    );
+    expect(body.thread).toMatchObject({ id: "app-thread-title", title: "项目变更与风险总结" });
+  });
+
   it("rewinds an app-server thread from a selected user turn", async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), "codex-relay-workspace-"));
     const now = Date.now() / 1000;
