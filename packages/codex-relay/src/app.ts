@@ -1,5 +1,22 @@
 import {
   ArchiveThreadResponseSchema,
+  BotResponseSchema,
+  BotConversationResponseSchema,
+  BotMemoryResponseSchema,
+  CreateBotConversationRequestSchema,
+  CreateBotMemoryRequestSchema,
+  CreateBotRequestSchema,
+  ListBotConversationsResponseSchema,
+  ListBotMemoriesResponseSchema,
+  ListBotMessagesResponseSchema,
+  ListBotsResponseSchema,
+  SearchBotHistoryResponseSchema,
+  SendBotMessageRequestSchema,
+  SendBotMessageResponseSchema,
+  StopBotConversationResponseSchema,
+  UpdateBotConversationRequestSchema,
+  UpdateBotMemoryRequestSchema,
+  UpdateBotRequestSchema,
   ChatMessageSchema,
   CheckoutWorkspaceBranchRequestSchema,
   CommitPushWorkspaceRequestSchema,
@@ -125,7 +142,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { mkdir, open, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
@@ -156,6 +173,8 @@ import {
   type CodexClient,
 } from "./codex.js";
 import { readLatestContextWindowUsage } from "./context-window.js";
+import { createBotStore } from "./bot-store.js";
+import { createBotRuntime } from "./bot-runtime.js";
 import { generateTitleWithAppServer, selectTitleGenerationModel } from "./title-generation.js";
 import { codexRelayDataPath } from "./paths.js";
 import { relayDebugLog } from "./debug-log.js";
@@ -206,6 +225,7 @@ const defaultWebPreviewPorts = [3000, 3001, 5173, 4173, 8080, 19006];
 
 type AppOptions = {
   appServer?: CodexAppServerClient | null;
+  botStorePath?: string;
   codex?: CodexClient;
   pairing?: PairingOptions;
   preferences?: RuntimePreferencesStore;
@@ -260,6 +280,7 @@ const AppServerThreadGoalPayloadSchema = z.object({
 
 type PendingApproval = {
   appServer: CodexAppServerClient;
+  botActivityMessageId?: string;
   kind:
     | "commandExecution"
     | "fileChange"
@@ -337,6 +358,10 @@ export function createApp(options: AppOptions = {}) {
       : options.appServer;
   const codex = options.codex ?? createCodexClient();
   const preferences = options.preferences ?? createMemoryRuntimePreferencesStore();
+  const botStore = createBotStore(
+    options.botStorePath ?? (process.env.VITEST ? ":memory:" : codexRelayDataPath("bot.sqlite")),
+  );
+  const botRuntime = createBotRuntime(botStore, appServer);
   const workspacePath = resolve(
     options.workspacePath ?? process.env.CODEX_RELAY_WORKSPACE_PATH ?? defaultWorkspacePath,
   );
@@ -345,6 +370,25 @@ export function createApp(options: AppOptions = {}) {
   const liveThreads = new Map<string, ReturnType<CodexClient["startThread"]>>();
   const pendingApprovals = new Map<string, PendingApproval>();
   const resolvedApprovals = new Map<string, ResolvedApproval>();
+  const cancelBotApprovals = async (
+    match: (context: { conversationId: string; botId: string }) => boolean,
+  ) => {
+    for (const [approvalId, pending] of pendingApprovals) {
+      if (!pending.botActivityMessageId) continue;
+      const context = botRuntime.getApprovalContext(pending.threadId);
+      if (!context || !match(context)) continue;
+      pendingApprovals.delete(approvalId);
+      await resolveAppServerRequest(pending, "cancel", []).catch(() => undefined);
+      await (await botStore).resolveActivity(pending.botActivityMessageId, "cancel");
+    }
+  };
+  botRuntime.setOnTurnFinished((threadId) =>
+    cancelBotApprovals(
+      (context) =>
+        Boolean(botRuntime.getApprovalContext(threadId)) &&
+        botRuntime.getApprovalContext(threadId) === context,
+    ),
+  );
   const queuedInputsByThreadId = new Map<string, QueuedThreadInput[]>();
   const threadOperationTails = new Map<string, Promise<void>>();
   const appServerMutationTails = new Map<string, Promise<void>>();
@@ -414,6 +458,54 @@ export function createApp(options: AppOptions = {}) {
       }
     });
   }
+  botRuntime.bindAppServer({
+    onApproval(request) {
+      if (!isApprovalServerRequest(request.method)) return;
+      const approval = approvalMessageFromRequest(request);
+      if (!approval) return;
+      const context = botRuntime.getApprovalContext(approval.threadId);
+      if (!context) return;
+      void (async () => {
+        try {
+          const activity = ChatMessageSchema.parse({
+            id: randomUUID(),
+            threadId: approval.threadId,
+            role: "status",
+            kind:
+              approval.kind === "structuredUserInput" ? "structuredUserInput" : "approvalRequest",
+            content: approval.content,
+            details: approval.details,
+            createdAt: new Date().toISOString(),
+            state: "completed",
+            turnId: approval.turnId,
+          });
+          const message = await (
+            await botStore
+          ).appendMessage({
+            conversationId: context.conversationId,
+            sender: "status",
+            botId: context.botId,
+            content: approval.content,
+            activity,
+            replyToMessageId: context.userMessageId,
+          });
+          pendingApprovals.set(approval.approvalId, {
+            appServer: appServer!,
+            botActivityMessageId: message.id,
+            kind: approval.kind,
+            method: request.method,
+            requestId: request.id,
+            threadId: approval.threadId,
+            turnId: approval.turnId,
+            isBlocking: approval.isBlocking,
+            questions: approval.questions,
+          });
+        } catch (error) {
+          await appServer!.rejectRequest(request.id, -32603, errorMessage(error));
+        }
+      })();
+    },
+  });
   function runThreadOperation<T>(threadId: string, operation: () => Promise<T>) {
     const previous = threadOperationTails.get(threadId) ?? Promise.resolve();
     const result = previous.then(operation, operation);
@@ -614,6 +706,550 @@ export function createApp(options: AppOptions = {}) {
     });
 
     return secureJson(c, options.pairing, secureSessionsByTokenHash, response);
+  });
+
+  app.get(apiPaths.bots, async (c) =>
+    secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      ListBotsResponseSchema.parse({ bots: await (await botStore).listBots() }),
+    ),
+  );
+
+  app.post(apiPaths.bots, async (c) => {
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      CreateBotRequestSchema,
+    );
+    if (!parsed.success)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        validationError(parsed.error),
+        400,
+      );
+    const bot = await (await botStore).createBot(parsed.data);
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      BotResponseSchema.parse({ bot }),
+      201,
+    );
+  });
+
+  app.get("/v1/bots/:botId", async (c) => {
+    const bot = await (await botStore).getBot(c.req.param("botId"));
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      bot ? BotResponseSchema.parse({ bot }) : apiError("not_found", "BOT not found."),
+      bot ? 200 : 404,
+    );
+  });
+
+  app.patch("/v1/bots/:botId", async (c) => {
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      UpdateBotRequestSchema,
+    );
+    if (!parsed.success)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        validationError(parsed.error),
+        400,
+      );
+    const bot = await (await botStore).updateBot(c.req.param("botId"), parsed.data);
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      bot ? BotResponseSchema.parse({ bot }) : apiError("not_found", "BOT not found."),
+      bot ? 200 : 404,
+    );
+  });
+
+  app.delete("/v1/bots/:botId", async (c) => {
+    try {
+      const removed = await (await botStore).deleteBot(c.req.param("botId"));
+      if (removed) {
+        await cancelBotApprovals((context) => context.botId === c.req.param("botId"));
+        await botRuntime.stopBot(c.req.param("botId"));
+      }
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        removed ? { ok: true } : apiError("not_found", "BOT not found."),
+        removed ? 200 : 404,
+      );
+    } catch (error) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("conflict", errorMessage(error)),
+        409,
+      );
+    }
+  });
+
+  app.get("/v1/bot-conversations", async (c) =>
+    secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      ListBotConversationsResponseSchema.parse({
+        conversations: await (await botStore).listConversations(),
+      }),
+    ),
+  );
+
+  app.post("/v1/bot-conversations", async (c) => {
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      CreateBotConversationRequestSchema,
+    );
+    if (!parsed.success)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        validationError(parsed.error),
+        400,
+      );
+    try {
+      const input =
+        parsed.data.kind === "direct"
+          ? { ...parsed.data, workspacePath: await canonicalBotWorkspacePath(workspacePath) }
+          : {
+              ...parsed.data,
+              workspacePath: await canonicalBotWorkspacePath(parsed.data.workspacePath),
+            };
+      const conversation = await (await botStore).createConversation(input);
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        BotConversationResponseSchema.parse({ conversation }),
+        201,
+      );
+    } catch (error) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_conversation", errorMessage(error)),
+        400,
+      );
+    }
+  });
+
+  app.get("/v1/bot-conversations/:conversationId", async (c) => {
+    const conversation = await (await botStore).getConversation(c.req.param("conversationId"));
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      conversation
+        ? BotConversationResponseSchema.parse({ conversation })
+        : apiError("not_found", "Conversation not found."),
+      conversation ? 200 : 404,
+    );
+  });
+
+  app.patch("/v1/bot-conversations/:conversationId", async (c) => {
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      UpdateBotConversationRequestSchema,
+    );
+    if (!parsed.success)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        validationError(parsed.error),
+        400,
+      );
+    try {
+      const previous = await (await botStore).getConversation(c.req.param("conversationId"));
+      if (parsed.data.workspacePath && previous && botRuntime.hasActiveConversation(previous.id)) {
+        return secureJson(
+          c,
+          options.pairing,
+          secureSessionsByTokenHash,
+          apiError(
+            "conversation_busy",
+            "Stop or wait for BOT replies before changing the workspace.",
+          ),
+          409,
+        );
+      }
+      const conversation = await (
+        await botStore
+      ).updateConversation(c.req.param("conversationId"), {
+        ...parsed.data,
+        ...(parsed.data.workspacePath
+          ? { workspacePath: await canonicalBotWorkspacePath(parsed.data.workspacePath) }
+          : {}),
+      });
+      if (conversation && previous) {
+        for (const botId of previous.botIds.filter((id) => !conversation.botIds.includes(id))) {
+          await cancelBotApprovals(
+            (context) => context.botId === botId && context.conversationId === conversation.id,
+          );
+          await botRuntime.stopBot(botId, conversation.id);
+        }
+      }
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        conversation
+          ? BotConversationResponseSchema.parse({ conversation })
+          : apiError("not_found", "Conversation not found."),
+        conversation ? 200 : 404,
+      );
+    } catch (error) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_conversation", errorMessage(error)),
+        400,
+      );
+    }
+  });
+
+  app.delete("/v1/bot-conversations/:conversationId", async (c) => {
+    await cancelBotApprovals((context) => context.conversationId === c.req.param("conversationId"));
+    await botRuntime.stopConversation(c.req.param("conversationId"));
+    const removed = await (await botStore).deleteConversation(c.req.param("conversationId"));
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      removed ? { ok: true } : apiError("not_found", "Conversation not found."),
+      removed ? 200 : 404,
+    );
+  });
+
+  app.get("/v1/bot-conversations/:conversationId/messages", async (c) => {
+    const store = await botStore;
+    const conversationId = c.req.param("conversationId");
+    if (!(await store.getConversation(conversationId)))
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "Conversation not found."),
+        404,
+      );
+    const cursorText = c.req.query("cursor");
+    const cursor = cursorText === undefined ? undefined : Number(cursorText);
+    if (cursor !== undefined && (!Number.isSafeInteger(cursor) || cursor <= 0)) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_cursor", "Invalid message cursor."),
+        400,
+      );
+    }
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      ListBotMessagesResponseSchema.parse(await store.listMessages(conversationId, cursor)),
+    );
+  });
+
+  app.post("/v1/bot-conversations/:conversationId/messages", async (c) => {
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      SendBotMessageRequestSchema,
+    );
+    if (!parsed.success)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        validationError(parsed.error),
+        400,
+      );
+    const store = await botStore;
+    const conversation = await store.getConversation(c.req.param("conversationId"));
+    if (!conversation)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "Conversation not found."),
+        404,
+      );
+    const previous = await store.getMessageByRequestId(conversation.id, parsed.data.requestId);
+    if (previous)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        SendBotMessageResponseSchema.parse({
+          message: previous,
+          replies: await store.listReplies(previous.id),
+        }),
+      );
+    const members = (await Promise.all(conversation.botIds.map((id) => store.getBot(id)))).filter(
+      (bot): bot is NonNullable<typeof bot> => Boolean(bot),
+    );
+    if (members.length === 0)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("no_bot", "No active BOT is available in this conversation."),
+        409,
+      );
+    const mentionIds = parsed.data.mentionBotIds;
+    if (mentionIds?.some((id: string) => !members.some((bot) => bot.id === id))) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_mentions", "Mentioned BOT is not in this conversation."),
+        400,
+      );
+    }
+    const targetIds =
+      conversation.kind === "direct"
+        ? conversation.botIds
+        : mentionIds?.length
+          ? mentionIds
+          : [conversation.defaultBotId!];
+    const orderedBots = members.filter((member) => targetIds.includes(member.id));
+    if (orderedBots.length === 0)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("no_bot", "No active BOT is available for this message."),
+        409,
+      );
+    let created;
+    try {
+      created = await store.appendUserWithReplies({
+        conversationId: conversation.id,
+        content: parsed.data.text,
+        requestId: parsed.data.requestId,
+        botIds: orderedBots.map((bot) => bot.id),
+      });
+    } catch (error) {
+      const duplicate = await store.getMessageByRequestId(conversation.id, parsed.data.requestId);
+      if (!duplicate) throw error;
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        SendBotMessageResponseSchema.parse({
+          message: duplicate,
+          replies: await store.listReplies(duplicate.id),
+        }),
+      );
+    }
+    const { message, replies } = created;
+    await botRuntime.rememberUserMessage(members, message);
+    if (created.created) {
+      for (const reply of replies) {
+        const bot = orderedBots.find((member) => member.id === reply.botId);
+        if (bot) botRuntime.schedule(conversation, bot, message, reply);
+      }
+    }
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      SendBotMessageResponseSchema.parse({ message, replies }),
+      201,
+    );
+  });
+
+  app.post("/v1/bot-conversations/:conversationId/stop", async (c) => {
+    const conversationId = c.req.param("conversationId");
+    if (!(await (await botStore).getConversation(conversationId))) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "Conversation not found."),
+        404,
+      );
+    }
+    await cancelBotApprovals((context) => context.conversationId === conversationId);
+    const interruptedReplyIds = await botRuntime.stopConversation(conversationId);
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      StopBotConversationResponseSchema.parse({ interruptedReplyIds }),
+    );
+  });
+
+  app.get("/v1/bots/:botId/history", async (c) => {
+    const store = await botStore;
+    const botId = c.req.param("botId");
+    if (!(await store.getBot(botId)))
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "BOT not found."),
+        404,
+      );
+    const cursorText = c.req.query("cursor");
+    const cursor = cursorText === undefined ? undefined : Number(cursorText);
+    if (cursor !== undefined && (!Number.isSafeInteger(cursor) || cursor <= 0)) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_cursor", "Invalid history cursor."),
+        400,
+      );
+    }
+    const history = await store.searchHistory(botId, c.req.query("query") ?? "", cursor);
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      SearchBotHistoryResponseSchema.parse(history),
+    );
+  });
+
+  app.get("/v1/bots/:botId/memories", async (c) => {
+    const store = await botStore;
+    if (!(await store.getBot(c.req.param("botId"))))
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "BOT not found."),
+        404,
+      );
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      ListBotMemoriesResponseSchema.parse({
+        memories: await store.listMemories(c.req.param("botId")),
+      }),
+    );
+  });
+
+  app.post("/v1/bots/:botId/memories", async (c) => {
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      CreateBotMemoryRequestSchema,
+    );
+    if (!parsed.success)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        validationError(parsed.error),
+        400,
+      );
+    const store = await botStore;
+    const botId = c.req.param("botId");
+    if (!(await store.getBot(botId)))
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "BOT not found."),
+        404,
+      );
+    if (
+      parsed.data.sourceMessageId &&
+      !(await store.canSeeMessage(botId, parsed.data.sourceMessageId))
+    ) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_source", "Memory source is not visible to this BOT."),
+        400,
+      );
+    }
+    const memory = await store.createMemory(
+      botId,
+      parsed.data.content,
+      parsed.data.sourceMessageId,
+    );
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      BotMemoryResponseSchema.parse({ memory }),
+      201,
+    );
+  });
+
+  app.patch("/v1/bots/:botId/memories/:memoryId", async (c) => {
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      UpdateBotMemoryRequestSchema,
+    );
+    if (!parsed.success)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        validationError(parsed.error),
+        400,
+      );
+    const memory = await (
+      await botStore
+    ).updateMemory(c.req.param("botId"), c.req.param("memoryId"), parsed.data.content);
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      memory
+        ? BotMemoryResponseSchema.parse({ memory })
+        : apiError("not_found", "Memory not found."),
+      memory ? 200 : 404,
+    );
+  });
+
+  app.delete("/v1/bots/:botId/memories/:memoryId", async (c) => {
+    const removed = await (
+      await botStore
+    ).deleteMemory(c.req.param("botId"), c.req.param("memoryId"));
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      removed ? { ok: true } : apiError("not_found", "Memory not found."),
+      removed ? 200 : 404,
+    );
   });
 
   app.post(apiPaths.pair, async (c) => {
@@ -1829,10 +2465,14 @@ export function createApp(options: AppOptions = {}) {
     if (appServer) {
       try {
         const appServerThreads = await appServer.listThreads();
+        const botThreadIds = await (await botStore).listThreadIds();
         const response: ListThreadsResponse = ListThreadsResponseSchema.parse({
           threads: appServerThreads
             .filter(
-              (thread) => !isSubagentThread(thread) && !titleGenerationThreadIds.has(thread.id),
+              (thread) =>
+                !isSubagentThread(thread) &&
+                !titleGenerationThreadIds.has(thread.id) &&
+                !botThreadIds.has(thread.id),
             )
             .map((thread) => rememberAppServerThread(threads, thread)),
           source: "app-server",
@@ -1863,11 +2503,15 @@ export function createApp(options: AppOptions = {}) {
         steeringThreads.delete(threadId);
 
         const appServerThreads = await appServer.listThreads();
+        const botThreadIds = await (await botStore).listThreadIds();
         const response: ArchiveThreadResponse = ArchiveThreadResponseSchema.parse({
           archivedThreadId: threadId,
           threads: appServerThreads
             .filter(
-              (thread) => !isSubagentThread(thread) && !titleGenerationThreadIds.has(thread.id),
+              (thread) =>
+                !isSubagentThread(thread) &&
+                !titleGenerationThreadIds.has(thread.id) &&
+                !botThreadIds.has(thread.id),
             )
             .map((thread) => rememberAppServerThread(threads, thread)),
           source: "app-server",
@@ -2852,7 +3496,12 @@ export function createApp(options: AppOptions = {}) {
       parsed.data.decision,
       parsed.data.answers ?? [],
     )
-      .then(() => {
+      .then(async () => {
+        if (pending.botActivityMessageId) {
+          await (
+            await botStore
+          ).resolveActivity(pending.botActivityMessageId, parsed.data.decision);
+        }
         if (pending.messageId) {
           markApprovalMessageResolved(
             messagesByThreadId,
@@ -4222,6 +4871,9 @@ async function streamRunningAppServerThread(input: {
   };
 
   cleanupRequestHandler = input.appServer.onRequest((request) => {
+    if (request.method === "item/tool/call") return;
+    const requestThreadId = firstString(recordParams(request), ["threadId", "conversationId"]);
+    if (requestThreadId && requestThreadId !== input.threadId) return;
     if (!isApprovalServerRequest(request.method)) {
       void input.appServer.rejectRequest(
         request.id,
@@ -4759,6 +5411,9 @@ async function runAppServerPromptStreamed(input: {
   debugStream("initial event sent", activeThreadId);
 
   const cleanupRequestHandler = input.appServer.onRequest((request) => {
+    if (request.method === "item/tool/call") return;
+    const requestThreadId = firstString(recordParams(request), ["threadId", "conversationId"]);
+    if (requestThreadId && requestThreadId !== activeThreadId) return;
     if (!isApprovalServerRequest(request.method)) {
       void input.appServer.rejectRequest(
         request.id,
@@ -8268,10 +8923,20 @@ function mapUnknownAppServerItem(threadId: string, turn: AppServerTurn, item: Ap
   const kind = kindFromProtocolType(type) ?? "unknown";
   const record = item as Record<string, unknown>;
   const content = kind === "plan" ? (planContentFromRecord(record) ?? type) : type;
+  const isFinalPlan =
+    kind === "plan" &&
+    (type === "plan" || type === "Plan") &&
+    turn.completedAt != null &&
+    turn.items.at(-1)?.id === item.id &&
+    typeof record.text === "string" &&
+    record.text.trim().length > 0 &&
+    record.plan == null &&
+    record.steps == null &&
+    record.items == null;
   return ChatMessageSchema.parse({
     id: item.id,
     threadId,
-    role: "status",
+    role: isFinalPlan ? "assistant" : "status",
     kind,
     content,
     createdAt: timestamp,
@@ -9102,6 +9767,7 @@ function fileChangeApprovalDecision(decision: string) {
 function kindFromProtocolType(type: string | undefined) {
   switch (type) {
     case "plan":
+    case "Plan":
     case "turn_plan_updated":
     case "turn/plan/updated":
       return "plan";
@@ -9932,6 +10598,12 @@ async function updateWorkspaceFileContent(
 
   await writeFile(absolutePath, input.content, "utf8");
   return readWorkspaceFileContent(workspacePath, relativePath.path);
+}
+
+async function canonicalBotWorkspacePath(requestedPath: string) {
+  const path = await realpath(resolve(requestedPath));
+  if (!(await stat(path)).isDirectory()) throw new Error("BOT workspace must be a directory.");
+  return path;
 }
 
 function normalizeWorkspaceRelativePath(requestedPath: string) {

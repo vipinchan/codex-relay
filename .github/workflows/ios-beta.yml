@@ -3,7 +3,7 @@ name: iOS 1.5.0 UI Beta
 on:
   push:
     branches:
-      - feat/mobile-history-navigation-beta
+      - feat/bot-groups-beta
   workflow_dispatch:
 
 permissions:
@@ -62,17 +62,17 @@ jobs:
 
       - name: Build beta IPA
         env:
-          IOS_IPA_NAME: CodexRelay-1.5.0-beta.13.ipa
-          MOBILE_RELEASE_VERSION: 1.5.0-beta.13
+          IOS_IPA_NAME: CodexRelay-1.5.0-beta.14.ipa
+          MOBILE_RELEASE_VERSION: 1.5.0-beta.14
         run: bash scripts/build-ios-ipa.sh
 
       - name: Upload beta artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodexRelay-1.5.0-beta.13-${{ github.sha }}
+          name: CodexRelay-1.5.0-beta.14-${{ github.sha }}
           path: |
-            dist/ios/CodexRelay-1.5.0-beta.13.ipa
-            dist/ios/CodexRelay-1.5.0-beta.13.ipa.sha256
+            dist/ios/CodexRelay-1.5.0-beta.14.ipa
+            dist/ios/CodexRelay-1.5.0-beta.14.ipa.sha256
             dist/ios/build-info.txt
           if-no-files-found: error
           retention-days: 30
@@ -85,28 +85,24 @@ jobs:
           app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
           min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
           cat > /tmp/beta-release-notes.md <<EOF
-          ## Codex Relay iOS 1.5.0 Beta 13
+          ## Codex Relay iOS 1.5.0 Beta 14
 
-          Improves generated conversation titles and the compact conversation list, while preserving the long-session history and encrypted-response fixes from Beta 11.
+          Adds BOT personas, private BOT conversations, group chats and persistent memory.
 
           ### Included
 
-          - Opens the latest 5 conversation turns first and loads earlier history in pages of 5
-          - Accepts valid encrypted responses arriving out of order while rejecting duplicate responses
-          - Preserves replay protection across app restarts and resets it when pairing again
-          - Stops indefinite loading after a failed request and provides retry while preserving cached messages
-          - Preserves history pagination during streaming and prevents stale requests from restoring rewound history
-          - Loads earlier pages when jumping to a previous user prompt
-          - Reads recent legacy JSONL history without parsing the entire conversation
-          - Preserves per-conversation runtime preferences, Markdown rendering, and workspace previews
-          - Uses the title-generation model for automatic naming and manual regeneration, with a shorter context and low effort
-          - Limits generated title length to fit the mobile history list and compacts rows to show more title and preview text
-          - Adds home-list actions to edit or regenerate conversation titles
-          - Shows progress during title regeneration and refreshes history after failures
+          - Adds Sessions, BOT and Settings tabs
+          - Creates and edits BOT personas with independent runtime preferences
+          - Creates groups with a shared workspace, ordered members and a default BOT
+          - Routes explicit BOT mentions by identity and runs replies sequentially
+          - Keeps private and group history on the relay with BOT access checks
+          - Manages sourced BOT memory and recalls it in later turns
+          - Preserves completed plans in the conversation timeline
+          - Preserves existing history navigation, model isolation and workspace previews
 
           ### Relay compatibility
 
-          Update the Mac relay to this release commit and restart it to use the updated title-selection and title-length logic.
+          Update the Mac relay to this release commit and restart it to enable the BOT APIs and persistent history store.
           The IPA does not update the relay server. Existing clients remain compatible with the updated relay.
           Build the relay from this tag with \`pnpm install --frozen-lockfile\` and \`pnpm --filter codex-relay build\`.
           Run the built \`packages/codex-relay/dist/cli.js\` from your usual workspace with your existing options.
@@ -115,13 +111,13 @@ jobs:
           ### Build
 
           - App version: \`${app_version}\`
-          - Mobile beta: \`1.5.0-beta.13\`
+          - Mobile beta: \`1.5.0-beta.14\`
           - Minimum iOS: \`${min_ios}\`
           - Commit: \`${commit}\`
 
           ### Installation
 
-          Download **CodexRelay-1.5.0-beta.13.ipa** and install it with TrollStore on a compatible device.
+          Download **CodexRelay-1.5.0-beta.14.ipa** and install it with TrollStore on a compatible device.
           This is an ad-hoc signed sideload build, not an Apple distribution-signed or notarized release.
           Automated checks and IPA build run in CI; physical-device validation remains pending.
           EOF
@@ -132,8 +128,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.13'
-          ipa='dist/ios/CodexRelay-1.5.0-beta.13.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.14'
+          ipa='dist/ios/CodexRelay-1.5.0-beta.14.ipa'
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" \
@@ -143,7 +139,7 @@ jobs:
               --clobber
             gh release edit "$tag" \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 13' \
+              --title 'Codex Relay iOS 1.5.0 Beta 14' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           else
@@ -152,7 +148,7 @@ jobs:
               "$ipa.sha256" \
               dist/ios/build-info.txt \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 13' \
+              --title 'Codex Relay iOS 1.5.0 Beta 14' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           fi
@@ -163,8 +159,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.13'
-          ipa='CodexRelay-1.5.0-beta.13.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.14'
+          ipa='CodexRelay-1.5.0-beta.14.ipa'
           rm -rf /tmp/codex-relay-beta-check
           mkdir -p /tmp/codex-relay-beta-check
           gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check

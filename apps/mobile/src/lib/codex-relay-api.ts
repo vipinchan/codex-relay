@@ -5,12 +5,22 @@ import { firstReachablePairingUrl } from "./pairing-reachability";
 
 import {
   ArchiveThreadResponseSchema,
+  BotConversationResponseSchema,
+  BotMemoryResponseSchema,
+  BotResponseSchema,
+  CreateBotConversationRequestSchema,
+  CreateBotMemoryRequestSchema,
+  CreateBotRequestSchema,
   CheckoutWorkspaceBranchRequestSchema,
   CommitPushWorkspaceRequestSchema,
   CreateThreadResponseSchema,
   InterruptThreadRunResponseSchema,
   ImageAttachmentUploadResponseSchema,
   ListModelsResponseSchema,
+  ListBotConversationsResponseSchema,
+  ListBotMemoriesResponseSchema,
+  ListBotMessagesResponseSchema,
+  ListBotsResponseSchema,
   ListQueuedThreadInputsResponseSchema,
   ListSkillsResponseSchema,
   ListThreadsResponseSchema,
@@ -20,6 +30,8 @@ import {
   PushNotificationSettingsResponseSchema,
   QueuedThreadInputActionResponseSchema,
   RateLimitsResponseSchema,
+  SearchBotHistoryResponseSchema,
+  SendBotMessageResponseSchema,
   RegenerateThreadTitleRequestSchema,
   RegenerateThreadTitleResponseSchema,
   RenameThreadRequestSchema,
@@ -36,6 +48,9 @@ import {
   ThreadMessageDetailResponseSchema,
   RegisterPushNotificationRequestSchema,
   UpdateThreadGoalRequestSchema,
+  UpdateBotConversationRequestSchema,
+  UpdateBotMemoryRequestSchema,
+  UpdateBotRequestSchema,
   UpdateWorkspaceFileContentRequestSchema,
   UpdateRuntimePreferencesRequestSchema,
   VersionResponseSchema,
@@ -48,6 +63,10 @@ import {
   WorkspaceTerminalSessionResponseSchema,
   apiPaths,
   type ArchiveThreadResponse,
+  type Bot,
+  type BotConversation,
+  type BotMemory,
+  type BotMessage,
   type CheckoutWorkspaceBranchRequest,
   type CommitPushWorkspaceRequest,
   type CreateThreadRequest,
@@ -521,6 +540,170 @@ export async function getStatus(): Promise<StatusResponse> {
 
 export async function getVersion(): Promise<VersionResponse> {
   return request(apiPaths.version, undefined, VersionResponseSchema.parse);
+}
+
+export type BotDraft = Pick<Bot, "name" | "color" | "instructions"> &
+  Partial<Pick<Bot, "model" | "reasoningEffort" | "serviceTier" | "runtimeMode">>;
+
+export async function listBots(): Promise<Bot[]> {
+  return (await request(apiPaths.bots, undefined, ListBotsResponseSchema.parse)).bots;
+}
+
+export async function createBot(draft: BotDraft): Promise<Bot> {
+  return (
+    await request(
+      apiPaths.bots,
+      { method: "POST", body: encryptRequestPayload(CreateBotRequestSchema.parse(draft)) },
+      BotResponseSchema.parse,
+    )
+  ).bot;
+}
+
+export async function updateBot(botId: string, draft: Partial<BotDraft>): Promise<Bot> {
+  return (
+    await request(
+      apiPaths.bot(botId),
+      { method: "PATCH", body: encryptRequestPayload(UpdateBotRequestSchema.parse(draft)) },
+      BotResponseSchema.parse,
+    )
+  ).bot;
+}
+
+export async function deleteBot(botId: string): Promise<void> {
+  await request(apiPaths.bot(botId), { method: "DELETE" }, () => undefined);
+}
+
+export async function listBotConversations(): Promise<BotConversation[]> {
+  return (
+    await request(apiPaths.botConversations, undefined, ListBotConversationsResponseSchema.parse)
+  ).conversations;
+}
+
+export async function getBotConversation(conversationId: string): Promise<BotConversation> {
+  return (
+    await request(
+      apiPaths.botConversation(conversationId),
+      undefined,
+      BotConversationResponseSchema.parse,
+    )
+  ).conversation;
+}
+
+export async function createBotConversation(
+  draft:
+    | { kind: "direct"; botId: string }
+    | {
+        kind: "group";
+        name: string;
+        workspacePath: string;
+        botIds: string[];
+        defaultBotId: string;
+      },
+): Promise<BotConversation> {
+  return (
+    await request(
+      apiPaths.botConversations,
+      {
+        method: "POST",
+        body: encryptRequestPayload(CreateBotConversationRequestSchema.parse(draft)),
+      },
+      BotConversationResponseSchema.parse,
+    )
+  ).conversation;
+}
+
+export async function updateBotConversation(
+  conversationId: string,
+  draft: { name?: string; workspacePath?: string; botIds?: string[]; defaultBotId?: string },
+): Promise<BotConversation> {
+  return (
+    await request(
+      apiPaths.botConversation(conversationId),
+      {
+        method: "PATCH",
+        body: encryptRequestPayload(UpdateBotConversationRequestSchema.parse(draft)),
+      },
+      BotConversationResponseSchema.parse,
+    )
+  ).conversation;
+}
+
+export async function deleteBotConversation(conversationId: string): Promise<void> {
+  await request(apiPaths.botConversation(conversationId), { method: "DELETE" }, () => undefined);
+}
+
+export async function stopBotConversation(conversationId: string): Promise<void> {
+  await request(apiPaths.botStop(conversationId), { method: "POST" }, () => undefined);
+}
+
+export async function listBotMessages(conversationId: string, cursor?: string) {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return request(
+    `${apiPaths.botMessages(conversationId)}${query}`,
+    undefined,
+    ListBotMessagesResponseSchema.parse,
+  );
+}
+
+export async function sendBotMessage(
+  conversationId: string,
+  message: { requestId: string; text: string; mentionBotIds?: string[] },
+): Promise<{ message: BotMessage; replies: BotMessage[] }> {
+  return request(
+    apiPaths.botMessages(conversationId),
+    { method: "POST", body: encryptRequestPayload(message), timeoutMs: streamRequestTimeoutMs },
+    SendBotMessageResponseSchema.parse,
+  );
+}
+
+export async function searchBotHistory(botId: string, query: string, cursor?: string) {
+  const params = new URLSearchParams({ query });
+  if (cursor) params.set("cursor", cursor);
+  return request(
+    `${apiPaths.botHistory(botId)}?${params.toString()}`,
+    undefined,
+    SearchBotHistoryResponseSchema.parse,
+  );
+}
+
+export async function listBotMemories(botId: string): Promise<BotMemory[]> {
+  return (
+    await request(apiPaths.botMemories(botId), undefined, ListBotMemoriesResponseSchema.parse)
+  ).memories;
+}
+
+export async function createBotMemory(botId: string, content: string): Promise<BotMemory> {
+  return (
+    await request(
+      apiPaths.botMemories(botId),
+      {
+        method: "POST",
+        body: encryptRequestPayload(CreateBotMemoryRequestSchema.parse({ content })),
+      },
+      BotMemoryResponseSchema.parse,
+    )
+  ).memory;
+}
+
+export async function updateBotMemory(
+  botId: string,
+  memoryId: string,
+  content: string,
+): Promise<BotMemory> {
+  return (
+    await request(
+      apiPaths.botMemory(botId, memoryId),
+      {
+        method: "PATCH",
+        body: encryptRequestPayload(UpdateBotMemoryRequestSchema.parse({ content })),
+      },
+      BotMemoryResponseSchema.parse,
+    )
+  ).memory;
+}
+
+export async function deleteBotMemory(botId: string, memoryId: string): Promise<void> {
+  await request(apiPaths.botMemory(botId, memoryId), { method: "DELETE" }, () => undefined);
 }
 
 export async function updateRuntimePreferences(
@@ -1285,7 +1468,7 @@ export async function resolveApproval(
 
 async function request<T>(
   path: string,
-  init: RequestInit | undefined,
+  init: NetworkRequestInit | undefined,
   parse: (payload: unknown) => T,
   options?: { jsonContentType?: boolean },
 ) {
@@ -1347,7 +1530,7 @@ export function getClientSessionId() {
   return next;
 }
 
-function createUuidV4() {
+export function createUuidV4() {
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
   bytes[6] = (bytes[6] & 0x0f) | 0x40;

@@ -95,6 +95,128 @@ export const RuntimePreferencesResponseSchema = z.object({
   workspacePath: z.string().trim().min(1).optional(),
 });
 
+export const BotSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1).max(80),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  instructions: z.string().max(20_000),
+  model: z.string().trim().min(1).optional(),
+  reasoningEffort: ReasoningEffortSchema.optional(),
+  serviceTier: z.string().trim().min(1).optional(),
+  runtimeMode: RuntimeModeSchema.default("default"),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+  deletedAt: IsoDateTimeSchema.nullable(),
+});
+
+export const CreateBotRequestSchema = BotSchema.pick({
+  name: true,
+  color: true,
+  instructions: true,
+  model: true,
+  reasoningEffort: true,
+  serviceTier: true,
+  runtimeMode: true,
+});
+export const UpdateBotRequestSchema = CreateBotRequestSchema.partial();
+export const BotResponseSchema = z.object({ bot: BotSchema });
+export const ListBotsResponseSchema = z.object({ bots: z.array(BotSchema) });
+
+export const BotConversationSchema = z.object({
+  id: z.string().uuid(),
+  kind: z.enum(["direct", "group"]),
+  name: z.string().min(1),
+  workspacePath: z.string().min(1),
+  botId: z.string().uuid().nullable(),
+  botIds: z.array(z.string().uuid()),
+  defaultBotId: z.string().uuid().nullable(),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+  deletedAt: IsoDateTimeSchema.nullable(),
+});
+export const CreateBotConversationRequestSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("direct"), botId: z.string().uuid() }),
+  z.object({
+    kind: z.literal("group"),
+    name: z.string().trim().min(1).max(120),
+    workspacePath: z.string().trim().min(1),
+    botIds: z.array(z.string().uuid()).min(1),
+    defaultBotId: z.string().uuid(),
+  }),
+]);
+export const UpdateBotConversationRequestSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  workspacePath: z.string().trim().min(1).optional(),
+  botIds: z.array(z.string().uuid()).min(1).optional(),
+  defaultBotId: z.string().uuid().optional(),
+});
+export const BotConversationResponseSchema = z.object({ conversation: BotConversationSchema });
+export const ListBotConversationsResponseSchema = z.object({
+  conversations: z.array(BotConversationSchema),
+});
+
+export const BotMessageSchema = z.object({
+  id: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  seq: z.number().int().positive(),
+  sender: z.enum(["user", "bot", "status"]),
+  botId: z.string().uuid().nullable(),
+  content: z.string(),
+  status: z.enum(["completed", "running", "failed", "interrupted"]),
+  requestId: z.string().nullable(),
+  replyToMessageId: z.string().uuid().nullable(),
+  createdAt: IsoDateTimeSchema,
+  activity: z.lazy(() => ChatMessageSchema).optional(),
+});
+export const SendBotMessageRequestSchema = z.object({
+  requestId: z.string().trim().min(1).max(120),
+  text: z.string().trim().min(1).max(100_000),
+  mentionBotIds: z.array(z.string().uuid()).optional(),
+});
+export const SendBotMessageResponseSchema = z.object({
+  message: BotMessageSchema,
+  replies: z.array(BotMessageSchema),
+});
+export const ListBotMessagesResponseSchema = z.object({
+  messages: z.array(BotMessageSchema),
+  nextCursor: z.string().nullable(),
+});
+export const StopBotConversationResponseSchema = z.object({
+  interruptedReplyIds: z.array(z.string().uuid()),
+});
+export const BotHistoryHitSchema = z.object({
+  message: BotMessageSchema,
+  conversation: BotConversationSchema,
+});
+export const SearchBotHistoryResponseSchema = z.object({
+  hits: z.array(BotHistoryHitSchema),
+  nextCursor: z.string().nullable(),
+});
+export const BotMemorySchema = z.object({
+  id: z.string().uuid(),
+  botId: z.string().uuid(),
+  content: z.string().trim().min(1).max(2_000),
+  sourceMessageId: z.string().uuid().nullable(),
+  sourceConversationId: z.string().uuid().nullable(),
+  sourceMessageContent: z.string().nullable(),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+});
+export const CreateBotMemoryRequestSchema = z.object({
+  content: BotMemorySchema.shape.content,
+  sourceMessageId: z.string().uuid().optional(),
+});
+export const UpdateBotMemoryRequestSchema = z.object({
+  content: BotMemorySchema.shape.content,
+});
+export const BotMemoryResponseSchema = z.object({ memory: BotMemorySchema });
+export const ListBotMemoriesResponseSchema = z.object({ memories: z.array(BotMemorySchema) });
+
+export type Bot = z.infer<typeof BotSchema>;
+export type BotConversation = z.infer<typeof BotConversationSchema>;
+export type BotMessage = z.infer<typeof BotMessageSchema>;
+export type BotMemory = z.infer<typeof BotMemorySchema>;
+
 export const PushNotificationIntentSchema = z.enum(["turn_terminal", "action_required"]);
 
 export const PushNotificationPreferencesSchema = z.object({
@@ -1123,6 +1245,19 @@ export const apiPaths = {
   imageAttachments: "/v1/attachments/images",
   imageAttachment: (attachmentId: string) =>
     `/v1/attachments/images/${encodeURIComponent(attachmentId)}`,
+  bots: "/v1/bots",
+  bot: (botId: string) => `/v1/bots/${encodeURIComponent(botId)}`,
+  botHistory: (botId: string) => `/v1/bots/${encodeURIComponent(botId)}/history`,
+  botMemories: (botId: string) => `/v1/bots/${encodeURIComponent(botId)}/memories`,
+  botMemory: (botId: string, memoryId: string) =>
+    `/v1/bots/${encodeURIComponent(botId)}/memories/${encodeURIComponent(memoryId)}`,
+  botConversations: "/v1/bot-conversations",
+  botConversation: (conversationId: string) =>
+    `/v1/bot-conversations/${encodeURIComponent(conversationId)}`,
+  botMessages: (conversationId: string) =>
+    `/v1/bot-conversations/${encodeURIComponent(conversationId)}/messages`,
+  botStop: (conversationId: string) =>
+    `/v1/bot-conversations/${encodeURIComponent(conversationId)}/stop`,
   threads: "/v1/threads",
   thread: (threadId: string) => `/v1/threads/${encodeURIComponent(threadId)}`,
   threadArchive: (threadId: string) => `/v1/threads/${encodeURIComponent(threadId)}`,

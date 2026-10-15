@@ -71,10 +71,35 @@ export function splitTimelinePlanProgress(messages: readonly ChatMessage[], isRu
   }
 
   const subagents = subagentMap.size > 0 ? { agents: [...subagentMap.values()] } : undefined;
+  const visibleCompletedPlanIds = new Set<string>();
+  if (!isRunning) {
+    let finalStatusPlan: ChatMessage | undefined;
+    let hasAssistantPlan = false;
+    const finishTurn = () => {
+      if (finalStatusPlan && !hasAssistantPlan) {
+        visibleCompletedPlanIds.add(finalStatusPlan.id);
+      }
+      finalStatusPlan = undefined;
+      hasAssistantPlan = false;
+    };
+
+    for (const message of messages) {
+      if (message.role === "user") {
+        finishTurn();
+      }
+      if (isTimelinePlanProgressMessage(message)) {
+        finalStatusPlan = message;
+      } else if (message.role === "assistant" && message.kind === "plan") {
+        hasAssistantPlan = true;
+      }
+    }
+    finishTurn();
+  }
+
   const visibleMessages: ChatMessage[] = [];
 
   for (const message of messages) {
-    if (isTimelinePlanProgressMessage(message)) {
+    if (isTimelinePlanProgressMessage(message) && !visibleCompletedPlanIds.has(message.id)) {
       continue;
     }
 

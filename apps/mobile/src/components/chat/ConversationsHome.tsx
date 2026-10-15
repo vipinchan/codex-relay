@@ -1,6 +1,6 @@
 import { useSelector } from "@legendapp/state/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ThreadSummary } from "codex-relay/api-schema";
+import type { BotConversation, ThreadSummary } from "codex-relay/api-schema";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, SectionList, TextInput, View, type SectionListData } from "react-native";
@@ -18,7 +18,11 @@ import { Text } from "@/components/ui/text";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
-import { hasCodexRelaySession } from "@/lib/codex-relay-api";
+import {
+  getCodexRelayServerUrl,
+  hasCodexRelaySession,
+  listBotConversations,
+} from "@/lib/codex-relay-api";
 import { hapticLightImpact, hapticSelection, hapticSuccess } from "@/lib/haptics";
 import {
   regenerateThreadTitleServerState,
@@ -82,6 +86,15 @@ export function ConversationsHome() {
     enabled: hasPairedSession,
     staleTime: 5_000,
   });
+  const botConversationsQuery = useQuery({
+    queryKey: ["bot-conversations", getCodexRelayServerUrl()],
+    queryFn: listBotConversations,
+    enabled: hasPairedSession,
+    staleTime: 5_000,
+  });
+  const botConversations = (botConversationsQuery.data ?? []).filter((conversation) =>
+    conversation.name.toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase()),
+  );
   const canMutateAppServerThreads = threadsQuery.data?.source === "app-server";
   const isPinnedThreadWithActions = Boolean(
     threadWithActions && pinnedThreadIds.includes(threadWithActions.id),
@@ -193,7 +206,7 @@ export function ConversationsHome() {
 
   function openSettings() {
     hapticSelection();
-    router.push("/settings-home");
+    router.navigate("/settings-tab");
   }
 
   function toggleSearch() {
@@ -208,7 +221,7 @@ export function ConversationsHome() {
   }
 
   return (
-    <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.screen}>
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
       <View style={styles.topBar}>
         <View style={styles.topBarSide}>
           <RoundTopButton icon="settings" label="Settings" onPress={openSettings} />
@@ -247,7 +260,10 @@ export function ConversationsHome() {
         contentContainerStyle={styles.listContent}
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
-        onRefresh={() => void threadsQuery.refetch()}
+        onRefresh={() => {
+          void threadsQuery.refetch();
+          void botConversationsQuery.refetch();
+        }}
         refreshing={threadsQuery.isFetching && threads.length > 0}
         renderSectionHeader={({ section }) => {
           const collapsed = collapsedSectionKeys.has(section.key) && !searchQuery.trim();
@@ -284,21 +300,38 @@ export function ConversationsHome() {
             onLongPress={() => openThreadActions(item)}
           />
         )}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
-              <Icon name="newChat" size={22} tintColor={Colors.dark.textSecondary} />
+        ListHeaderComponent={
+          botConversations.length ? (
+            <View>
+              <View style={styles.sectionHeader}>
+                <ThemedText style={styles.sectionTitle}>
+                  {zh ? "BOT 与群聊" : "BOT conversations"}
+                </ThemedText>
+                <ThemedText style={styles.sectionCount}>{botConversations.length}</ThemedText>
+              </View>
+              {botConversations.map((conversation) => (
+                <BotConversationRow key={conversation.id} conversation={conversation} zh={zh} />
+              ))}
             </View>
-            <ThemedText style={styles.emptyTitle}>
-              {searchQuery
-                ? zh
-                  ? "没有匹配的会话"
-                  : "No matching conversations"
-                : zh
-                  ? "开始一个新会话"
-                  : "Start a new conversation"}
-            </ThemedText>
-          </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          botConversations.length ? null : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Icon name="newChat" size={22} tintColor={Colors.dark.textSecondary} />
+              </View>
+              <ThemedText style={styles.emptyTitle}>
+                {searchQuery
+                  ? zh
+                    ? "没有匹配的会话"
+                    : "No matching conversations"
+                  : zh
+                    ? "开始一个新会话"
+                    : "Start a new conversation"}
+              </ThemedText>
+            </View>
+          )
         }
       />
 
@@ -429,6 +462,41 @@ export function ConversationsHome() {
         ) : null}
       </AppBottomSheet>
     </SafeAreaView>
+  );
+}
+
+function BotConversationRow({ conversation, zh }: { conversation: BotConversation; zh: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => {
+        hapticSelection();
+        router.push({
+          pathname: "/bot-chat/[conversationId]",
+          params: { conversationId: conversation.id },
+        });
+      }}
+      style={({ pressed }) => [styles.threadRow, pressed && styles.rowPressed]}
+    >
+      <View style={[styles.threadIcon, { backgroundColor: "#282642" }]}>
+        <Icon name="agentAtom" size={22} tintColor="#A49CFF" />
+      </View>
+      <View style={styles.threadCopy}>
+        <ThemedText numberOfLines={1} style={styles.threadTitle}>
+          {conversation.name}
+        </ThemedText>
+        <ThemedText numberOfLines={1} style={styles.threadPreview}>
+          {conversation.kind === "group"
+            ? zh
+              ? `${conversation.botIds.length} 个 BOT · 群聊`
+              : `${conversation.botIds.length} BOTs · Group`
+            : zh
+              ? "BOT 私聊"
+              : "BOT direct chat"}
+        </ThemedText>
+      </View>
+      <Icon name="chevronRight" size={18} tintColor="#77777D" />
+    </Pressable>
   );
 }
 

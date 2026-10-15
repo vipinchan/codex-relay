@@ -203,6 +203,13 @@ export type AppServerNotification = {
 export type AppServerThreadStartParams = {
   approvalPolicy?: string | null;
   cwd?: string | null;
+  developerInstructions?: string | null;
+  dynamicTools?: Array<{
+    type: "function";
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+  }> | null;
   model?: string | null;
   sandbox?: string | null;
   serviceTier?: string | null;
@@ -212,6 +219,7 @@ export type AppServerThreadStartParams = {
 export type AppServerThreadResumeParams = {
   approvalPolicy?: string | null;
   cwd?: string | null;
+  developerInstructions?: string | null;
   excludeTurns?: boolean;
   model?: string | null;
   sandbox?: string | null;

@@ -4334,11 +4334,65 @@ describe("Codex Relay server routes", () => {
 
     expect(response.status).toBe(200);
     expect(body.messages[0]).toMatchObject({
+      role: "status",
       kind: "plan",
       content: expect.stringContaining("Inspect README.md"),
     });
     expect(body.messages[0].content).toContain("Update only the title");
   });
+
+  it.each(["plan", "Plan"])(
+    "shows completed app-server %s text as a final answer",
+    async (type) => {
+      const workspacePath = await mkdtemp(join(tmpdir(), "codex-relay-workspace-"));
+      const now = Date.now() / 1000;
+      const plan = "# BOT groups\n\nCreate a group.\n\n## Acceptance\nCheck the full history.";
+      const appServer = {
+        onNotification() {
+          return () => undefined;
+        },
+        onRequest() {
+          return () => undefined;
+        },
+        readThread: vi.fn<() => Promise<unknown>>(async () => ({
+          id: "app-thread-final-plan",
+          createdAt: now,
+          cwd: workspacePath,
+          modelProvider: "gpt-5.5",
+          name: "Final plan",
+          preview: "Final plan",
+          source: "app",
+          status: { type: "idle" },
+          turns: [
+            {
+              id: "turn-final-plan",
+              completedAt: now,
+              items: [{ id: "plan-answer", type, text: plan }],
+              startedAt: now,
+              status: "completed",
+            },
+          ],
+          updatedAt: now,
+        })),
+      };
+      const app = createApp({
+        appServer: appServer as never,
+        codex: createMockCodex(),
+        workspacePath,
+      });
+
+      const response = await app.request("/v1/threads/app-thread-final-plan");
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.messages[0]).toMatchObject({
+        id: "plan-answer",
+        role: "assistant",
+        kind: "plan",
+        content: plan,
+      });
+    },
+  );
 
   it("keeps app-server plan mode when no model override is provided", async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), "codex-relay-workspace-"));

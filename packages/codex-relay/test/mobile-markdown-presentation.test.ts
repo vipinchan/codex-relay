@@ -93,7 +93,6 @@ describe("assistant markdown presentation", () => {
     expect(fixture).toContain("   ```bash");
   });
 
-
   it("renders lists, quotes, and tables as separated blocks", () => {
     const style = createAssistantMarkdownStyle(theme, fonts);
 

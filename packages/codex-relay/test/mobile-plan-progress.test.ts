@@ -66,7 +66,20 @@ describe("mobile plan progress", () => {
     expect(implementablePlanId(messages)).toBe("assistant-plan");
   });
 
-  it("hides historical status plan progress when the thread is no longer running", () => {
+  it("keeps the final plan update visible after its turn completes", () => {
+    const messages = [
+      chatMessage("user-1", "user", "chat", "Plan the work"),
+      chatMessage("plan-1", "status", "plan", "pending: Investigate"),
+      chatMessage("plan-2", "status", "plan", "completed: Investigate\npending: Implement"),
+    ];
+
+    const result = splitTimelinePlanProgress(messages, false);
+
+    expect(result.visibleMessages.map((message) => message.id)).toEqual(["user-1", "plan-2"]);
+    expect(result.progress).toBeUndefined();
+  });
+
+  it("keeps the final status plan available after the thread stops", () => {
     const messages = [
       chatMessage("user-1", "user", "chat", "Check logs"),
       chatMessage("plan-1", "status", "plan", "completed: Inspect logs"),
@@ -74,9 +87,29 @@ describe("mobile plan progress", () => {
 
     const result = splitTimelinePlanProgress(messages, false);
 
-    expect(result.visibleMessages.map((message) => message.id)).toEqual(["user-1"]);
+    expect(result.visibleMessages.map((message) => message.id)).toEqual(["user-1", "plan-1"]);
     expect(result.progress).toBeUndefined();
     expect(implementablePlanId(messages)).toBeUndefined();
+  });
+
+  it("keeps one final status plan per completed turn without duplicating an assistant plan", () => {
+    const messages = [
+      chatMessage("user-1", "user", "chat", "Plan the first task"),
+      chatMessage("plan-1a", "status", "plan", "pending: First task"),
+      chatMessage("plan-1b", "status", "plan", "completed: First task"),
+      chatMessage("user-2", "user", "chat", "Plan the second task"),
+      chatMessage("plan-2", "status", "plan", "pending: Second task"),
+      chatMessage("assistant-plan-2", "assistant", "plan", "# Second task plan"),
+    ];
+
+    const result = splitTimelinePlanProgress(messages, false);
+
+    expect(result.visibleMessages.map((message) => message.id)).toEqual([
+      "user-1",
+      "plan-1b",
+      "user-2",
+      "assistant-plan-2",
+    ]);
   });
 
   it("does not reuse older progress when the newest status plan is unparseable", () => {

@@ -1,9 +1,6 @@
 import type { ThreadSummary } from "codex-relay/api-schema";
 
-type WorkspaceThread = Pick<
-  ThreadSummary,
-  "createdAt" | "cwd" | "lastActivityAt" | "updatedAt"
->;
+type WorkspaceThread = Pick<ThreadSummary, "createdAt" | "cwd" | "lastActivityAt" | "updatedAt">;
 
 export function preferredNewChatWorkspacePath(
   threads: WorkspaceThread[],

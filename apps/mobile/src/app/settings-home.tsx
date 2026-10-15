@@ -11,7 +11,11 @@ import { hapticSelection } from "@/lib/haptics";
 
 const accent = "#6EA8FF";
 
-export default function SettingsHomeScreen() {
+export default function SettingsHomeRoute() {
+  return <SettingsHomeScreen />;
+}
+
+export function SettingsHomeScreen({ embedded = false }: { embedded?: boolean }) {
   const locale = Intl.DateTimeFormat().resolvedOptions().locale || "en";
   const zh = locale.toLowerCase().startsWith("zh");
 
@@ -27,15 +31,22 @@ export default function SettingsHomeScreen() {
   }
 
   return (
-    <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.screen}>
+    <SafeAreaView
+      edges={embedded ? ["top", "left", "right"] : ["top", "left", "right", "bottom"]}
+      style={styles.screen}
+    >
       <View style={styles.header}>
-        <Pressable
-          onPress={goBack}
-          hitSlop={8}
-          style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}
-        >
-          <Icon name="back" size={24} tintColor={accent} strokeWidth={1.8} />
-        </Pressable>
+        {embedded ? (
+          <View style={styles.circleButton} />
+        ) : (
+          <Pressable
+            onPress={goBack}
+            hitSlop={8}
+            style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}
+          >
+            <Icon name="back" size={24} tintColor={accent} strokeWidth={1.8} />
+          </Pressable>
+        )}
         <ThemedText style={styles.title}>{zh ? "设置" : "Settings"}</ThemedText>
         <View style={styles.circleButton} />
       </View>

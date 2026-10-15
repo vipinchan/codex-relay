@@ -91,7 +91,12 @@ export function NewChatWorkspaceScreen() {
     void loadWorkspaceDirectories(
       preferredNewChatWorkspacePath(recentThreads, statusQuery.data?.workspacePath),
     );
-  }, [loadWorkspaceDirectories, queryClient, statusQuery.data?.workspacePath, statusQuery.isFetched]);
+  }, [
+    loadWorkspaceDirectories,
+    queryClient,
+    statusQuery.data?.workspacePath,
+    statusQuery.isFetched,
+  ]);
 
   const currentPath = browser?.path ?? statusQuery.data?.workspacePath;
   const rows = useMemo<WorkspaceRow[]>(() => {

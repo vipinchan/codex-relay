@@ -394,6 +394,16 @@ export async function clearThreadGoalServerState(queryClient: QueryClient, threa
 
 export function clearServerState(queryClient: QueryClient) {
   queryClient.removeQueries({ queryKey: [rootKey] });
+  const botScopes = new Set([
+    "bots",
+    "bot-conversations",
+    "bot-conversation",
+    "bot-messages",
+    "bot-memories",
+    "bot-history",
+    "bot-workspaces",
+  ]);
+  queryClient.removeQueries({ predicate: (query) => botScopes.has(String(query.queryKey[0])) });
 }
 
 export function setStatusState(queryClient: QueryClient, status: StatusResponse) {

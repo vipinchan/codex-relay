@@ -20,6 +20,8 @@ This pnpm monorepo contains a mobile Codex client backed by a local server. `app
 
 Use TypeScript throughout. Formatting is owned by `oxfmt`; do not hand-format around it. The current style uses two-space indentation, double quotes, trailing commas where added, and ESM imports. React components use `PascalCase` file and export names, hooks use `use-*` file names and `useX` functions, and helpers use `camelCase`. Keep shared API shapes in `packages/codex-relay/src/api-schema.ts`.
 
+When external projects inform a design, describe the resulting behavior and decisions in the project's own terms. Do not include research project names, repository links, or provenance notes in implementation code, comments, commits, PRs, or release text. Preserve legally required license notices and attribution for any copied or adapted licensed material.
+
 ## Mobile UI Primitives
 
 Prefer established UI primitives over hand-rolling fragile React Native layouts.

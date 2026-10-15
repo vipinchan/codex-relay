@@ -201,6 +201,27 @@ function TabLayout() {
                 }}
               >
                 <Stack.Screen name="(drawer)" />
+                <Stack.Screen
+                  name="chat"
+                  options={{
+                    animation: "slide_from_right",
+                    gestureEnabled: true,
+                  }}
+                />
+                <Stack.Screen
+                  name="preview"
+                  options={{
+                    animation: "slide_from_right",
+                    gestureEnabled: true,
+                  }}
+                />
+                <Stack.Screen
+                  name="bot-chat/[conversationId]"
+                  options={{
+                    animation: "slide_from_right",
+                    gestureEnabled: true,
+                  }}
+                />
                 <Stack.Screen name="pair" />
                 <Stack.Screen
                   name="image-viewer"

@@ -13,13 +13,12 @@ describe("mobile message link action", () => {
     });
   });
 
-  it.each([
-    "/Users/vipinchan/docs/README.md",
-    "docs/README.mdx",
-    "../notes/research.markdown",
-  ])("routes local Markdown paths to workspace preview: %s", (url) => {
-    expect(messageLinkAction(url).kind).toBe("workspace-markdown");
-  });
+  it.each(["/Users/vipinchan/docs/README.md", "docs/README.mdx", "../notes/research.markdown"])(
+    "routes local Markdown paths to workspace preview: %s",
+    (url) => {
+      expect(messageLinkAction(url).kind).toBe("workspace-markdown");
+    },
+  );
 
   it("removes query and fragment suffixes from local Markdown paths", () => {
     expect(messageLinkAction("docs/README.mdx?mode=preview#section")).toEqual({

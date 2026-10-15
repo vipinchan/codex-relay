@@ -22,6 +22,7 @@ vi.mock("@/lib/workspace-runtime-preferences-cache", () => ({
 
 import { getCodexRelayServerUrl, getThread } from "./codex-relay-api";
 import {
+  clearServerState,
   fetchOlderThreadMessagesState,
   fetchThreadState,
   serverStateKeys,
@@ -312,5 +313,27 @@ describe("mobile thread pagination cache", () => {
       olderMessagesCursor: null,
       messages: [current.messages[1]],
     });
+  });
+});
+
+describe("clearing paired server state", () => {
+  it("removes BOT histories and memory when signing out", () => {
+    const queryClient = new QueryClient();
+    const scopes = [
+      "bots",
+      "bot-conversations",
+      "bot-conversation",
+      "bot-messages",
+      "bot-memories",
+      "bot-history",
+      "bot-workspaces",
+    ];
+    for (const scope of scopes)
+      queryClient.setQueryData([scope, "http://relay.test", "private"], { secret: true });
+    queryClient.setQueryData(["unrelated"], "keep");
+    clearServerState(queryClient);
+    for (const scope of scopes)
+      expect(queryClient.getQueryData([scope, "http://relay.test", "private"])).toBeUndefined();
+    expect(queryClient.getQueryData(["unrelated"])).toBe("keep");
   });
 });
