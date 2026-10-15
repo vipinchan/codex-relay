@@ -3,6 +3,7 @@ name: iOS 1.5.0 UI Beta
 on:
   push:
     branches:
+      - feat/mobile-history-navigation-beta
       - feat/bot-groups-beta
   workflow_dispatch:
 
