@@ -11,15 +11,30 @@ export type BotEditorDraft = {
 };
 
 export function botUpdatePayload(draft: BotEditorDraft) {
-  return {
+  const payload: {
+    name: string;
+    color: string;
+    instructions: string;
+    runtimeMode: Bot["runtimeMode"];
+    model?: string | null;
+    reasoningEffort?: ReasoningEffort | null;
+    serviceTier?: string | null;
+  } = {
     name: draft.name.trim(),
     color: draft.color,
     instructions: draft.instructions.trim(),
     runtimeMode: draft.runtimeMode,
-    model: draft.model ?? null,
-    reasoningEffort: draft.reasoningEffort ?? null,
-    serviceTier: draft.serviceTier ?? null,
   };
+  if (draft.model) {
+    payload.model = draft.model;
+    if (draft.reasoningEffort !== undefined) payload.reasoningEffort = draft.reasoningEffort;
+    if (draft.serviceTier !== undefined) payload.serviceTier = draft.serviceTier;
+  } else {
+    payload.model = null;
+    payload.reasoningEffort = null;
+    payload.serviceTier = null;
+  }
+  return payload;
 }
 
 export function botModelUnavailable(

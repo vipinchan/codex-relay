@@ -23,6 +23,27 @@ describe("BOT editor configuration", () => {
     });
   });
 
+  it("omits undefined reasoning effort and service tier when model is set", () => {
+    const payload = botUpdatePayload({
+      name: "A",
+      color: "#4778d9",
+      instructions: "",
+      model: "GPT-6-Luna",
+      reasoningEffort: "medium",
+      serviceTier: undefined,
+      runtimeMode: "default",
+    });
+    expect(payload).toEqual({
+      name: "A",
+      color: "#4778d9",
+      instructions: "",
+      model: "GPT-6-Luna",
+      reasoningEffort: "medium",
+      runtimeMode: "default",
+    });
+    expect(payload).not.toHaveProperty("serviceTier");
+  });
+
   it("keeps saved model settings while the catalog is unavailable, then identifies a removed model", () => {
     expect(botModelUnavailable("removed-model", false, [])).toBe(false);
     expect(botModelUnavailable("removed-model", true, [])).toBe(true);
