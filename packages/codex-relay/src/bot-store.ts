@@ -6,18 +6,25 @@ import {
   BotConversationSchema,
   BotMemorySchema,
   BotMessageSchema,
+  BotMessageRuntimeSchema,
   BotSchema,
   ChatMessageSchema,
   type Bot,
   type BotConversation,
   type BotMemory,
   type BotMessage,
+  type BotMessageRuntime,
   type ChatMessage,
 } from "./api-schema.js";
 import { connect } from "./libsql-database.js";
 
 type BotInput = Pick<Bot, "name" | "color" | "instructions" | "runtimeMode"> &
   Partial<Pick<Bot, "model" | "reasoningEffort" | "serviceTier">>;
+type BotPatch = Partial<Omit<BotInput, "model" | "reasoningEffort" | "serviceTier">> & {
+  model?: string | null;
+  reasoningEffort?: Bot["reasoningEffort"] | null;
+  serviceTier?: string | null;
+};
 type ConversationInput =
   | { kind: "direct"; botId: string; workspacePath: string }
   | {
@@ -95,6 +102,10 @@ export async function createBotStore(path: string) {
       source_message_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
   `);
+  const messageColumnsBeforeMigration = await db.prepare("PRAGMA table_info(bot_messages)").all();
+  if (!messageColumnsBeforeMigration.some((column) => column.name === "runtime_json")) {
+    await db.exec("ALTER TABLE bot_messages ADD COLUMN runtime_json TEXT");
+  }
   if (requiresFtsBackfill) {
     await db.exec(`DELETE FROM bot_message_search;
       INSERT INTO bot_message_search(rowid, content)
@@ -123,16 +134,20 @@ export async function createBotStore(path: string) {
     created_at AS createdAt, updated_at AS updatedAt, deleted_at AS deletedAt`;
   const messageColumns = `id, conversation_id AS conversationId, seq, sender, bot_id AS botId,
     content, status, request_id AS requestId, reply_to_message_id AS replyToMessageId,
-    activity_json AS activityJson, created_at AS createdAt`;
+    activity_json AS activityJson, runtime_json AS runtimeJson, created_at AS createdAt`;
   const joinedMessageColumns = `m.id, m.conversation_id AS conversationId, m.seq,
     m.sender, m.bot_id AS botId, m.content, m.status, m.request_id AS requestId,
     m.reply_to_message_id AS replyToMessageId, m.activity_json AS activityJson,
+    m.runtime_json AS runtimeJson,
     m.created_at AS createdAt`;
   const parseMessage = (row: Record<string, unknown>) =>
     BotMessageSchema.parse({
       ...row,
       activity: row.activityJson
         ? ChatMessageSchema.parse(JSON.parse(String(row.activityJson)))
+        : undefined,
+      runtime: row.runtimeJson
+        ? BotMessageRuntimeSchema.parse(JSON.parse(String(row.runtimeJson)))
         : undefined,
     });
   const memoryColumns = `id, bot_id AS botId, content, source_message_id AS sourceMessageId,
@@ -190,7 +205,7 @@ export async function createBotStore(path: string) {
     return (await getBot(id))!;
   }
 
-  async function updateBot(id: string, patch: Partial<BotInput>): Promise<Bot | undefined> {
+  async function updateBot(id: string, patch: BotPatch): Promise<Bot | undefined> {
     const current = await getBot(id);
     if (!current) return undefined;
     const next = { ...current, ...patch };
@@ -466,6 +481,13 @@ export async function createBotStore(path: string) {
     return getMessage(id);
   }
 
+  async function setMessageRuntime(id: string, runtime: BotMessageRuntime) {
+    await db
+      .prepare("UPDATE bot_messages SET runtime_json = ? WHERE id = ? AND status = 'running'")
+      .run(JSON.stringify(BotMessageRuntimeSchema.parse(runtime)), id);
+    return getMessage(id);
+  }
+
   async function resolveActivity(id: string, decision: string) {
     const message = await getMessage(id);
     if (!message?.activity) return undefined;
@@ -687,6 +709,7 @@ export async function createBotStore(path: string) {
     readHistory,
     resolveActivity,
     searchHistory,
+    setMessageRuntime,
     setThread,
     updateBot,
     updateConversation,

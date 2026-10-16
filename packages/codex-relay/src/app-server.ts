@@ -58,6 +58,11 @@ export type AppServerThread = {
   historyMode?: "legacy" | "paginated";
   path?: string | null;
   turns?: AppServerTurn[];
+  runtimeConfig?: {
+    model?: string;
+    reasoningEffort?: string;
+    serviceTier?: string;
+  };
 };
 
 export type AppServerTurn = {
@@ -169,6 +174,22 @@ export type AppServerRateLimits = {
   rateLimits?: unknown;
   rateLimitsByLimitId?: Record<string, unknown>;
 };
+
+function threadFromResponse(response: {
+  thread: AppServerThread;
+  model?: string | null;
+  reasoningEffort?: string | null;
+  serviceTier?: string | null;
+}): AppServerThread {
+  const runtimeConfig = {
+    ...(response.model ? { model: response.model } : {}),
+    ...(response.reasoningEffort ? { reasoningEffort: response.reasoningEffort } : {}),
+    ...(response.serviceTier ? { serviceTier: response.serviceTier } : {}),
+  };
+  return Object.keys(runtimeConfig).length
+    ? { ...response.thread, runtimeConfig }
+    : response.thread;
+}
 
 export type AppServerThreadGoalStatus =
   | "active"
@@ -396,15 +417,23 @@ export class CodexAppServerClient {
   }
 
   async startThread(params: AppServerThreadStartParams) {
-    const response = await this.request<{ thread: AppServerThread }>("thread/start", params);
+    const response = await this.request<{
+      thread: AppServerThread;
+      model?: string | null;
+      reasoningEffort?: string | null;
+      serviceTier?: string | null;
+    }>("thread/start", params);
     this.subscribedThreadIds.add(response.thread.id);
-    return response.thread;
+    return threadFromResponse(response);
   }
 
   async resumeThread(params: AppServerThreadResumeParams) {
     const response = await this.request<{
       initialTurnsPage?: { data: AppServerTurn[] } | null;
       thread: AppServerThread;
+      model?: string | null;
+      reasoningEffort?: string | null;
+      serviceTier?: string | null;
     }>(
       "thread/resume",
       params.excludeTurns
@@ -419,7 +448,7 @@ export class CodexAppServerClient {
       ...response.thread,
       turns: response.initialTurnsPage?.data ?? response.thread.turns,
     });
-    return response.thread;
+    return threadFromResponse(response);
   }
 
   async startTurn(params: AppServerTurnStartParams) {

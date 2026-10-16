@@ -104,6 +104,7 @@ export const BotSchema = z.object({
   reasoningEffort: ReasoningEffortSchema.optional(),
   serviceTier: z.string().trim().min(1).optional(),
   runtimeMode: RuntimeModeSchema.default("default"),
+  runtimeState: z.enum(["idle", "queued", "running"]).optional(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
   deletedAt: IsoDateTimeSchema.nullable(),
@@ -118,7 +119,11 @@ export const CreateBotRequestSchema = BotSchema.pick({
   serviceTier: true,
   runtimeMode: true,
 });
-export const UpdateBotRequestSchema = CreateBotRequestSchema.partial();
+export const UpdateBotRequestSchema = CreateBotRequestSchema.partial().extend({
+  model: BotSchema.shape.model.nullable(),
+  reasoningEffort: BotSchema.shape.reasoningEffort.nullable(),
+  serviceTier: BotSchema.shape.serviceTier.nullable(),
+});
 export const BotResponseSchema = z.object({ bot: BotSchema });
 export const ListBotsResponseSchema = z.object({ bots: z.array(BotSchema) });
 
@@ -155,6 +160,12 @@ export const ListBotConversationsResponseSchema = z.object({
   conversations: z.array(BotConversationSchema),
 });
 
+export const BotMessageRuntimeSchema = z.object({
+  requestedModel: z.string().trim().min(1).optional(),
+  resolvedModel: z.string().trim().min(1).optional(),
+  reasoningEffort: ReasoningEffortSchema.optional(),
+  serviceTier: z.string().trim().min(1).optional(),
+});
 export const BotMessageSchema = z.object({
   id: z.string().uuid(),
   conversationId: z.string().uuid(),
@@ -167,6 +178,7 @@ export const BotMessageSchema = z.object({
   replyToMessageId: z.string().uuid().nullable(),
   createdAt: IsoDateTimeSchema,
   activity: z.lazy(() => ChatMessageSchema).optional(),
+  runtime: BotMessageRuntimeSchema.optional(),
 });
 export const SendBotMessageRequestSchema = z.object({
   requestId: z.string().trim().min(1).max(120),
@@ -215,6 +227,7 @@ export const ListBotMemoriesResponseSchema = z.object({ memories: z.array(BotMem
 export type Bot = z.infer<typeof BotSchema>;
 export type BotConversation = z.infer<typeof BotConversationSchema>;
 export type BotMessage = z.infer<typeof BotMessageSchema>;
+export type BotMessageRuntime = z.infer<typeof BotMessageRuntimeSchema>;
 export type BotMemory = z.infer<typeof BotMemorySchema>;
 
 export const PushNotificationIntentSchema = z.enum(["turn_terminal", "action_required"]);

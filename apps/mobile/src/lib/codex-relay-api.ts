@@ -559,7 +559,11 @@ export async function createBot(draft: BotDraft): Promise<Bot> {
   ).bot;
 }
 
-export async function updateBot(botId: string, draft: Partial<BotDraft>): Promise<Bot> {
+export type BotPatch = Partial<Omit<BotDraft, "model" | "reasoningEffort" | "serviceTier">> & {
+  [K in "model" | "reasoningEffort" | "serviceTier"]?: Bot[K] | null;
+};
+
+export async function updateBot(botId: string, draft: BotPatch): Promise<Bot> {
   return (
     await request(
       apiPaths.bot(botId),

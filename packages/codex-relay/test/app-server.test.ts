@@ -32,6 +32,46 @@ describe("CodexAppServerClient shared socket mode", () => {
     vi.unstubAllEnvs();
   });
 
+  it("preserves confirmed runtime settings from start and resume response envelopes", async () => {
+    const codexHome = await mkdtemp(join(socketTempRoot, "codex-relay-runtime-envelope-"));
+    const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");
+    const server = await startSharedSocketServer(socketPath, (request) => {
+      if (request.method === "thread/start" || request.method === "thread/resume") {
+        return {
+          thread: { id: "runtime-thread" },
+          model: request.method === "thread/start" ? "start-model" : "resume-model",
+          reasoningEffort: "high",
+          serviceTier: "fast",
+        };
+      }
+      return {};
+    });
+    vi.stubEnv("CODEX_HOME", codexHome);
+    vi.stubEnv("CODEX_RELAY_APP_SERVER_MODE", "socket");
+    const client = new CodexAppServerClient({
+      startSharedServer: async () => {
+        throw new Error("Expected an existing shared app-server.");
+      },
+    });
+    try {
+      await client.initialize();
+      expect((await client.startThread({})).runtimeConfig).toEqual({
+        model: "start-model",
+        reasoningEffort: "high",
+        serviceTier: "fast",
+      });
+      expect((await client.resumeThread({ threadId: "runtime-thread" })).runtimeConfig).toEqual({
+        model: "resume-model",
+        reasoningEffort: "high",
+        serviceTier: "fast",
+      });
+    } finally {
+      client.close();
+      await server.close();
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
   it("reconnects after its shared socket resets without starting another app-server", async () => {
     const codexHome = await mkdtemp(join(socketTempRoot, "codex-relay-app-server-"));
     const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");

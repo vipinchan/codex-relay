@@ -222,6 +222,17 @@ function TabLayout() {
                     gestureEnabled: true,
                   }}
                 />
+                <Stack.Screen name="bot/[botId]" options={{ animation: "slide_from_right" }} />
+                <Stack.Screen name="bot/new" options={{ animation: "slide_from_right" }} />
+                <Stack.Screen name="bot/[botId]/edit" options={{ animation: "slide_from_right" }} />
+                <Stack.Screen
+                  name="bot/[botId]/memory"
+                  options={{ animation: "slide_from_right" }}
+                />
+                <Stack.Screen
+                  name="bot/[botId]/history"
+                  options={{ animation: "slide_from_right" }}
+                />
                 <Stack.Screen name="pair" />
                 <Stack.Screen
                   name="image-viewer"

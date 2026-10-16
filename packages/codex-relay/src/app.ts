@@ -708,14 +708,17 @@ export function createApp(options: AppOptions = {}) {
     return secureJson(c, options.pairing, secureSessionsByTokenHash, response);
   });
 
-  app.get(apiPaths.bots, async (c) =>
-    secureJson(
+  app.get(apiPaths.bots, async (c) => {
+    const bots = await (await botStore).listBots();
+    return secureJson(
       c,
       options.pairing,
       secureSessionsByTokenHash,
-      ListBotsResponseSchema.parse({ bots: await (await botStore).listBots() }),
-    ),
-  );
+      ListBotsResponseSchema.parse({
+        bots: bots.map((bot) => ({ ...bot, runtimeState: botRuntime.getBotState(bot.id) })),
+      }),
+    );
+  });
 
   app.post(apiPaths.bots, async (c) => {
     const parsed = await parseRequestJson(
@@ -737,7 +740,7 @@ export function createApp(options: AppOptions = {}) {
       c,
       options.pairing,
       secureSessionsByTokenHash,
-      BotResponseSchema.parse({ bot }),
+      BotResponseSchema.parse({ bot: { ...bot, runtimeState: botRuntime.getBotState(bot.id) } }),
       201,
     );
   });
@@ -748,7 +751,11 @@ export function createApp(options: AppOptions = {}) {
       c,
       options.pairing,
       secureSessionsByTokenHash,
-      bot ? BotResponseSchema.parse({ bot }) : apiError("not_found", "BOT not found."),
+      bot
+        ? BotResponseSchema.parse({
+            bot: { ...bot, runtimeState: botRuntime.getBotState(bot.id) },
+          })
+        : apiError("not_found", "BOT not found."),
       bot ? 200 : 404,
     );
   });
@@ -773,7 +780,11 @@ export function createApp(options: AppOptions = {}) {
       c,
       options.pairing,
       secureSessionsByTokenHash,
-      bot ? BotResponseSchema.parse({ bot }) : apiError("not_found", "BOT not found."),
+      bot
+        ? BotResponseSchema.parse({
+            bot: { ...bot, runtimeState: botRuntime.getBotState(bot.id) },
+          })
+        : apiError("not_found", "BOT not found."),
       bot ? 200 : 404,
     );
   });
