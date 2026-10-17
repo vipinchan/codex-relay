@@ -8,6 +8,8 @@ export type BotEditorDraft = {
   reasoningEffort: ReasoningEffort | undefined;
   serviceTier: string | undefined;
   runtimeMode: Bot["runtimeMode"];
+  preferredSkills?: string[];
+  preferredPlugins?: string[];
 };
 
 export function botUpdatePayload(draft: BotEditorDraft) {
@@ -19,16 +21,20 @@ export function botUpdatePayload(draft: BotEditorDraft) {
     model?: string | null;
     reasoningEffort?: ReasoningEffort | null;
     serviceTier?: string | null;
+    preferredSkills?: string[];
+    preferredPlugins?: string[];
   } = {
     name: draft.name.trim(),
     color: draft.color,
     instructions: draft.instructions.trim(),
     runtimeMode: draft.runtimeMode,
   };
+  if (draft.preferredSkills) payload.preferredSkills = draft.preferredSkills;
+  if (draft.preferredPlugins) payload.preferredPlugins = draft.preferredPlugins;
   if (draft.model) {
     payload.model = draft.model;
-    if (draft.reasoningEffort !== undefined) payload.reasoningEffort = draft.reasoningEffort;
-    if (draft.serviceTier !== undefined) payload.serviceTier = draft.serviceTier;
+    payload.reasoningEffort = draft.reasoningEffort ?? null;
+    payload.serviceTier = draft.serviceTier ?? null;
   } else {
     payload.model = null;
     payload.reasoningEffort = null;

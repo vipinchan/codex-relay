@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Bot, BotConversation, BotMessage } from "codex-relay/api-schema";
-import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -47,6 +47,8 @@ import {
 } from "./bot-compose";
 import { BotComposer } from "./BotComposer";
 import { BotMessageRow } from "./BotMessageRow";
+import { BotDirectComposer } from "./BotDirectComposer";
+import { BotDirectMessageRow } from "./BotDirectMessageRow";
 import { useBotMessageSource } from "./use-bot-message-source";
 
 const accent = "#6EA8FF";
@@ -88,12 +90,17 @@ export function BotChatScreen({
   const [savingGroup, setSavingGroup] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [mentionOpen, setMentionOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   const conversationQuery = useQuery({
     queryKey: ["bot-conversation", serverUrl, conversationId],
     queryFn: () => getBotConversation(conversationId),
   });
-  const botsQuery = useQuery({ queryKey: ["bots", serverUrl], queryFn: listBots });
+  const botsQuery = useQuery({
+    queryKey: ["bots", serverUrl],
+    queryFn: listBots,
+    refetchInterval: focused && conversationQuery.data?.kind === "direct" ? 4000 : false,
+  });
   const messagesQuery = useQuery({
     queryKey: ["bot-messages", serverUrl, conversationId],
     queryFn: () => listBotMessages(conversationId),
@@ -106,6 +113,8 @@ export function BotChatScreen({
 
   const conversation = conversationQuery.data;
   const bots = botsQuery.data ?? [];
+  const directBot =
+    conversation?.kind === "direct" ? bots.find((bot) => bot.id === conversation.botId) : undefined;
   const members = conversation?.botIds ?? [];
   const messages = useMemo(
     () => mergeBotMessagePages(messagesQuery.data?.messages ?? [], olderMessages),
@@ -142,6 +151,27 @@ export function BotChatScreen({
       ),
     [theme.backgroundSelected, theme.text, theme.textSecondary],
   );
+
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      void queryClient.invalidateQueries({ queryKey: ["bots", serverUrl] });
+      void queryClient.invalidateQueries({
+        queryKey: ["bot-conversation", serverUrl, conversationId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["bot-conversation-runtime", serverUrl, conversationId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["bot-messages", serverUrl, conversationId] });
+      return () => setFocused(false);
+    }, [queryClient, serverUrl, conversationId]),
+  );
+
+  async function refreshMessagesAfterSend() {
+    await queryClient.invalidateQueries({ queryKey: ["bot-messages", serverUrl, conversationId] });
+    void queryClient.invalidateQueries({ queryKey: ["bot-conversations", serverUrl] });
+    if (atLatest.current) setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+  }
 
   function botName(botId: string | null) {
     return bots.find((bot) => bot.id === botId)?.name ?? "BOT";
@@ -339,12 +369,12 @@ export function BotChatScreen({
           style={styles.headerCopy}
         >
           <Text numberOfLines={1} style={styles.headerTitle}>
-            {conversation?.name ?? tr("聊天", "Chat")}
+            {directBot?.name ?? conversation?.name ?? tr("聊天", "Chat")}
           </Text>
           <Text numberOfLines={1} style={styles.headerSubtitle}>
             {conversation?.kind === "group"
               ? `${members.length} BOT · ${conversation.workspacePath}`
-              : tr("BOT 私聊", "Private BOT chat")}
+              : (conversation?.workspacePath ?? tr("BOT 私聊", "Private BOT chat"))}
           </Text>
         </Pressable>
         {conversation?.kind === "group" ? (
@@ -355,6 +385,20 @@ export function BotChatScreen({
             style={styles.headerButton}
           >
             <Icon name="controls" size={21} tintColor={accent} />
+          </Pressable>
+        ) : conversation?.kind === "direct" ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={tr("BOT 定义与工作区预览", "BOT definition and workspace preview")}
+            onPress={() =>
+              router.push({
+                pathname: "/bot-preview/[conversationId]",
+                params: { conversationId },
+              })
+            }
+            style={styles.headerButton}
+          >
+            <Icon name="preview" size={21} tintColor={accent} />
           </Pressable>
         ) : (
           <View style={styles.headerButton} />
@@ -372,15 +416,29 @@ export function BotChatScreen({
           ref={listRef}
           data={messages}
           keyExtractor={(message) => message.id}
-          renderItem={({ item }) => (
-            <BotMessageRow
-              message={item}
-              bot={bots.find((bot) => bot.id === item.botId)}
-              markdownStyle={markdownStyle}
-              isActiveReply={item.id === activeReplyId}
-              isSource={item.id === messageId}
-            />
-          )}
+          renderItem={({ item }) =>
+            conversation?.kind === "direct" ? (
+              <BotDirectMessageRow
+                message={item}
+                isActiveReply={item.id === activeReplyId}
+                isSource={item.id === messageId}
+                onOpenMarkdownAttachment={(target) =>
+                  router.push({
+                    pathname: "/bot-preview/[conversationId]",
+                    params: { conversationId, filePath: target.path },
+                  })
+                }
+              />
+            ) : (
+              <BotMessageRow
+                message={item}
+                bot={bots.find((bot) => bot.id === item.botId)}
+                markdownStyle={markdownStyle}
+                isActiveReply={item.id === activeReplyId}
+                isSource={item.id === messageId}
+              />
+            )
+          }
           style={styles.list}
           contentContainerStyle={styles.timeline}
           keyboardShouldPersistTaps="handled"
@@ -531,21 +589,45 @@ export function BotChatScreen({
             </Pressable>
           </View>
         ) : null}
-        <BotComposer
-          conversation={conversation}
-          bots={bots}
-          draft={draft}
-          selectedMentions={selectedMentions}
-          matchingBots={matchingBots}
-          mentionOpen={mentionOpen}
-          sending={sending}
-          hasPending={!!pending}
-          onDraftChange={onDraftChange}
-          onToggleMention={toggleMention}
-          onSelectMention={selectMention}
-          onOpenMentions={() => setSheet("mentions")}
-          onSend={() => void submit()}
-        />
+        {conversation?.kind === "direct" ? (
+          directBot ? (
+            <BotDirectComposer
+              key={`${serverUrl}:${conversationId}`}
+              conversation={conversation}
+              bot={directBot}
+              isFocused={focused}
+              hasRunning={hasRunning}
+              onCancel={() => void stopReply()}
+              onSent={refreshMessagesAfterSend}
+            />
+          ) : (
+            <Pressable onPress={() => void botsQuery.refetch()} style={styles.loadMore}>
+              <Text style={botsQuery.error ? styles.error : styles.empty}>
+                {botsQuery.error
+                  ? `${errorText(botsQuery.error)} · ${tr("点击重试", "Tap to retry")}`
+                  : botsQuery.isPending
+                    ? tr("正在加载 BOT…", "Loading BOT…")
+                    : tr("BOT 不可用", "BOT is unavailable")}
+              </Text>
+            </Pressable>
+          )
+        ) : (
+          <BotComposer
+            conversation={conversation}
+            bots={bots}
+            draft={draft}
+            selectedMentions={selectedMentions}
+            matchingBots={matchingBots}
+            mentionOpen={mentionOpen}
+            sending={sending}
+            hasPending={!!pending}
+            onDraftChange={onDraftChange}
+            onToggleMention={toggleMention}
+            onSelectMention={selectMention}
+            onOpenMentions={() => setSheet("mentions")}
+            onSend={() => void submit()}
+          />
+        )}
       </KeyboardAvoidingView>
 
       <AppBottomSheet

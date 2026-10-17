@@ -30,7 +30,6 @@ import {
   type BarcodeScanningResult,
   type ScanningResult,
 } from "expo-camera";
-import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -69,7 +68,6 @@ import {
   resolveApproval,
   resolveCodexRelayUrl,
   streamThreadRun,
-  uploadImageAttachments,
 } from "@/lib/codex-relay-api";
 import {
   hapticLightImpact,
@@ -128,7 +126,6 @@ import {
 } from "@/lib/thread-run-stream";
 import { readCachedWorkspaceRuntimePreferences } from "@/lib/workspace-runtime-preferences-cache";
 import {
-  appendComposerAttachments,
   chatStore$,
   clearComposerDraft,
   clearThreadStreamReconnectRequest,
@@ -153,6 +150,8 @@ import {
   type QueuedComposerPrompt,
 } from "@/state/chat-store";
 import { addWorkspacePreviewTab } from "@/state/workspace-preview-store";
+
+import { attachComposerImages } from "@/lib/composer-images";
 
 import { ChatControls } from "./ChatControls";
 import { runConnectionRefresh } from "./connection-refresh";
@@ -179,8 +178,6 @@ import {
 import { WorkspacePreviewSurface } from "./WorkspacePreviewSurface";
 import type { WorkspaceMarkdownPreviewTarget } from "./workspace-preview/markdown-target";
 
-const MAX_IMAGE_ATTACHMENTS = 3;
-const MAX_ATTACHMENT_PAYLOAD_BYTES = 8 * 1024 * 1024;
 const CHAT_INPUT_NATIVE_ID = "chat-composer-input";
 const CONNECTION_HEALTH_CHECK_MS = 5000;
 const CONNECTION_RETRY_MS = 2500;
@@ -1838,95 +1835,12 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   }
 
   async function attachImagesFromGallery() {
-    if (isAttachingImagesRef.current) {
-      return;
-    }
-
+    if (isAttachingImagesRef.current) return;
     const composerThreadId = activeThreadId;
     isAttachingImagesRef.current = true;
     setAttachingImages(true);
     try {
-      const attachments = getComposerAttachments(composerThreadId);
-      const remainingSlots = MAX_IMAGE_ATTACHMENTS - attachments.length;
-      if (remainingSlots <= 0) {
-        Alert.alert(
-          "Image limit reached",
-          `Attach up to ${MAX_IMAGE_ATTACHMENTS} images at a time.`,
-        );
-        return;
-      }
-
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        allowsMultipleSelection: true,
-        mediaTypes: ["images"],
-        preferredAssetRepresentationMode:
-          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-        quality: 0.72,
-        selectionLimit: remainingSlots,
-        shouldDownloadFromNetwork: true,
-      });
-
-      if (result.canceled) {
-        return;
-      }
-
-      let acceptedPayloadBytes = 0;
-      let skippedImages = 0;
-      const selectedAssets = result.assets.flatMap((asset) => {
-        const payloadBytes = asset.fileSize ?? 0;
-        if (acceptedPayloadBytes + payloadBytes > MAX_ATTACHMENT_PAYLOAD_BYTES) {
-          skippedImages += 1;
-          return [];
-        }
-
-        acceptedPayloadBytes += payloadBytes;
-        return [asset];
-      });
-
-      if (selectedAssets.length === 0) {
-        Alert.alert("Image attach failed", "Could not read the selected image.");
-        return;
-      }
-
-      const uploaded = await uploadImageAttachments(
-        selectedAssets.map((asset, index) => ({
-          mimeType: asset.mimeType ?? "image/jpeg",
-          name: asset.fileName ?? `image-${index + 1}.jpg`,
-          uri: asset.uri,
-        })),
-      );
-
-      const nextAttachments = uploaded.attachments.flatMap((attachment, index) => {
-        const asset = selectedAssets[index];
-        if (!asset) {
-          skippedImages += 1;
-          return [];
-        }
-        const mimeType = asset.mimeType ?? "image/jpeg";
-        return {
-          id: `${Date.now()}-${index}-${asset.assetId ?? asset.uri}`,
-          mimeType: attachment.mimeType ?? mimeType,
-          name: attachment.name ?? asset.fileName ?? undefined,
-          path: attachment.path,
-          uri: asset.uri,
-          url: attachment.url,
-        };
-      });
-
-      if (nextAttachments.length === 0) {
-        Alert.alert("Image attach failed", "Could not read the selected image.");
-        return;
-      }
-
-      appendComposerAttachments(nextAttachments, composerThreadId);
-      if (skippedImages > 0) {
-        Alert.alert(
-          "Some images were skipped",
-          "Choose fewer or smaller images so the chat stays stable.",
-        );
-      }
+      await attachComposerImages(composerThreadId);
     } catch (caught) {
       Alert.alert("Image attach failed", errorMessage(caught));
     } finally {

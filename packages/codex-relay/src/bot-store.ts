@@ -9,17 +9,23 @@ import {
   BotMessageRuntimeSchema,
   BotSchema,
   ChatMessageSchema,
+  PromptAttachmentSummarySchema,
+  PromptSkillSchema,
   type Bot,
   type BotConversation,
   type BotMemory,
   type BotMessage,
   type BotMessageRuntime,
   type ChatMessage,
+  type PromptAttachment,
+  type PromptSkill,
 } from "./api-schema.js";
 import { connect } from "./libsql-database.js";
 
 type BotInput = Pick<Bot, "name" | "color" | "instructions" | "runtimeMode"> &
-  Partial<Pick<Bot, "model" | "reasoningEffort" | "serviceTier">>;
+  Partial<
+    Pick<Bot, "model" | "reasoningEffort" | "serviceTier" | "preferredSkills" | "preferredPlugins">
+  >;
 type BotPatch = Partial<Omit<BotInput, "model" | "reasoningEffort" | "serviceTier">> & {
   model?: string | null;
   reasoningEffort?: Bot["reasoningEffort"] | null;
@@ -53,12 +59,14 @@ export async function createBotStore(path: string) {
       id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL,
       instructions TEXT NOT NULL, model TEXT, reasoning_effort TEXT,
       service_tier TEXT, runtime_mode TEXT NOT NULL,
+      preferred_skills_json TEXT NOT NULL DEFAULT '[]',
+      preferred_plugins_json TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
     );
     CREATE TABLE IF NOT EXISTS bot_conversations (
       id TEXT PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL,
       workspace_path TEXT NOT NULL, direct_bot_id TEXT, default_bot_id TEXT,
-      last_seq INTEGER NOT NULL DEFAULT 0,
+      last_seq INTEGER NOT NULL DEFAULT 0, preferences_json TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
     );
     CREATE TABLE IF NOT EXISTS bot_group_members (
@@ -71,6 +79,7 @@ export async function createBotStore(path: string) {
       sender TEXT NOT NULL, bot_id TEXT, content TEXT NOT NULL,
       status TEXT NOT NULL, request_id TEXT, reply_to_message_id TEXT,
       activity_json TEXT,
+      attachments_json TEXT, skills_json TEXT,
       created_at TEXT NOT NULL,
       UNIQUE (conversation_id, seq)
     );
@@ -106,6 +115,25 @@ export async function createBotStore(path: string) {
   if (!messageColumnsBeforeMigration.some((column) => column.name === "runtime_json")) {
     await db.exec("ALTER TABLE bot_messages ADD COLUMN runtime_json TEXT");
   }
+  if (!messageColumnsBeforeMigration.some((column) => column.name === "attachments_json")) {
+    await db.exec("ALTER TABLE bot_messages ADD COLUMN attachments_json TEXT");
+  }
+  if (!messageColumnsBeforeMigration.some((column) => column.name === "skills_json")) {
+    await db.exec("ALTER TABLE bot_messages ADD COLUMN skills_json TEXT");
+  }
+  const conversationColumns = await db.prepare("PRAGMA table_info(bot_conversations)").all();
+  if (!conversationColumns.some((column) => column.name === "preferences_json")) {
+    await db.exec(
+      "ALTER TABLE bot_conversations ADD COLUMN preferences_json TEXT NOT NULL DEFAULT '{}'",
+    );
+  }
+  const botColumnsBeforeMigration = await db.prepare("PRAGMA table_info(bots)").all();
+  if (!botColumnsBeforeMigration.some((column) => column.name === "preferred_skills_json")) {
+    await db.exec("ALTER TABLE bots ADD COLUMN preferred_skills_json TEXT NOT NULL DEFAULT '[]'");
+  }
+  if (!botColumnsBeforeMigration.some((column) => column.name === "preferred_plugins_json")) {
+    await db.exec("ALTER TABLE bots ADD COLUMN preferred_plugins_json TEXT NOT NULL DEFAULT '[]'");
+  }
   if (requiresFtsBackfill) {
     await db.exec(`DELETE FROM bot_message_search;
       INSERT INTO bot_message_search(rowid, content)
@@ -131,14 +159,18 @@ export async function createBotStore(path: string) {
 
   const botColumns = `id, name, color, instructions, model, reasoning_effort AS reasoningEffort,
     service_tier AS serviceTier, runtime_mode AS runtimeMode,
+    preferred_skills_json AS preferredSkillsJson,
+    preferred_plugins_json AS preferredPluginsJson,
     created_at AS createdAt, updated_at AS updatedAt, deleted_at AS deletedAt`;
   const messageColumns = `id, conversation_id AS conversationId, seq, sender, bot_id AS botId,
     content, status, request_id AS requestId, reply_to_message_id AS replyToMessageId,
-    activity_json AS activityJson, runtime_json AS runtimeJson, created_at AS createdAt`;
+    activity_json AS activityJson, runtime_json AS runtimeJson,
+    attachments_json AS attachmentsJson, skills_json AS skillsJson, created_at AS createdAt`;
   const joinedMessageColumns = `m.id, m.conversation_id AS conversationId, m.seq,
     m.sender, m.bot_id AS botId, m.content, m.status, m.request_id AS requestId,
     m.reply_to_message_id AS replyToMessageId, m.activity_json AS activityJson,
-    m.runtime_json AS runtimeJson,
+    m.runtime_json AS runtimeJson, m.attachments_json AS attachmentsJson,
+    m.skills_json AS skillsJson,
     m.created_at AS createdAt`;
   const parseMessage = (row: Record<string, unknown>) =>
     BotMessageSchema.parse({
@@ -148,6 +180,12 @@ export async function createBotStore(path: string) {
         : undefined,
       runtime: row.runtimeJson
         ? BotMessageRuntimeSchema.parse(JSON.parse(String(row.runtimeJson)))
+        : undefined,
+      attachments: row.attachmentsJson
+        ? PromptAttachmentSummarySchema.array().parse(JSON.parse(String(row.attachmentsJson)))
+        : undefined,
+      skills: row.skillsJson
+        ? PromptSkillSchema.array().parse(JSON.parse(String(row.skillsJson)))
         : undefined,
     });
   const memoryColumns = `id, bot_id AS botId, content, source_message_id AS sourceMessageId,
@@ -163,6 +201,8 @@ export async function createBotStore(path: string) {
           model: row.model ?? undefined,
           reasoningEffort: row.reasoningEffort ?? undefined,
           serviceTier: row.serviceTier ?? undefined,
+          preferredSkills: JSON.parse(String(row.preferredSkillsJson ?? "[]")),
+          preferredPlugins: JSON.parse(String(row.preferredPluginsJson ?? "[]")),
         })
       : undefined;
     return bot && (includeDeleted || !bot.deletedAt) ? bot : undefined;
@@ -178,6 +218,8 @@ export async function createBotStore(path: string) {
         model: row.model ?? undefined,
         reasoningEffort: row.reasoningEffort ?? undefined,
         serviceTier: row.serviceTier ?? undefined,
+        preferredSkills: JSON.parse(String(row.preferredSkillsJson ?? "[]")),
+        preferredPlugins: JSON.parse(String(row.preferredPluginsJson ?? "[]")),
       }),
     );
   }
@@ -188,8 +230,9 @@ export async function createBotStore(path: string) {
     await db
       .prepare(`INSERT INTO bots
       (id, name, color, instructions, model, reasoning_effort, service_tier, runtime_mode,
+       preferred_skills_json, preferred_plugins_json,
        created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(
         id,
         input.name,
@@ -199,6 +242,8 @@ export async function createBotStore(path: string) {
         input.reasoningEffort ?? null,
         input.serviceTier ?? null,
         input.runtimeMode,
+        JSON.stringify(input.preferredSkills ?? []),
+        JSON.stringify(input.preferredPlugins ?? []),
         now,
         now,
       );
@@ -209,20 +254,31 @@ export async function createBotStore(path: string) {
     const current = await getBot(id);
     if (!current) return undefined;
     const next = { ...current, ...patch };
-    await db
-      .prepare(`UPDATE bots SET name = ?, color = ?, instructions = ?, model = ?,
-      reasoning_effort = ?, service_tier = ?, runtime_mode = ?, updated_at = ? WHERE id = ?`)
-      .run(
-        next.name,
-        next.color,
-        next.instructions,
-        next.model ?? null,
-        next.reasoningEffort ?? null,
-        next.serviceTier ?? null,
-        next.runtimeMode,
-        new Date().toISOString(),
-        id,
-      );
+    await db.transaction(async (tx) => {
+      await tx
+        .prepare(`UPDATE bots SET name = ?, color = ?, instructions = ?, model = ?,
+      reasoning_effort = ?, service_tier = ?, runtime_mode = ?,
+      preferred_skills_json = ?, preferred_plugins_json = ?, updated_at = ? WHERE id = ?`)
+        .run(
+          next.name,
+          next.color,
+          next.instructions,
+          next.model ?? null,
+          next.reasoningEffort ?? null,
+          next.serviceTier ?? null,
+          next.runtimeMode,
+          JSON.stringify(next.preferredSkills),
+          JSON.stringify(next.preferredPlugins),
+          new Date().toISOString(),
+          id,
+        );
+      if (next.name !== current.name) {
+        await tx
+          .prepare(`UPDATE bot_conversations SET name = ?
+          WHERE kind = 'direct' AND direct_bot_id = ? AND deleted_at IS NULL`)
+          .run(next.name, id);
+      }
+    })();
     return getBot(id);
   }
 
@@ -254,6 +310,7 @@ export async function createBotStore(path: string) {
     const row = await db
       .prepare(`SELECT id, kind, name, workspace_path AS workspacePath,
       direct_bot_id AS botId, default_bot_id AS defaultBotId,
+      preferences_json AS preferencesJson,
       created_at AS createdAt, updated_at AS updatedAt, deleted_at AS deletedAt
       FROM bot_conversations WHERE id = ?`)
       .get(id);
@@ -267,7 +324,11 @@ export async function createBotStore(path: string) {
           WHERE conversation_id = ? AND left_seq IS NULL ORDER BY position`)
               .all(id)
           ).map((member) => member.bot_id);
-    return BotConversationSchema.parse({ ...row, botIds: members });
+    return BotConversationSchema.parse({
+      ...row,
+      botIds: members,
+      preferences: JSON.parse(String(row.preferencesJson ?? "{}")),
+    });
   }
 
   async function listConversations(): Promise<BotConversation[]> {
@@ -366,6 +427,50 @@ export async function createBotStore(path: string) {
     return getConversation(id);
   }
 
+  async function updateConversationPreferences(
+    id: string,
+    patch: Partial<
+      Record<"model" | "reasoningEffort" | "serviceTier" | "runtimeMode", string | null>
+    >,
+  ): Promise<BotConversation | undefined> {
+    const current = await getConversation(id);
+    if (!current) return undefined;
+    if (current.kind !== "direct")
+      throw new Error("Only direct chats have conversation preferences.");
+    await db.transaction(async (tx) => {
+      const row = await tx
+        .prepare(`SELECT preferences_json FROM bot_conversations
+        WHERE id = ? AND deleted_at IS NULL`)
+        .get(id);
+      if (!row) throw new Error("Conversation not found.");
+      const preferences = BotConversationSchema.shape.preferences.parse(
+        JSON.parse(String(row.preferences_json)),
+      );
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === null && key !== "serviceTier")
+          delete preferences[key as keyof typeof preferences];
+        else if (value !== undefined) Object.assign(preferences, { [key]: value });
+      }
+      await tx
+        .prepare(`UPDATE bot_conversations SET preferences_json = ?, updated_at = ?
+        WHERE id = ?`)
+        .run(JSON.stringify(preferences), new Date().toISOString(), id);
+    })();
+    return getConversation(id);
+  }
+
+  async function resetConversationPreferences(id: string) {
+    const current = await getConversation(id);
+    if (!current) return undefined;
+    if (current.kind !== "direct")
+      throw new Error("Only direct chats have conversation preferences.");
+    await db
+      .prepare(`UPDATE bot_conversations SET preferences_json = '{}', updated_at = ?
+      WHERE id = ?`)
+      .run(new Date().toISOString(), id);
+    return getConversation(id);
+  }
+
   async function deleteConversation(id: string): Promise<boolean> {
     if (!(await getConversation(id))) return false;
     await db
@@ -426,6 +531,8 @@ export async function createBotStore(path: string) {
     content: string;
     requestId: string;
     botIds: string[];
+    attachments?: PromptAttachment[];
+    skills?: PromptSkill[];
   }) {
     const createdAt = new Date().toISOString();
     const userId = randomUUID();
@@ -447,8 +554,22 @@ export async function createBotStore(path: string) {
       await tx
         .prepare(`INSERT INTO bot_messages
         (id, conversation_id, seq, sender, bot_id, content, status, request_id,
-         reply_to_message_id, created_at) VALUES (?, ?, ?, 'user', NULL, ?, 'completed', ?, NULL, ?)`)
-        .run(userId, input.conversationId, firstSeq, input.content, input.requestId, createdAt);
+         reply_to_message_id, attachments_json, skills_json, created_at)
+         VALUES (?, ?, ?, 'user', NULL, ?, 'completed', ?, NULL, ?, ?, ?)`)
+        .run(
+          userId,
+          input.conversationId,
+          firstSeq,
+          input.content,
+          input.requestId,
+          input.attachments?.length
+            ? JSON.stringify(PromptAttachmentSummarySchema.array().parse(input.attachments))
+            : null,
+          input.skills?.length
+            ? JSON.stringify(PromptSkillSchema.array().parse(input.skills))
+            : null,
+          createdAt,
+        );
       for (const [index, botId] of input.botIds.entries()) {
         await tx
           .prepare(`INSERT INTO bot_messages
@@ -622,6 +743,23 @@ export async function createBotStore(path: string) {
       : undefined;
   }
 
+  async function getLatestThreadRuntime(conversationId: string, botId: string, threadId: string) {
+    const row = await db
+      .prepare(`SELECT runtime_json FROM bot_messages
+      WHERE conversation_id = ? AND sender = 'bot' AND bot_id = ?
+        AND runtime_json IS NOT NULL
+        AND json_extract(runtime_json, '$.threadId') = ?
+      ORDER BY seq DESC LIMIT 1`)
+      .get(conversationId, botId, threadId);
+    return row ? BotMessageRuntimeSchema.parse(JSON.parse(String(row.runtime_json))) : undefined;
+  }
+
+  async function resetThread(conversationId: string, botId: string) {
+    await db
+      .prepare("DELETE FROM bot_threads WHERE conversation_id = ? AND bot_id = ?")
+      .run(conversationId, botId);
+  }
+
   async function setThread(
     conversationId: string,
     botId: string,
@@ -697,6 +835,7 @@ export async function createBotStore(path: string) {
     getMemory,
     getMessage,
     getMessageByRequestId,
+    getLatestThreadRuntime,
     getThread,
     lastSequence,
     listBots,
@@ -707,12 +846,15 @@ export async function createBotStore(path: string) {
     listMessagesAfter,
     listReplies,
     readHistory,
+    resetConversationPreferences,
+    resetThread,
     resolveActivity,
     searchHistory,
     setMessageRuntime,
     setThread,
     updateBot,
     updateConversation,
+    updateConversationPreferences,
     updateMemory,
   };
 }

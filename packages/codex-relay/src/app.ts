@@ -2,6 +2,10 @@ import {
   ArchiveThreadResponseSchema,
   BotResponseSchema,
   BotConversationResponseSchema,
+  BotConversationRuntimeResponseSchema,
+  BotDefinitionResponseSchema,
+  UpdateBotDefinitionRequestSchema,
+  ListBotPluginsResponseSchema,
   BotMemoryResponseSchema,
   CreateBotConversationRequestSchema,
   CreateBotMemoryRequestSchema,
@@ -14,7 +18,9 @@ import {
   SendBotMessageRequestSchema,
   SendBotMessageResponseSchema,
   StopBotConversationResponseSchema,
+  ResetBotConversationContextResponseSchema,
   UpdateBotConversationRequestSchema,
+  UpdateBotConversationPreferencesRequestSchema,
   UpdateBotMemoryRequestSchema,
   UpdateBotRequestSchema,
   ChatMessageSchema,
@@ -94,6 +100,7 @@ import {
   type PendingInputRequestQuestion,
   type PromptAttachment,
   type PromptSkill,
+  type Bot,
   type ReasoningEffort,
   type RenameThreadRequest,
   type RegenerateThreadTitleResponse,
@@ -135,6 +142,7 @@ import {
   closeSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readFileSync,
   readSync,
@@ -144,7 +152,7 @@ import {
 } from "node:fs";
 import { mkdir, open, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { homedir, hostname } from "node:os";
+import { homedir, hostname, tmpdir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -175,6 +183,14 @@ import {
 import { readLatestContextWindowUsage } from "./context-window.js";
 import { createBotStore } from "./bot-store.js";
 import { createBotRuntime } from "./bot-runtime.js";
+import { listInstalledCodexPlugins } from "./plugin-discovery.js";
+import {
+  createBotDefinitionStore,
+  validateBotDefinitionDraft,
+  DefinitionConflictError,
+  type BotDefinition,
+  type BotDefinitionPatch,
+} from "./bot-definitions.js";
 import { generateTitleWithAppServer, selectTitleGenerationModel } from "./title-generation.js";
 import { codexRelayDataPath } from "./paths.js";
 import { relayDebugLog } from "./debug-log.js";
@@ -226,6 +242,7 @@ const defaultWebPreviewPorts = [3000, 3001, 5173, 4173, 8080, 19006];
 type AppOptions = {
   appServer?: CodexAppServerClient | null;
   botStorePath?: string;
+  botDefinitionPath?: string;
   codex?: CodexClient;
   pairing?: PairingOptions;
   preferences?: RuntimePreferencesStore;
@@ -361,7 +378,63 @@ export function createApp(options: AppOptions = {}) {
   const botStore = createBotStore(
     options.botStorePath ?? (process.env.VITEST ? ":memory:" : codexRelayDataPath("bot.sqlite")),
   );
-  const botRuntime = createBotRuntime(botStore, appServer);
+  const botDefinitions = createBotDefinitionStore(
+    options.botDefinitionPath ??
+      (options.botStorePath && options.botStorePath !== ":memory:"
+        ? `${options.botStorePath}.definitions`
+        : process.env.VITEST
+          ? mkdtempSync(join(tmpdir(), "codex-relay-bot-definitions-"))
+          : codexRelayDataPath("bot-definitions")),
+  );
+  const mirrorBotDefinition = async (
+    bot: Bot,
+    snapshot: { status: "valid" | "invalid"; definition: BotDefinition },
+  ) => {
+    if (snapshot.status === "valid") {
+      const definition = snapshot.definition;
+      const current = await (await botStore).getBot(bot.id);
+      if (!current) return;
+      const fields = [
+        "name",
+        "color",
+        "instructions",
+        "model",
+        "reasoningEffort",
+        "serviceTier",
+        "runtimeMode",
+      ] as const;
+      if (
+        fields.some((field) => current[field] !== definition[field]) ||
+        JSON.stringify(current.preferredSkills) !== JSON.stringify(definition.preferredSkills) ||
+        JSON.stringify(current.preferredPlugins) !== JSON.stringify(definition.preferredPlugins)
+      ) {
+        await (
+          await botStore
+        ).updateBot(bot.id, {
+          name: definition.name,
+          color: definition.color,
+          instructions: definition.instructions,
+          model: definition.model ?? null,
+          reasoningEffort: definition.reasoningEffort ?? null,
+          serviceTier: definition.serviceTier ?? null,
+          runtimeMode: definition.runtimeMode,
+          preferredSkills: definition.preferredSkills,
+          preferredPlugins: definition.preferredPlugins,
+        });
+      }
+    }
+  };
+  const readBotDefinition = (bot: Bot) =>
+    botDefinitions.synchronize(bot, (snapshot) => mirrorBotDefinition(bot, snapshot));
+  const botRuntime = createBotRuntime(botStore, appServer, async (bot) => {
+    const snapshot = await readBotDefinition(bot);
+    return {
+      bot: { ...bot, ...snapshot.definition },
+      revision: snapshot.status === "valid" ? snapshot.revision : undefined,
+      preferredSkills: snapshot.definition.preferredSkills,
+      preferredPlugins: snapshot.definition.preferredPlugins,
+    };
+  });
   const workspacePath = resolve(
     options.workspacePath ?? process.env.CODEX_RELAY_WORKSPACE_PATH ?? defaultWorkspacePath,
   );
@@ -709,7 +782,12 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.get(apiPaths.bots, async (c) => {
-    const bots = await (await botStore).listBots();
+    const bots = await Promise.all(
+      (await (await botStore).listBots()).map(async (bot) => {
+        await readBotDefinition(bot);
+        return (await (await botStore).getBot(bot.id))!;
+      }),
+    );
     return secureJson(
       c,
       options.pairing,
@@ -735,7 +813,19 @@ export function createApp(options: AppOptions = {}) {
         validationError(parsed.error),
         400,
       );
+    try {
+      validateBotDefinitionDraft(parsed.data);
+    } catch (error) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_definition", errorMessage(error)),
+        400,
+      );
+    }
     const bot = await (await botStore).createBot(parsed.data);
+    await botDefinitions.read(bot);
     return secureJson(
       c,
       options.pairing,
@@ -745,8 +835,29 @@ export function createApp(options: AppOptions = {}) {
     );
   });
 
+  app.get(apiPaths.botPlugins, async (c) => {
+    try {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        ListBotPluginsResponseSchema.parse({ plugins: await listInstalledCodexPlugins() }),
+      );
+    } catch (error) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("plugin_catalog_unavailable", errorMessage(error)),
+        503,
+      );
+    }
+  });
+
   app.get("/v1/bots/:botId", async (c) => {
-    const bot = await (await botStore).getBot(c.req.param("botId"));
+    const storedBot = await (await botStore).getBot(c.req.param("botId"));
+    if (storedBot) await readBotDefinition(storedBot);
+    const bot = storedBot ? await (await botStore).getBot(storedBot.id) : undefined;
     return secureJson(
       c,
       options.pairing,
@@ -767,6 +878,17 @@ export function createApp(options: AppOptions = {}) {
       secureSessionsByTokenHash,
       UpdateBotRequestSchema,
     );
+    if (
+      !parsed.success &&
+      parsed.error.issues.some((issue) => issue.path[0] === "expectedRevision")
+    )
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("revision_required", "Reload the BOT before editing its definition."),
+        428,
+      );
     if (!parsed.success)
       return secureJson(
         c,
@@ -775,7 +897,37 @@ export function createApp(options: AppOptions = {}) {
         validationError(parsed.error),
         400,
       );
-    const bot = await (await botStore).updateBot(c.req.param("botId"), parsed.data);
+    const storedBot = await (await botStore).getBot(c.req.param("botId"));
+    if (!storedBot)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "BOT not found."),
+        404,
+      );
+    try {
+      const { expectedRevision, ...patch } = parsed.data;
+      await botDefinitions.updateAndSynchronize(
+        storedBot,
+        patch as BotDefinitionPatch,
+        expectedRevision,
+        (snapshot) => mirrorBotDefinition(storedBot, snapshot),
+      );
+    } catch (error) {
+      const status = error instanceof DefinitionConflictError ? 409 : 400;
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError(
+          status === 409 ? "definition_conflict" : "invalid_definition",
+          errorMessage(error),
+        ),
+        status,
+      );
+    }
+    const bot = await (await botStore).getBot(storedBot.id);
     return secureJson(
       c,
       options.pairing,
@@ -787,6 +939,77 @@ export function createApp(options: AppOptions = {}) {
         : apiError("not_found", "BOT not found."),
       bot ? 200 : 404,
     );
+  });
+
+  app.get("/v1/bots/:botId/definition", async (c) => {
+    const bot = await (await botStore).getBot(c.req.param("botId"));
+    if (!bot)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "BOT not found."),
+        404,
+      );
+    const snapshot = await readBotDefinition(bot);
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      BotDefinitionResponseSchema.parse(snapshot),
+    );
+  });
+
+  app.put("/v1/bots/:botId/definition", async (c) => {
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      UpdateBotDefinitionRequestSchema,
+    );
+    if (!parsed.success)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        validationError(parsed.error),
+        400,
+      );
+    const bot = await (await botStore).getBot(c.req.param("botId"));
+    if (!bot)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "BOT not found."),
+        404,
+      );
+    try {
+      const snapshot = await botDefinitions.writeAndSynchronize(
+        bot,
+        parsed.data.content,
+        parsed.data.expectedRevision,
+        (snapshot) => mirrorBotDefinition(bot, snapshot),
+      );
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        BotDefinitionResponseSchema.parse(snapshot),
+      );
+    } catch (error) {
+      const status = error instanceof DefinitionConflictError ? 409 : 400;
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError(
+          status === 409 ? "definition_conflict" : "invalid_definition",
+          errorMessage(error),
+        ),
+        status,
+      );
+    }
   });
 
   app.delete("/v1/bots/:botId", async (c) => {
@@ -877,6 +1100,177 @@ export function createApp(options: AppOptions = {}) {
         ? BotConversationResponseSchema.parse({ conversation })
         : apiError("not_found", "Conversation not found."),
       conversation ? 200 : 404,
+    );
+  });
+
+  app.patch("/v1/bot-conversations/:conversationId/preferences", async (c) => {
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      UpdateBotConversationPreferencesRequestSchema,
+    );
+    if (!parsed.success)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        validationError(parsed.error),
+        400,
+      );
+    try {
+      const conversation = await (
+        await botStore
+      ).updateConversationPreferences(c.req.param("conversationId"), parsed.data);
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        conversation
+          ? BotConversationResponseSchema.parse({ conversation })
+          : apiError("not_found", "Conversation not found."),
+        conversation ? 200 : 404,
+      );
+    } catch (error) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_conversation", errorMessage(error)),
+        400,
+      );
+    }
+  });
+
+  app.post("/v1/bot-conversations/:conversationId/preferences/reset", async (c) => {
+    try {
+      const conversation = await (
+        await botStore
+      ).resetConversationPreferences(c.req.param("conversationId"));
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        conversation
+          ? BotConversationResponseSchema.parse({ conversation })
+          : apiError("not_found", "Conversation not found."),
+        conversation ? 200 : 404,
+      );
+    } catch (error) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_conversation", errorMessage(error)),
+        400,
+      );
+    }
+  });
+
+  app.get("/v1/bot-conversations/:conversationId/runtime", async (c) => {
+    const store = await botStore;
+    const conversation = await store.getConversation(c.req.param("conversationId"));
+    if (!conversation)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "Conversation not found."),
+        404,
+      );
+    const botId = conversation.botId ?? conversation.defaultBotId;
+    const bot = botId ? await store.getBot(botId) : undefined;
+    if (!bot)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("no_bot", "No active BOT is available."),
+        409,
+      );
+    const definition = await readBotDefinition(bot);
+    const prefs = conversation.preferences;
+    const modelOverridden = Boolean(prefs.model && prefs.model !== definition.definition.model);
+    const nextTier = Object.hasOwn(prefs, "serviceTier")
+      ? (prefs.serviceTier ?? undefined)
+      : modelOverridden
+        ? undefined
+        : definition.definition.serviceTier;
+    const next = {
+      botName: definition.definition.name,
+      instructions: definition.definition.instructions,
+      preferredSkills: definition.definition.preferredSkills,
+      preferredPlugins: definition.definition.preferredPlugins,
+      ...((prefs.model ?? definition.definition.model)
+        ? { requestedModel: prefs.model ?? definition.definition.model }
+        : {}),
+      ...((prefs.reasoningEffort ??
+      (modelOverridden ? undefined : definition.definition.reasoningEffort))
+        ? { reasoningEffort: prefs.reasoningEffort ?? definition.definition.reasoningEffort }
+        : {}),
+      ...(nextTier ? { serviceTier: nextTier } : {}),
+      runtimeMode: prefs.runtimeMode ?? definition.definition.runtimeMode,
+      definitionRevision: definition.status === "valid" ? definition.revision : undefined,
+    };
+    const thread = await store.getThread(conversation.id, bot.id);
+    const latest = thread
+      ? await store.getLatestThreadRuntime(conversation.id, bot.id, thread.threadId)
+      : undefined;
+    const running = botRuntime.getActiveRuntime(conversation.id);
+    const active =
+      conversation.kind === "direct" || !running
+        ? (running ?? latest)
+        : thread?.threadId && running.threadId === thread.threadId
+          ? running
+          : undefined;
+    const usage = thread ? readLatestContextWindowUsage({ threadId: thread.threadId }).usage : null;
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      BotConversationRuntimeResponseSchema.parse({
+        threadId: thread?.threadId ?? null,
+        runtimeState: botRuntime.getConversationState(conversation.id),
+        active,
+        next,
+        contextWindowUsage: usage,
+      }),
+    );
+  });
+
+  app.post("/v1/bot-conversations/:conversationId/reset-context", async (c) => {
+    const store = await botStore;
+    const conversation = await store.getConversation(c.req.param("conversationId"));
+    if (!conversation)
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("not_found", "Conversation not found."),
+        404,
+      );
+    if (conversation.kind !== "direct")
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_conversation", "Only direct BOT chats support context reset."),
+        400,
+      );
+    if (botRuntime.hasActiveConversation(conversation.id))
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("conversation_busy", "Wait for the current BOT reply."),
+        409,
+      );
+    await store.resetThread(conversation.id, conversation.botId!);
+    return secureJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      ResetBotConversationContextResponseSchema.parse({ conversation, reset: true }),
     );
   });
 
@@ -1060,6 +1454,84 @@ export function createApp(options: AppOptions = {}) {
         apiError("no_bot", "No active BOT is available for this message."),
         409,
       );
+    const attachments = parsed.data.attachments ?? [];
+    for (const attachment of attachments) {
+      if (attachment.path) {
+        const allowedPath = uploadedImagePathFromId(basename(attachment.path));
+        const canonicalDirectory = await realpath(imageAttachmentDirectory).catch(() => undefined);
+        const canonicalFile = allowedPath
+          ? await realpath(allowedPath).catch(() => undefined)
+          : undefined;
+        if (
+          !allowedPath ||
+          resolve(attachment.path) !== allowedPath ||
+          !canonicalDirectory ||
+          canonicalFile !== resolve(canonicalDirectory, basename(allowedPath)) ||
+          !(await stat(allowedPath)
+            .then(
+              (file) => file.isFile() && file.size > 0 && file.size <= IMAGE_ATTACHMENT_MAX_BYTES,
+            )
+            .catch(() => false))
+        ) {
+          return secureJson(
+            c,
+            options.pairing,
+            secureSessionsByTokenHash,
+            apiError("invalid_attachment", "Upload the image before sending it to a BOT."),
+            400,
+          );
+        }
+      } else if (!attachment.url?.startsWith("https://")) {
+        return secureJson(
+          c,
+          options.pairing,
+          secureSessionsByTokenHash,
+          apiError("invalid_attachment", "Image URL must use HTTPS."),
+          400,
+        );
+      }
+    }
+    const availableBotSkills = parsed.data.skills?.length
+      ? await listAvailableSkills({ workspacePath: conversation.workspacePath })
+      : [];
+    if (
+      parsed.data.skills?.some(
+        (skill) =>
+          !availableBotSkills.some(
+            (available) => available.name === skill.name && available.path === skill.path,
+          ),
+      )
+    ) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_skill", "Selected skill is unavailable in this workspace."),
+        400,
+      );
+    }
+    if (attachments.length && appServer?.listModels) {
+      const catalog = await appServer.listModels().catch(() => []);
+      for (const member of orderedBots) {
+        const definition = await readBotDefinition(member);
+        const modelName = conversation.preferences.model ?? definition.definition.model;
+        const selected = modelName
+          ? catalog.find((model) => model.model === modelName || model.id === modelName)
+          : catalog.find((model) => model.isDefault);
+        if (selected?.inputModalities && !selected.inputModalities.includes("image")) {
+          return secureJson(
+            c,
+            options.pairing,
+            secureSessionsByTokenHash,
+            apiError(
+              "unsupported_image",
+              `The selected model for ${member.name} does not accept images.`,
+            ),
+            400,
+          );
+        }
+      }
+    }
     let created;
     try {
       created = await store.appendUserWithReplies({
@@ -1067,6 +1539,8 @@ export function createApp(options: AppOptions = {}) {
         content: parsed.data.text,
         requestId: parsed.data.requestId,
         botIds: orderedBots.map((bot) => bot.id),
+        attachments,
+        skills: parsed.data.skills,
       });
     } catch (error) {
       const duplicate = await store.getMessageByRequestId(conversation.id, parsed.data.requestId);
@@ -8991,6 +9465,7 @@ function mapAppServerModel(model: AppServerModel) {
     displayName: model.displayName,
     description: model.description,
     isDefault: Boolean(model.isDefault),
+    inputModalities: model.inputModalities,
     defaultReasoningEffort: defaultReasoningEffort.success
       ? defaultReasoningEffort.data
       : undefined,

@@ -222,9 +222,17 @@ function TabLayout() {
                     gestureEnabled: true,
                   }}
                 />
+                <Stack.Screen
+                  name="bot-preview/[conversationId]"
+                  options={{ animation: "slide_from_right", gestureEnabled: true }}
+                />
                 <Stack.Screen name="bot/[botId]" options={{ animation: "slide_from_right" }} />
                 <Stack.Screen name="bot/new" options={{ animation: "slide_from_right" }} />
                 <Stack.Screen name="bot/[botId]/edit" options={{ animation: "slide_from_right" }} />
+                <Stack.Screen
+                  name="bot/[botId]/definition"
+                  options={{ animation: "slide_from_right" }}
+                />
                 <Stack.Screen
                   name="bot/[botId]/memory"
                   options={{ animation: "slide_from_right" }}

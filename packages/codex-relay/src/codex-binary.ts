@@ -86,6 +86,20 @@ export function resolveCodexSharedAppServerSpawn(
   };
 }
 
+export function resolveCodexPluginListSpawn(
+  input: CodexAppServerSpawnInput = {},
+): CodexAppServerSpawn {
+  const platform = input.platform ?? currentPlatform();
+  const executable = resolveCodexExecutable(input.env ?? process.env);
+  const isWindows = platform === "win32";
+  return {
+    command: executable.command,
+    args: [...executable.args, "plugin", "list", "--json"],
+    shell: isWindows && executable.explicit && shouldUseWindowsShell(executable.command),
+    windowsHide: isWindows,
+  };
+}
+
 export function resolveCodexSharedAppServerRemoteAddress(
   platform: CodexSpawnPlatform = currentPlatform(),
 ) {

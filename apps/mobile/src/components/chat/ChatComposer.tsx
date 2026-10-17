@@ -230,6 +230,7 @@ export const ChatComposer = memo(function ChatComposer({
   focusRequestKey,
   focusRecoveryKey,
   inputEditable,
+  placeholder,
   isAttachingImage,
   isRunning,
   goal,
@@ -268,6 +269,7 @@ export const ChatComposer = memo(function ChatComposer({
   focusRequestKey?: number;
   focusRecoveryKey?: number | string;
   inputEditable?: boolean;
+  placeholder?: string;
   isAttachingImage: boolean;
   isRunning: boolean;
   goal?: ThreadGoal | null;
@@ -280,7 +282,7 @@ export const ChatComposer = memo(function ChatComposer({
   onAddPlanContext?: (context: string) => void;
   onAttachImage: () => Promise<void> | void;
   onCancel: () => void;
-  onCollaborationModeChange: (mode: ThreadCollaborationMode) => void;
+  onCollaborationModeChange?: (mode: ThreadCollaborationMode) => void;
   onImplementPlan?: () => void;
   onIgnoreInputRequest?: (request: PendingInputRequest) => void;
   onKeyboardLayoutFrozenChange?: (frozen: boolean) => void;
@@ -485,7 +487,7 @@ export const ChatComposer = memo(function ChatComposer({
   }
 
   function togglePlanMode() {
-    onCollaborationModeChange(isPlanMode ? "default" : "plan");
+    onCollaborationModeChange?.(isPlanMode ? "default" : "plan");
     closeAddSheet();
   }
 
@@ -1028,7 +1030,7 @@ export const ChatComposer = memo(function ChatComposer({
                 ? (disabledPlaceholder ?? "Connect to the Codex Relay server first")
                 : isPlanMode
                   ? PLAN_COMPOSER_PLACEHOLDER
-                  : DEFAULT_COMPOSER_PLACEHOLDER
+                  : (placeholder ?? DEFAULT_COMPOSER_PLACEHOLDER)
             }
             placeholderTextColor={theme.textSecondary}
             scrollEnabled
@@ -1114,14 +1116,16 @@ export const ChatComposer = memo(function ChatComposer({
           disabled={isAttachBusy}
           onPress={attachFromSheet}
         />
-        <SheetActionRow
-          accessibilityLabel={isPlanMode ? "Turn off Plan mode" : "Turn on Plan mode"}
-          icon="controls"
-          title="Plan mode"
-          subtitle={isPlanMode ? "Plan first, then wait" : "Ask Codex to plan before editing"}
-          selected={isPlanMode}
-          onPress={togglePlanMode}
-        />
+        {onCollaborationModeChange ? (
+          <SheetActionRow
+            accessibilityLabel={isPlanMode ? "Turn off Plan mode" : "Turn on Plan mode"}
+            icon="controls"
+            title="Plan mode"
+            subtitle={isPlanMode ? "Plan first, then wait" : "Ask Codex to plan before editing"}
+            selected={isPlanMode}
+            onPress={togglePlanMode}
+          />
+        ) : null}
         <View style={styles.sheetSection}>
           <Text style={[styles.sheetSectionTitle, { color: theme.textSecondary }]}>
             Usage limits

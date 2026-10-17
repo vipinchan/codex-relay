@@ -95,6 +95,10 @@ export const RuntimePreferencesResponseSchema = z.object({
   workspacePath: z.string().trim().min(1).optional(),
 });
 
+const BotCapabilityNamesSchema = z
+  .array(z.string().trim().min(1).max(500))
+  .max(100)
+  .refine((names) => new Set(names).size === names.length, "Capability names must be unique.");
 export const BotSchema = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
@@ -104,10 +108,52 @@ export const BotSchema = z.object({
   reasoningEffort: ReasoningEffortSchema.optional(),
   serviceTier: z.string().trim().min(1).optional(),
   runtimeMode: RuntimeModeSchema.default("default"),
+  preferredSkills: BotCapabilityNamesSchema.default([]),
+  preferredPlugins: BotCapabilityNamesSchema.default([]),
   runtimeState: z.enum(["idle", "queued", "running"]).optional(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
   deletedAt: IsoDateTimeSchema.nullable(),
+});
+export const BotDefinitionSchema = BotSchema.pick({
+  name: true,
+  color: true,
+  instructions: true,
+  model: true,
+  reasoningEffort: true,
+  serviceTier: true,
+  runtimeMode: true,
+  preferredSkills: true,
+  preferredPlugins: true,
+})
+  .extend({
+    schemaVersion: z.literal(1),
+    botId: BotSchema.shape.id,
+    preferredSkills: BotCapabilityNamesSchema,
+    preferredPlugins: BotCapabilityNamesSchema,
+  })
+  .strict();
+export const BotDefinitionResponseSchema = z.object({
+  definition: BotDefinitionSchema,
+  content: z.string(),
+  revision: z.string(),
+  path: z.string(),
+  status: z.enum(["valid", "invalid"]),
+  error: z.string().optional(),
+});
+export const UpdateBotDefinitionRequestSchema = z.object({
+  content: z.string().max(128_000),
+  expectedRevision: z.string().min(1),
+});
+export const ListBotPluginsResponseSchema = z.object({
+  plugins: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      description: z.string().optional(),
+      version: z.string().optional(),
+    }),
+  ),
 });
 
 export const CreateBotRequestSchema = BotSchema.pick({
@@ -118,11 +164,16 @@ export const CreateBotRequestSchema = BotSchema.pick({
   reasoningEffort: true,
   serviceTier: true,
   runtimeMode: true,
+  preferredSkills: true,
+  preferredPlugins: true,
 });
 export const UpdateBotRequestSchema = CreateBotRequestSchema.partial().extend({
   model: BotSchema.shape.model.nullable(),
   reasoningEffort: BotSchema.shape.reasoningEffort.nullable(),
   serviceTier: BotSchema.shape.serviceTier.nullable(),
+  expectedRevision: z.string().min(1),
+  preferredSkills: BotCapabilityNamesSchema.optional(),
+  preferredPlugins: BotCapabilityNamesSchema.optional(),
 });
 export const BotResponseSchema = z.object({ bot: BotSchema });
 export const ListBotsResponseSchema = z.object({ bots: z.array(BotSchema) });
@@ -135,6 +186,14 @@ export const BotConversationSchema = z.object({
   botId: z.string().uuid().nullable(),
   botIds: z.array(z.string().uuid()),
   defaultBotId: z.string().uuid().nullable(),
+  preferences: z
+    .object({
+      model: z.string().trim().min(1).optional(),
+      reasoningEffort: ReasoningEffortSchema.optional(),
+      serviceTier: z.string().trim().min(1).nullable().optional(),
+      runtimeMode: RuntimeModeSchema.optional(),
+    })
+    .default({}),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
   deletedAt: IsoDateTimeSchema.nullable(),
@@ -155,16 +214,29 @@ export const UpdateBotConversationRequestSchema = z.object({
   botIds: z.array(z.string().uuid()).min(1).optional(),
   defaultBotId: z.string().uuid().optional(),
 });
+export const UpdateBotConversationPreferencesRequestSchema = z.object({
+  model: z.string().trim().min(1).nullable().optional(),
+  reasoningEffort: ReasoningEffortSchema.nullable().optional(),
+  serviceTier: z.string().trim().min(1).nullable().optional(),
+  runtimeMode: RuntimeModeSchema.nullable().optional(),
+});
 export const BotConversationResponseSchema = z.object({ conversation: BotConversationSchema });
 export const ListBotConversationsResponseSchema = z.object({
   conversations: z.array(BotConversationSchema),
 });
 
 export const BotMessageRuntimeSchema = z.object({
+  threadId: z.string().optional(),
+  botName: z.string().optional(),
+  instructions: z.string().optional(),
+  preferredSkills: z.array(z.string()).optional(),
+  preferredPlugins: z.array(z.string()).optional(),
   requestedModel: z.string().trim().min(1).optional(),
   resolvedModel: z.string().trim().min(1).optional(),
   reasoningEffort: ReasoningEffortSchema.optional(),
   serviceTier: z.string().trim().min(1).optional(),
+  runtimeMode: RuntimeModeSchema.optional(),
+  definitionRevision: z.string().optional(),
 });
 export const BotMessageSchema = z.object({
   id: z.string().uuid(),
@@ -179,11 +251,34 @@ export const BotMessageSchema = z.object({
   createdAt: IsoDateTimeSchema,
   activity: z.lazy(() => ChatMessageSchema).optional(),
   runtime: BotMessageRuntimeSchema.optional(),
+  attachments: z.lazy(() => z.array(PromptAttachmentSummarySchema).max(6)).optional(),
+  skills: z.lazy(() => z.array(PromptSkillSchema).max(12)).optional(),
 });
-export const SendBotMessageRequestSchema = z.object({
-  requestId: z.string().trim().min(1).max(120),
-  text: z.string().trim().min(1).max(100_000),
-  mentionBotIds: z.array(z.string().uuid()).optional(),
+export const SendBotMessageRequestSchema = z
+  .object({
+    requestId: z.string().trim().min(1).max(120),
+    text: z.string().trim().max(100_000),
+    attachments: z.lazy(() => z.array(PromptAttachmentSchema).max(6)).optional(),
+    skills: z.lazy(() => z.array(PromptSkillSchema).max(12)).optional(),
+    mentionBotIds: z.array(z.string().uuid()).optional(),
+  })
+  .refine((input) => input.text.length > 0 || Boolean(input.attachments?.length), {
+    message: "A message needs text or an image.",
+    path: ["text"],
+  });
+export const BotConversationRuntimeResponseSchema = z.object({
+  threadId: z.string().nullable(),
+  runtimeState: z.enum(["idle", "queued", "running"]),
+  active: BotMessageRuntimeSchema.optional(),
+  next: BotMessageRuntimeSchema,
+  contextWindowUsage: z
+    .lazy(() => ContextWindowUsageSchema)
+    .nullable()
+    .optional(),
+});
+export const ResetBotConversationContextResponseSchema = z.object({
+  conversation: BotConversationSchema,
+  reset: z.literal(true),
 });
 export const SendBotMessageResponseSchema = z.object({
   message: BotMessageSchema,
@@ -225,6 +320,9 @@ export const BotMemoryResponseSchema = z.object({ memory: BotMemorySchema });
 export const ListBotMemoriesResponseSchema = z.object({ memories: z.array(BotMemorySchema) });
 
 export type Bot = z.infer<typeof BotSchema>;
+export type BotDefinition = z.infer<typeof BotDefinitionSchema>;
+export type BotDefinitionResponse = z.infer<typeof BotDefinitionResponseSchema>;
+export type ListBotPluginsResponse = z.infer<typeof ListBotPluginsResponseSchema>;
 export type BotConversation = z.infer<typeof BotConversationSchema>;
 export type BotMessage = z.infer<typeof BotMessageSchema>;
 export type BotMessageRuntime = z.infer<typeof BotMessageRuntimeSchema>;
@@ -258,6 +356,7 @@ export const CodexModelSchema = z.object({
   displayName: z.string().min(1),
   description: z.string().optional(),
   isDefault: z.boolean().default(false),
+  inputModalities: z.array(z.string()).optional(),
   defaultReasoningEffort: ReasoningEffortSchema.optional(),
   supportedReasoningEfforts: z.array(ReasoningEffortSchema).default([]),
   reasoningEffortOptions: z
@@ -1260,6 +1359,8 @@ export const apiPaths = {
     `/v1/attachments/images/${encodeURIComponent(attachmentId)}`,
   bots: "/v1/bots",
   bot: (botId: string) => `/v1/bots/${encodeURIComponent(botId)}`,
+  botDefinition: (botId: string) => `/v1/bots/${encodeURIComponent(botId)}/definition`,
+  botPlugins: "/v1/bots/plugins",
   botHistory: (botId: string) => `/v1/bots/${encodeURIComponent(botId)}/history`,
   botMemories: (botId: string) => `/v1/bots/${encodeURIComponent(botId)}/memories`,
   botMemory: (botId: string, memoryId: string) =>
@@ -1267,6 +1368,14 @@ export const apiPaths = {
   botConversations: "/v1/bot-conversations",
   botConversation: (conversationId: string) =>
     `/v1/bot-conversations/${encodeURIComponent(conversationId)}`,
+  botConversationPreferences: (conversationId: string) =>
+    `/v1/bot-conversations/${encodeURIComponent(conversationId)}/preferences`,
+  botConversationPreferencesReset: (conversationId: string) =>
+    `/v1/bot-conversations/${encodeURIComponent(conversationId)}/preferences/reset`,
+  botConversationRuntime: (conversationId: string) =>
+    `/v1/bot-conversations/${encodeURIComponent(conversationId)}/runtime`,
+  botConversationContextReset: (conversationId: string) =>
+    `/v1/bot-conversations/${encodeURIComponent(conversationId)}/reset-context`,
   botMessages: (conversationId: string) =>
     `/v1/bot-conversations/${encodeURIComponent(conversationId)}/messages`,
   botStop: (conversationId: string) =>

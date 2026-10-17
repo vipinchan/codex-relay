@@ -23,7 +23,7 @@ describe("BOT editor configuration", () => {
     });
   });
 
-  it("omits undefined reasoning effort and service tier when model is set", () => {
+  it("clears stale reasoning and service tier overrides when model is changed", () => {
     const payload = botUpdatePayload({
       name: "A",
       color: "#4778d9",
@@ -39,9 +39,20 @@ describe("BOT editor configuration", () => {
       instructions: "",
       model: "GPT-6-Luna",
       reasoningEffort: "medium",
+      serviceTier: null,
       runtimeMode: "default",
     });
-    expect(payload).not.toHaveProperty("serviceTier");
+    expect(
+      botUpdatePayload({
+        name: "A",
+        color: "#4778d9",
+        instructions: "",
+        model: "new-model",
+        reasoningEffort: undefined,
+        serviceTier: undefined,
+        runtimeMode: "default",
+      }),
+    ).toMatchObject({ reasoningEffort: null, serviceTier: null });
   });
 
   it("keeps saved model settings while the catalog is unavailable, then identifies a removed model", () => {

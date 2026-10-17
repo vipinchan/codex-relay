@@ -8,6 +8,72 @@ import { createBotRuntime } from "../src/bot-runtime.js";
 import type { CodexAppServerClient, AppServerRequest } from "../src/app-server.js";
 
 describe("BOT storage", () => {
+  it("merges concurrent direct chat preference updates and preserves explicit standard tier", async () => {
+    const store = await createBotStore(":memory:");
+    const bot = await store.createBot({
+      name: "A",
+      color: "#112233",
+      instructions: "",
+      runtimeMode: "default",
+      serviceTier: "fast",
+    });
+    const conversation = await store.createConversation({
+      kind: "direct",
+      botId: bot.id,
+      workspacePath: "/tmp",
+    });
+    await Promise.all([
+      store.updateConversationPreferences(conversation.id, { model: "custom-model" }),
+      store.updateConversationPreferences(conversation.id, { serviceTier: null }),
+    ]);
+    expect((await store.getConversation(conversation.id))?.preferences).toEqual({
+      model: "custom-model",
+      serviceTier: null,
+    });
+    expect((await store.resetConversationPreferences(conversation.id))?.preferences).toEqual({});
+  });
+
+  it("finds the current thread snapshot beyond recent activity rows", async () => {
+    const store = await createBotStore(":memory:");
+    const bot = await store.createBot({
+      name: "A",
+      color: "#112233",
+      instructions: "",
+      runtimeMode: "default",
+    });
+    const conversation = await store.createConversation({
+      kind: "direct",
+      botId: bot.id,
+      workspacePath: "/tmp",
+    });
+    const sent = await store.appendUserWithReplies({
+      conversationId: conversation.id,
+      content: "Hi",
+      requestId: "first",
+      botIds: [bot.id],
+    });
+    await store.setMessageRuntime(sent.replies[0]!.id, {
+      threadId: "thread-current",
+      botName: "A",
+      runtimeMode: "default",
+      definitionRevision: "revision-1",
+    });
+    await store.completeMessage(sent.replies[0]!.id, "Hello", "completed");
+    for (let index = 0; index < 35; index += 1) {
+      await store.appendMessage({
+        conversationId: conversation.id,
+        sender: "status",
+        content: `activity ${index}`,
+      });
+    }
+    expect(
+      await store.getLatestThreadRuntime(conversation.id, bot.id, "thread-current"),
+    ).toMatchObject({ definitionRevision: "revision-1" });
+    expect(
+      await store.getLatestThreadRuntime(conversation.id, bot.id, "thread-reset"),
+    ).toBeUndefined();
+  });
+
   it("atomically stores replies, indexes completed text and interrupts old runs on restart", async () => {
     const directory = await mkdtemp(join(tmpdir(), "relay-bot-store-"));
     try {
@@ -113,7 +179,7 @@ describe("BOT storage", () => {
     const runtime = createBotRuntime(Promise.resolve(store), appServer);
     runtime.schedule(aChat, a, own.message, own.replies[0]!);
     await waitFor(async () => (await store.getMessage(own.replies[0]!.id))?.status === "completed");
-    expect((threadStart?.dynamicTools as Array<{ name: string }>).map((tool) => tool.name)).toEqual(
+    expect((threadStart!.dynamicTools as Array<{ name: string }>).map((tool) => tool.name)).toEqual(
       ["bot_history_search", "bot_history_read"],
     );
     requestHandler!({

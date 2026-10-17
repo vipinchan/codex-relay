@@ -6,6 +6,8 @@ import { firstReachablePairingUrl } from "./pairing-reachability";
 import {
   ArchiveThreadResponseSchema,
   BotConversationResponseSchema,
+  BotConversationRuntimeResponseSchema,
+  BotDefinitionResponseSchema,
   BotMemoryResponseSchema,
   BotResponseSchema,
   CreateBotConversationRequestSchema,
@@ -21,6 +23,7 @@ import {
   ListBotMemoriesResponseSchema,
   ListBotMessagesResponseSchema,
   ListBotsResponseSchema,
+  ListBotPluginsResponseSchema,
   ListQueuedThreadInputsResponseSchema,
   ListSkillsResponseSchema,
   ListThreadsResponseSchema,
@@ -39,6 +42,7 @@ import {
   ResolveApprovalResponseSchema,
   RewindThreadRequestSchema,
   RuntimePreferencesResponseSchema,
+  ResetBotConversationContextResponseSchema,
   RunThreadResponseSchema,
   StatusResponseSchema,
   SubmitThreadInputResponseSchema,
@@ -49,6 +53,8 @@ import {
   RegisterPushNotificationRequestSchema,
   UpdateThreadGoalRequestSchema,
   UpdateBotConversationRequestSchema,
+  UpdateBotConversationPreferencesRequestSchema,
+  UpdateBotDefinitionRequestSchema,
   UpdateBotMemoryRequestSchema,
   UpdateBotRequestSchema,
   UpdateWorkspaceFileContentRequestSchema,
@@ -67,6 +73,8 @@ import {
   type BotConversation,
   type BotMemory,
   type BotMessage,
+  type PromptAttachment,
+  type PromptSkill,
   type CheckoutWorkspaceBranchRequest,
   type CommitPushWorkspaceRequest,
   type CreateThreadRequest,
@@ -153,6 +161,7 @@ const skillsRequestTimeoutMs = 8000;
 const clientSessionIdStorageKey = "codex-relay.client-session-id";
 const legacyClientTokenExpiresAtStorageKey = "codex-relay.client-token-expires-at";
 const clientTokenStorageKey = "codex-relay.client-token";
+const pairingIdentityStorageKey = "codex-relay.pairing-identity";
 const pairingConnectTimeoutMs = 2500;
 const streamRequestTimeoutMs = 10 * 60 * 1000;
 const terminalStreamRequestTimeoutMs = 24 * 60 * 60 * 1000;
@@ -234,6 +243,7 @@ export function codexRelayImageRequestHeaders() {
 
 export function signOutCodexRelaySession() {
   storage.remove(clientTokenStorageKey);
+  storage.remove(pairingIdentityStorageKey);
   storage.remove(legacyClientTokenExpiresAtStorageKey);
   clearSecureSession();
   clearCodexRelayServerUrlState();
@@ -543,7 +553,17 @@ export async function getVersion(): Promise<VersionResponse> {
 }
 
 export type BotDraft = Pick<Bot, "name" | "color" | "instructions"> &
-  Partial<Pick<Bot, "model" | "reasoningEffort" | "serviceTier" | "runtimeMode">>;
+  Partial<
+    Pick<
+      Bot,
+      | "model"
+      | "reasoningEffort"
+      | "serviceTier"
+      | "runtimeMode"
+      | "preferredSkills"
+      | "preferredPlugins"
+    >
+  >;
 
 export async function listBots(): Promise<Bot[]> {
   return (await request(apiPaths.bots, undefined, ListBotsResponseSchema.parse)).bots;
@@ -561,7 +581,7 @@ export async function createBot(draft: BotDraft): Promise<Bot> {
 
 export type BotPatch = Partial<Omit<BotDraft, "model" | "reasoningEffort" | "serviceTier">> & {
   [K in "model" | "reasoningEffort" | "serviceTier"]?: Bot[K] | null;
-};
+} & { expectedRevision: string };
 
 export async function updateBot(botId: string, draft: BotPatch): Promise<Bot> {
   return (
@@ -575,6 +595,25 @@ export async function updateBot(botId: string, draft: BotPatch): Promise<Bot> {
 
 export async function deleteBot(botId: string): Promise<void> {
   await request(apiPaths.bot(botId), { method: "DELETE" }, () => undefined);
+}
+
+export async function getBotDefinition(botId: string) {
+  return request(apiPaths.botDefinition(botId), undefined, BotDefinitionResponseSchema.parse);
+}
+
+export async function updateBotDefinition(
+  botId: string,
+  body: { content: string; expectedRevision: string },
+) {
+  return request(
+    apiPaths.botDefinition(botId),
+    { method: "PUT", body: encryptRequestPayload(UpdateBotDefinitionRequestSchema.parse(body)) },
+    BotDefinitionResponseSchema.parse,
+  );
+}
+
+export async function listBotPlugins() {
+  return request(apiPaths.botPlugins, undefined, ListBotPluginsResponseSchema.parse);
 }
 
 export async function listBotConversations(): Promise<BotConversation[]> {
@@ -591,6 +630,59 @@ export async function getBotConversation(conversationId: string): Promise<BotCon
       BotConversationResponseSchema.parse,
     )
   ).conversation;
+}
+
+export async function getBotConversationRuntime(conversationId: string) {
+  return request(
+    apiPaths.botConversationRuntime(conversationId),
+    undefined,
+    BotConversationRuntimeResponseSchema.parse,
+  );
+}
+
+export type BotConversationPreferencesPatch = {
+  model?: string | null;
+  reasoningEffort?: string | null;
+  serviceTier?: string | null;
+  runtimeMode?: Bot["runtimeMode"] | null;
+};
+
+export async function updateBotConversationPreferences(
+  conversationId: string,
+  preferences: BotConversationPreferencesPatch,
+): Promise<BotConversation> {
+  return (
+    await request(
+      apiPaths.botConversationPreferences(conversationId),
+      {
+        method: "PATCH",
+        body: encryptRequestPayload(
+          UpdateBotConversationPreferencesRequestSchema.parse(preferences),
+        ),
+      },
+      BotConversationResponseSchema.parse,
+    )
+  ).conversation;
+}
+
+export async function resetBotConversationPreferences(
+  conversationId: string,
+): Promise<BotConversation> {
+  return (
+    await request(
+      apiPaths.botConversationPreferencesReset(conversationId),
+      { method: "POST" },
+      BotConversationResponseSchema.parse,
+    )
+  ).conversation;
+}
+
+export async function resetBotConversationContext(conversationId: string) {
+  return request(
+    apiPaths.botConversationContextReset(conversationId),
+    { method: "POST" },
+    ResetBotConversationContextResponseSchema.parse,
+  );
 }
 
 export async function createBotConversation(
@@ -651,7 +743,13 @@ export async function listBotMessages(conversationId: string, cursor?: string) {
 
 export async function sendBotMessage(
   conversationId: string,
-  message: { requestId: string; text: string; mentionBotIds?: string[] },
+  message: {
+    requestId: string;
+    text: string;
+    mentionBotIds?: string[];
+    attachments?: PromptAttachment[];
+    skills?: PromptSkill[];
+  },
 ): Promise<{ message: BotMessage; replies: BotMessage[] }> {
   return request(
     apiPaths.botMessages(conversationId),
@@ -1520,7 +1618,16 @@ function requestHeaders(
 function saveSession(serverUrl: string, clientToken: string) {
   setCodexRelayServerUrl(serverUrl);
   storage.set(clientTokenStorageKey, clientToken);
+  storage.set(pairingIdentityStorageKey, createUuidV4());
   storage.remove(legacyClientTokenExpiresAtStorageKey);
+}
+
+export function getCodexRelayPairingIdentity() {
+  const existing = storage.getString(pairingIdentityStorageKey);
+  if (existing) return existing;
+  const identity = createUuidV4();
+  storage.set(pairingIdentityStorageKey, identity);
+  return identity;
 }
 
 export function getClientSessionId() {

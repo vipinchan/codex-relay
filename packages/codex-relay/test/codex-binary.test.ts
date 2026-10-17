@@ -4,10 +4,22 @@ import { sep } from "node:path";
 import {
   resolveCodexAppServerMode,
   resolveCodexAppServerSpawn,
+  resolveCodexPluginListSpawn,
   resolveCodexSharedAppServerSpawn,
 } from "../src/codex-binary.js";
 
 describe("Codex app-server spawn resolution", () => {
+  it("uses the configured Codex CLI for installed plugin metadata", () => {
+    expect(
+      resolveCodexPluginListSpawn({ env: { CODEX_BIN: "/tmp/codex" }, platform: "darwin" }),
+    ).toEqual({
+      command: "/tmp/codex",
+      args: ["plugin", "list", "--json"],
+      shell: false,
+      windowsHide: false,
+    });
+  });
+
   it("defaults to a shared socket with startup fallback on macOS", () => {
     // Given: macOS with no explicit app-server mode.
     // When: the relay resolves its startup mode.

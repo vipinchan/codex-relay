@@ -167,6 +167,7 @@ export type AppServerModel = {
   defaultReasoningEffort?: string;
   supportedReasoningEfforts?: Array<{ reasoningEffort: string; description?: string }>;
   additionalSpeedTiers?: string[];
+  inputModalities?: string[];
   serviceTiers?: Array<{ id: string; name: string; description?: string }>;
 };
 
