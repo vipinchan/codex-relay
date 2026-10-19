@@ -226,6 +226,7 @@ export const ChatComposer = memo(function ChatComposer({
   contextWindowUsage,
   disabled,
   disabledPlaceholder,
+  enableFileMentions = true,
   footer,
   focusRequestKey,
   focusRecoveryKey,
@@ -265,6 +266,7 @@ export const ChatComposer = memo(function ChatComposer({
   contextWindowUsage?: ContextWindowUsage;
   disabled: boolean;
   disabledPlaceholder?: string;
+  enableFileMentions?: boolean;
   footer?: ReactNode;
   focusRequestKey?: number;
   focusRecoveryKey?: number | string;
@@ -362,7 +364,9 @@ export const ChatComposer = memo(function ChatComposer({
     skillsLoadState !== "idle" &&
     skillsLoadState !== "loading",
   );
-  const shouldFetchFileSuggestions = Boolean(fileMentionQuery !== undefined && !disabled);
+  const shouldFetchFileSuggestions = Boolean(
+    enableFileMentions && fileMentionQuery !== undefined && !disabled,
+  );
   const fileSuggestionsQuery = useQuery({
     enabled: shouldFetchFileSuggestions,
     queryFn: () => listWorkspaceFiles({ query: fileMentionQuery, workspacePath }),
@@ -370,7 +374,7 @@ export const ChatComposer = memo(function ChatComposer({
     staleTime: 10_000,
   });
   const visibleFiles = fileSuggestionsQuery.data?.files ?? [];
-  const shouldShowFileSuggestions = Boolean(fileMentionQuery !== undefined && !disabled);
+  const shouldShowFileSuggestions = shouldFetchFileSuggestions;
   const visibleSkills = useMemo(() => {
     if (skillMentionQuery === undefined) {
       return [];
@@ -654,7 +658,7 @@ export const ChatComposer = memo(function ChatComposer({
     if (removeSkillMentionFromTextChange(nativeDraftRef.current, draft)) {
       return;
     }
-    if (removeFileMentionFromTextChange(nativeDraftRef.current, draft)) {
+    if (enableFileMentions && removeFileMentionFromTextChange(nativeDraftRef.current, draft)) {
       return;
     }
     const nextRanges = nextSkillMentionRangesForTextChange(
@@ -662,11 +666,13 @@ export const ChatComposer = memo(function ChatComposer({
       draft,
       skillMentionRangesRef.current,
     );
-    const nextFileRanges = nextFileMentionRangesForTextChange(
-      nativeDraftRef.current,
-      draft,
-      fileMentionRangesRef.current,
-    );
+    const nextFileRanges = enableFileMentions
+      ? nextFileMentionRangesForTextChange(
+          nativeDraftRef.current,
+          draft,
+          fileMentionRangesRef.current,
+        )
+      : [];
     nativeDraftRef.current = draft;
     skillMentionRangesRef.current = nextRanges;
     fileMentionRangesRef.current = nextFileRanges;
@@ -674,7 +680,9 @@ export const ChatComposer = memo(function ChatComposer({
       uniqueSkills(nextRanges.map((candidate) => candidate.skill)),
       composerThreadId,
     );
-    setFileMentionQuery(activeFileMentionQuery(draft, inputSelection));
+    setFileMentionQuery(
+      enableFileMentions ? activeFileMentionQuery(draft, inputSelection) : undefined,
+    );
     setSkillMentionQuery(activeSkillMentionQuery(draft, inputSelection, nextRanges));
   }
 
@@ -691,14 +699,16 @@ export const ChatComposer = memo(function ChatComposer({
       ignoredMarkdownChangeRef.current = undefined;
     }
     nativeMarkdownRef.current = markdown;
-    syncFileMentionsFromMarkdown(markdown);
+    if (enableFileMentions) syncFileMentionsFromMarkdown(markdown);
     syncSkillMentionsFromMarkdown(markdown);
     setComposerDraft(markdown, composerThreadId);
   }
 
   function handleInputSelectionChange(selection: { end: number; start: number }) {
     setInputSelection(selection);
-    setFileMentionQuery(activeFileMentionQuery(nativeDraftRef.current, selection));
+    setFileMentionQuery(
+      enableFileMentions ? activeFileMentionQuery(nativeDraftRef.current, selection) : undefined,
+    );
     setSkillMentionQuery(
       activeSkillMentionQuery(nativeDraftRef.current, selection, skillMentionRangesRef.current),
     );

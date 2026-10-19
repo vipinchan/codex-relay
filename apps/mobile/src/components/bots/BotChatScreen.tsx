@@ -28,23 +28,15 @@ import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
-  createUuidV4,
   deleteBotConversation,
   getBotConversation,
   getCodexRelayServerUrl,
   listBotMessages,
   listBots,
-  sendBotMessage,
   stopBotConversation,
   updateBotConversation,
 } from "@/lib/codex-relay-api";
-import {
-  findMessageIndex,
-  mentionPayload,
-  mentionQuery,
-  mergeBotMessagePages,
-  removeMentionToken,
-} from "./bot-compose";
+import { findMessageIndex, mergeBotMessagePages } from "./bot-compose";
 import { BotComposer } from "./BotComposer";
 import { BotMessageRow } from "./BotMessageRow";
 import { BotDirectComposer } from "./BotDirectComposer";
@@ -56,8 +48,6 @@ const zh = (Intl.DateTimeFormat().resolvedOptions().locale || "en").toLowerCase(
 const tr = (cn: string, en: string) => (zh ? cn : en);
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : tr("操作失败", "Operation failed");
-
-type PendingSend = { requestId: string; text: string; mentionBotIds?: string[] };
 
 export function BotChatScreen({
   conversationId,
@@ -76,20 +66,14 @@ export function BotChatScreen({
   const sourceScrolledId = useRef<string | undefined>(undefined);
   const [showLatest, setShowLatest] = useState(false);
   const [sourceUnavailable, setSourceUnavailable] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [selectedMentions, setSelectedMentions] = useState<string[]>([]);
-  const [sheet, setSheet] = useState<"mentions" | "group" | undefined>();
+  const [sheet, setSheet] = useState<"group" | undefined>();
   const [groupName, setGroupName] = useState("");
   const [workspacePath, setWorkspacePath] = useState("");
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [defaultBotId, setDefaultBotId] = useState("");
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [pending, setPending] = useState<PendingSend>();
-  const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState("");
   const [savingGroup, setSavingGroup] = useState(false);
   const [stopping, setStopping] = useState(false);
-  const [mentionOpen, setMentionOpen] = useState(false);
   const [focused, setFocused] = useState(false);
 
   const conversationQuery = useQuery({
@@ -115,7 +99,6 @@ export function BotChatScreen({
   const bots = botsQuery.data ?? [];
   const directBot =
     conversation?.kind === "direct" ? bots.find((bot) => bot.id === conversation.botId) : undefined;
-  const members = conversation?.botIds ?? [];
   const messages = useMemo(
     () => mergeBotMessagePages(messagesQuery.data?.messages ?? [], olderMessages),
     [messagesQuery.data?.messages, olderMessages],
@@ -125,14 +108,6 @@ export function BotChatScreen({
   const activeReplyId = messages.find(
     (message) => message.sender === "bot" && message.status === "running",
   )?.id;
-  const matchingBots = (() => {
-    const query = mentionQuery(draft);
-    return query === null
-      ? []
-      : members
-          .map((id) => bots.find((bot) => bot.id === id))
-          .filter((bot): bot is Bot => !!bot && bot.name.toLocaleLowerCase().includes(query));
-  })();
   const markdownStyle = useMemo(
     () =>
       createAssistantMarkdownStyle(
@@ -173,10 +148,6 @@ export function BotChatScreen({
     if (atLatest.current) setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
-  function botName(botId: string | null) {
-    return bots.find((bot) => bot.id === botId)?.name ?? "BOT";
-  }
-
   useEffect(() => {
     if (!messageId || sourceStatus !== "found" || sourceScrolledId.current === messageId) return;
     const index = findMessageIndex(messages, messageId);
@@ -206,54 +177,6 @@ export function BotChatScreen({
     } finally {
       setLoadingOlder(false);
     }
-  }
-
-  async function submit(message?: PendingSend) {
-    if (sending || (pending && !message)) return;
-    const submitted = message ?? {
-      requestId: createUuidV4(),
-      text: draft.trim(),
-      mentionBotIds:
-        conversation?.kind === "group" ? mentionPayload(selectedMentions, members) : undefined,
-    };
-    if (!submitted.text) return;
-    setSending(true);
-    setSendError("");
-    setPending(submitted);
-    try {
-      await sendBotMessage(conversationId, submitted);
-      setPending(undefined);
-      setDraft((current) => (current.trim() === submitted.text ? "" : current));
-      if (draft.trim() === submitted.text) setSelectedMentions([]);
-      await queryClient.invalidateQueries({
-        queryKey: ["bot-messages", serverUrl, conversationId],
-      });
-      void queryClient.invalidateQueries({ queryKey: ["bot-conversations", serverUrl] });
-      if (atLatest.current) setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (error) {
-      setSendError(errorText(error));
-      // The same request ID is retained because the server may already be processing this turn.
-    } finally {
-      setSending(false);
-    }
-  }
-
-  function toggleMention(botId: string) {
-    setSelectedMentions((current) =>
-      current.includes(botId) ? current.filter((id) => id !== botId) : [...current, botId],
-    );
-  }
-
-  function selectMention(botId: string) {
-    setSelectedMentions((current) => (current.includes(botId) ? current : [...current, botId]));
-    setDraft((current) => removeMentionToken(current));
-    setMentionOpen(false);
-    setSheet(undefined);
-  }
-
-  function onDraftChange(text: string) {
-    setDraft(text);
-    setMentionOpen(conversation?.kind === "group" && mentionQuery(text) !== null);
   }
 
   function openGroupEditor(group: BotConversation) {
@@ -297,7 +220,6 @@ export function BotChatScreen({
         queryKey: ["bot-conversation", serverUrl, conversationId],
       });
       void queryClient.invalidateQueries({ queryKey: ["bot-conversations", serverUrl] });
-      setSelectedMentions((current) => current.filter((id) => memberIds.includes(id)));
       setSheet(undefined);
     } catch (error) {
       Alert.alert(tr("群设置保存失败", "Couldn’t save group"), errorText(error));
@@ -373,7 +295,7 @@ export function BotChatScreen({
           </Text>
           <Text numberOfLines={1} style={styles.headerSubtitle}>
             {conversation?.kind === "group"
-              ? `${members.length} BOT · ${conversation.workspacePath}`
+              ? `${conversation.botIds.length} BOT · ${conversation.workspacePath}`
               : (conversation?.workspacePath ?? tr("BOT 私聊", "Private BOT chat"))}
           </Text>
         </Pressable>
@@ -417,7 +339,7 @@ export function BotChatScreen({
           data={messages}
           keyExtractor={(message) => message.id}
           renderItem={({ item }) =>
-            conversation?.kind === "direct" ? (
+            conversation?.kind === "direct" || item.sender === "user" ? (
               <BotDirectMessageRow
                 message={item}
                 isActiveReply={item.id === activeReplyId}
@@ -532,47 +454,6 @@ export function BotChatScreen({
           </Pressable>
         ) : null}
 
-        {sendError && pending ? (
-          <View style={styles.retryBar}>
-            <Text numberOfLines={2} style={styles.retryError}>
-              {sendError}
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              disabled={sending}
-              onPress={() => void submit(pending)}
-            >
-              <Text style={styles.retryText}>{tr("重试", "Retry")}</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={sending}
-              onPress={() =>
-                Alert.alert(
-                  tr("放弃重试？", "Discard retry?"),
-                  tr(
-                    "之前的消息可能已送达。你可以先返回聊天记录查看。",
-                    "The earlier message may have been delivered. Check the chat before sending again.",
-                  ),
-                  [
-                    { text: tr("取消", "Cancel"), style: "cancel" },
-                    {
-                      text: tr("放弃", "Discard"),
-                      style: "destructive",
-                      onPress: () => {
-                        setPending(undefined);
-                        setSendError("");
-                        void messagesQuery.refetch();
-                      },
-                    },
-                  ],
-                )
-              }
-            >
-              <Text style={styles.discardText}>{tr("放弃", "Discard")}</Text>
-            </Pressable>
-          </View>
-        ) : null}
         {hasRunning ? (
           <View style={styles.progressRow}>
             <Text style={styles.progressHint}>
@@ -611,68 +492,17 @@ export function BotChatScreen({
               </Text>
             </Pressable>
           )
-        ) : (
+        ) : conversation?.kind === "group" ? (
           <BotComposer
+            key={`${serverUrl}:${conversationId}`}
             conversation={conversation}
             bots={bots}
-            draft={draft}
-            selectedMentions={selectedMentions}
-            matchingBots={matchingBots}
-            mentionOpen={mentionOpen}
-            sending={sending}
-            hasPending={!!pending}
-            onDraftChange={onDraftChange}
-            onToggleMention={toggleMention}
-            onSelectMention={selectMention}
-            onOpenMentions={() => setSheet("mentions")}
-            onSend={() => void submit()}
+            hasRunning={hasRunning}
+            onCancel={() => void stopReply()}
+            onSent={refreshMessagesAfterSend}
           />
-        )}
+        ) : null}
       </KeyboardAvoidingView>
-
-      <AppBottomSheet
-        title={tr("选择回复 BOT", "Choose responding BOTs")}
-        subtitle={tr(
-          "可多选；未选择时由默认 BOT 回复。",
-          "Select multiple BOTs. Without a selection, the default BOT responds.",
-        )}
-        visible={sheet === "mentions"}
-        onClose={() => setSheet(undefined)}
-      >
-        <SheetActionRow
-          accessibilityLabel={tr("默认 BOT", "Default BOT")}
-          icon="agentAtom"
-          title={tr("默认 BOT", "Default BOT")}
-          subtitle={botName(conversation?.defaultBotId ?? null)}
-          selected={!selectedMentions.length}
-          onPress={() => setSelectedMentions([])}
-        />
-        <SheetActionRow
-          accessibilityLabel={tr("@所有 BOT", "Mention all BOTs")}
-          icon="agentAtom"
-          title={tr("@所有 BOT", "@all BOTs")}
-          selected={selectedMentions.length === members.length && !!members.length}
-          onPress={() => setSelectedMentions([...members])}
-        />
-        {members.map((id) => (
-          <SheetActionRow
-            key={id}
-            accessibilityLabel={`@${botName(id)}`}
-            icon="agentAtom"
-            title={`@${botName(id)}`}
-            selected={selectedMentions.includes(id)}
-            trailing={<SheetSelectedDot selected={selectedMentions.includes(id)} />}
-            onPress={() => toggleMention(id)}
-          />
-        ))}
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setSheet(undefined)}
-          style={styles.primaryAction}
-        >
-          <Text style={styles.primaryText}>{tr("完成", "Done")}</Text>
-        </Pressable>
-      </AppBottomSheet>
 
       <AppBottomSheet
         title={tr("群设置", "Group settings")}
@@ -783,18 +613,6 @@ const styles = StyleSheet.create({
   progressHint: { color: "#85858B", fontSize: 11 },
   stopText: { color: "#FF8DA5", fontSize: 12, fontWeight: "700" },
   disabled: { opacity: 0.45 },
-  retryBar: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-    backgroundColor: "#2E1D23",
-    paddingHorizontal: 15,
-    paddingVertical: 9,
-  },
-  retryError: { color: "#FFB3C1", fontSize: 12, flex: 1 },
-  retryText: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  discardText: { color: "#C0A3AB", fontSize: 12 },
   loadMore: { alignItems: "center", paddingVertical: 8 },
   loadMoreText: { color: accent, fontSize: 13 },
   error: { color: "#FF8DA5", fontSize: 13, textAlign: "center", padding: 10 },

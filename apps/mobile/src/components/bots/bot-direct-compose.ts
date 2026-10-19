@@ -17,6 +17,7 @@ export type BotSubmission = {
   skills: PromptSkill[];
   attachmentIds: string[];
   draftText: string;
+  mentionBotIds?: string[];
 };
 
 export function botComposerKey(pairingIdentity: string, conversationId: string) {

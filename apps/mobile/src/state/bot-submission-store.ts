@@ -1,4 +1,4 @@
-import { PromptAttachmentSchema, PromptSkillSchema } from "codex-relay/api-schema";
+import { BotSchema, PromptAttachmentSchema, PromptSkillSchema } from "codex-relay/api-schema";
 import { createMMKV } from "react-native-mmkv";
 
 import type { BotSubmission } from "../components/bots/bot-direct-compose.js";
@@ -25,6 +25,9 @@ function parseSubmission(input: unknown): BotSubmission {
     attachmentIds: value.attachmentIds,
     attachments: PromptAttachmentSchema.array().max(6).parse(value.attachments),
     skills: PromptSkillSchema.array().max(12).parse(value.skills),
+    ...(value.mentionBotIds !== undefined
+      ? { mentionBotIds: BotSchema.shape.id.array().parse(value.mentionBotIds) }
+      : {}),
   };
 }
 
