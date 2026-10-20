@@ -23,11 +23,23 @@ export function BotAvatar({ bot, size = 48 }: { bot: Pick<Bot, "name" | "color">
     <View
       style={[
         styles.avatar,
-        { width: size, height: size, borderRadius: size * 0.31, backgroundColor: `${bot.color}28` },
+        {
+          width: size,
+          height: size,
+          borderRadius: size * 0.28,
+          backgroundColor: `${bot.color}28`,
+          borderColor: `${bot.color}40`,
+        },
       ]}
     >
-      <Text style={[styles.avatarText, { color: bot.color, fontSize: size * 0.43 }]}>
-        {bot.name.slice(0, 1).toUpperCase()}
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.avatarText,
+          { color: bot.color, fontSize: size * 0.43, lineHeight: size * 0.6 },
+        ]}
+      >
+        {Array.from(bot.name.trim())[0]?.toUpperCase() ?? "B"}
       </Text>
     </View>
   );
@@ -151,8 +163,13 @@ const styles = StyleSheet.create({
   backText: { fontFamily: Fonts.sansMedium, fontSize: 15 },
   headerTitle: { flex: 1, textAlign: "center", fontFamily: Fonts.sansSemiBold, fontSize: 17 },
   action: { width: 72, alignItems: "flex-end" },
-  avatar: { alignItems: "center", justifyContent: "center" },
-  avatarText: { fontFamily: Fonts.sansBold },
+  avatar: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    borderWidth: 1,
+  },
+  avatarText: { fontFamily: Fonts.sansBold, fontWeight: "700", textAlign: "center" },
   row: {
     minHeight: 74,
     borderRadius: 14,

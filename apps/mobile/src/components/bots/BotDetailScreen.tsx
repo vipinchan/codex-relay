@@ -2,9 +2,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Bot } from "codex-relay/api-schema";
 import { router } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
+import { WorkspaceMarkdownPreview } from "@/components/chat/workspace-preview/WorkspaceMarkdownPreview";
 import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
@@ -93,7 +94,25 @@ export function BotDetailScreen({ botId }: { botId: string }) {
   }
 
   return (
-    <BotPage title={bot?.name ?? "BOT"}>
+    <BotPage
+      title={botText("BOT 详情", "BOT profile")}
+      action={
+        bot ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={botText("编辑 BOT", "Edit BOT")}
+            accessibilityState={{ disabled: busy }}
+            disabled={busy}
+            onPress={() => router.push({ pathname: "/bot/[botId]/edit", params: { botId } })}
+            style={styles.editButton}
+          >
+            <Text style={[styles.editText, { color: theme.powerBlue }]}>
+              {botText("编辑", "Edit")}
+            </Text>
+          </Pressable>
+        ) : null
+      }
+    >
       {botsQuery.isLoading ? <ActivityIndicator color={theme.powerBlue} /> : null}
       {botsQuery.error ? <Text style={styles.error}>{botError(botsQuery.error)}</Text> : null}
       {!botsQuery.isLoading && !bot ? (
@@ -102,19 +121,33 @@ export function BotDetailScreen({ botId }: { botId: string }) {
         </Text>
       ) : null}
       {bot ? (
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.hero}>
-            <BotAvatar bot={bot} size={76} />
-            <Text style={[styles.name, { color: theme.text }]}>{bot.name}</Text>
-            <Text style={[styles.intro, { color: theme.textSecondary }]}>
-              {bot.instructions || botText("尚未设置角色说明", "No role instructions yet")}
-            </Text>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+          <View style={[styles.hero, { backgroundColor: theme.backgroundElement }]}>
+            <BotAvatar bot={bot} size={64} />
+            <View style={styles.identity}>
+              <Text style={[styles.identityLabel, { color: theme.textSecondary }]}>BOT</Text>
+              <Text numberOfLines={2} style={[styles.name, { color: theme.text }]}>
+                {bot.name}
+              </Text>
+            </View>
           </View>
           <BotPrimaryButton
             label={busy ? botText("打开中…", "Opening…") : botText("开始聊天", "Start chat")}
             disabled={busy}
             onPress={() => void openChat()}
           />
+          <Text style={[styles.section, { color: theme.textSecondaryStrong }]}>
+            {botText("角色简介", "About this BOT")}
+          </Text>
+          <View style={[styles.introCard, { backgroundColor: theme.backgroundElement }]}>
+            {bot.instructions.trim() ? (
+              <WorkspaceMarkdownPreview markdown={bot.instructions} />
+            ) : (
+              <Text style={[styles.emptyIntro, { color: theme.textSecondary }]}>
+                {botText("尚未设置角色说明", "No role instructions yet")}
+              </Text>
+            )}
+          </View>
           <Text style={[styles.section, { color: theme.textSecondaryStrong }]}>
             {botText("配置", "Configuration")}
           </Text>
@@ -186,11 +219,30 @@ function Info({ label, value, last }: { label: string; value: string; last?: boo
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingBottom: 40, gap: 8 },
-  hero: { alignItems: "center", paddingTop: 30, paddingBottom: 22, gap: 10 },
-  name: { fontFamily: Fonts.sansBold, fontSize: 27 },
-  intro: { textAlign: "center", fontSize: 13, lineHeight: 19, maxWidth: 320 },
-  section: { fontFamily: Fonts.sansSemiBold, fontSize: 13, marginTop: 24, marginBottom: 3 },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40, gap: 10 },
+  hero: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 18,
+    padding: 16,
+    gap: 16,
+    marginBottom: 2,
+  },
+  identity: { flex: 1, minWidth: 0, gap: 3 },
+  identityLabel: { fontSize: 11, lineHeight: 16, fontWeight: "600", letterSpacing: 1 },
+  name: { fontFamily: Fonts.sansBold, fontSize: 24, lineHeight: 32, fontWeight: "700" },
+  introCard: { borderRadius: 16, padding: 16 },
+  emptyIntro: { fontSize: 14, lineHeight: 21 },
+  editButton: { minWidth: 44, minHeight: 44, alignItems: "flex-end", justifyContent: "center" },
+  editText: { fontFamily: Fonts.sansSemiBold, fontSize: 15, fontWeight: "600" },
+  section: {
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 18,
+    marginBottom: 2,
+  },
   infoCard: { borderRadius: 14, paddingHorizontal: 14 },
   infoRow: {
     minHeight: 47,
