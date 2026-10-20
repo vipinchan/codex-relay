@@ -57,7 +57,6 @@ export function BotMessageRow({
           user ? styles.userBubble : status ? styles.statusBubble : styles.botBubble,
         ]}
       >
-        {!user && !status ? <Text style={styles.senderName}>{bot?.name ?? "BOT"}</Text> : null}
         {message.status === "running" ? (
           <View style={styles.running}>
             {isActiveReply ? <ActivityIndicator size="small" color={accent} /> : null}
@@ -152,7 +151,6 @@ const styles = StyleSheet.create({
   userBubble: { backgroundColor: "#3157B9", borderBottomRightRadius: 5 },
   botBubble: { backgroundColor: "#1C1C1E", borderBottomLeftRadius: 5, minWidth: 80 },
   statusBubble: { backgroundColor: "#151517", borderBottomLeftRadius: 5 },
-  senderName: { color: accent, fontSize: 11, fontFamily: Fonts.sansSemiBold, marginBottom: 4 },
   messageText: { color: "#fff", fontSize: 15, lineHeight: 21 },
   statusText: { color: "#A0A0A7", fontSize: 13 },
   messageFooter: {

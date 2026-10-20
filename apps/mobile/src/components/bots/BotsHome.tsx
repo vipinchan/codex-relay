@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
   },
   headerCopy: { gap: 4 },
-  heading: { fontFamily: Fonts.sansBold, fontSize: 30 },
+  heading: { fontFamily: Fonts.sansBold, fontSize: 30, lineHeight: 38, fontWeight: "700" },
   subheading: { fontFamily: Fonts.sans, fontSize: 13 },
   addButton: {
     width: 42,
