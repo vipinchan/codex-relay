@@ -51,84 +51,93 @@ export function BotMessageRow({
           <Text style={styles.senderInitial}>{(bot?.name ?? "B").slice(0, 1).toUpperCase()}</Text>
         </View>
       ) : null}
-      <View
-        style={[
-          styles.bubble,
-          user ? styles.userBubble : status ? styles.statusBubble : styles.botBubble,
-        ]}
-      >
-        {message.status === "running" ? (
-          <View style={styles.running}>
-            {isActiveReply ? <ActivityIndicator size="small" color={accent} /> : null}
-            <Text style={styles.runningText}>
-              {isActiveReply ? tr("正在回复…", "Responding…") : tr("等待回复…", "Queued…")}
-            </Text>
-          </View>
-        ) : null}
-        {message.content ? (
-          user || status ? (
-            <Text selectable style={[styles.messageText, status ? styles.statusText : null]}>
-              {message.content}
-            </Text>
-          ) : (
-            <EnrichedMarkdownText
-              allowFontScaling={false}
-              enableTaskListItemToggle={false}
-              flavor={ASSISTANT_MARKDOWN_FLAVOR}
-              markdown={message.content}
-              markdownStyle={markdownStyle}
-              maxFontSizeMultiplier={1}
-              selectable
-            />
-          )
-        ) : null}
-        {message.status === "failed" || message.status === "interrupted" ? (
-          <Text style={styles.failedText}>
-            {message.status === "failed"
-              ? tr("回复失败", "Reply failed")
-              : tr("回复中断", "Reply interrupted")}
+      <View style={styles.messageContent}>
+        {!user && !status ? (
+          <Text numberOfLines={1} style={styles.senderName}>
+            {bot?.name ?? "BOT"}
           </Text>
         ) : null}
-        {!user && !status && showModelInfo ? (
-          <Text style={styles.runtimeText}>
-            {runtime?.resolvedModel
-              ? tr(
-                  `已确认模型：${runtime.resolvedModel}`,
-                  `Confirmed model: ${runtime.resolvedModel}`,
-                )
-              : runtime?.requestedModel
-                ? tr(
-                    `请求模型：${runtime.requestedModel} · 运行时未返回`,
-                    `Requested: ${runtime.requestedModel} · runtime did not report`,
-                  )
-                : tr("运行时未返回模型", "Runtime did not report model")}
-          </Text>
-        ) : null}
-        <View style={styles.messageFooter}>
-          {!user && !status ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={tr("模型信息", "Model info")}
-              onPress={() => setShowModelInfo((current) => !current)}
-            >
-              <Text style={styles.copyText}>{tr("模型信息", "Model info")}</Text>
-            </Pressable>
+        <View
+          style={[
+            styles.bubble,
+            user ? styles.userBubble : status ? styles.statusBubble : styles.botBubble,
+          ]}
+        >
+          {message.status === "running" ? (
+            <View style={styles.running}>
+              {isActiveReply ? <ActivityIndicator size="small" color={accent} /> : null}
+              <Text style={styles.runningText}>
+                {isActiveReply ? tr("正在回复…", "Responding…") : tr("等待回复…", "Queued…")}
+              </Text>
+            </View>
           ) : null}
           {message.content ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={tr("复制消息", "Copy message")}
-              onPress={() => void Clipboard.setStringAsync(message.content).catch(() => undefined)}
-            >
-              <Text style={styles.copyText}>{tr("复制", "Copy")}</Text>
-            </Pressable>
+            user || status ? (
+              <Text selectable style={[styles.messageText, status ? styles.statusText : null]}>
+                {message.content}
+              </Text>
+            ) : (
+              <EnrichedMarkdownText
+                allowFontScaling={false}
+                enableTaskListItemToggle={false}
+                flavor={ASSISTANT_MARKDOWN_FLAVOR}
+                markdown={message.content}
+                markdownStyle={markdownStyle}
+                maxFontSizeMultiplier={1}
+                selectable
+              />
+            )
           ) : null}
-          <Text style={styles.timestamp}>
-            {new Date(message.createdAt).toLocaleTimeString(undefined, {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
+          {message.status === "failed" || message.status === "interrupted" ? (
+            <Text style={styles.failedText}>
+              {message.status === "failed"
+                ? tr("回复失败", "Reply failed")
+                : tr("回复中断", "Reply interrupted")}
+            </Text>
+          ) : null}
+          {!user && !status && showModelInfo ? (
+            <Text style={styles.runtimeText}>
+              {runtime?.resolvedModel
+                ? tr(
+                    `已确认模型：${runtime.resolvedModel}`,
+                    `Confirmed model: ${runtime.resolvedModel}`,
+                  )
+                : runtime?.requestedModel
+                  ? tr(
+                      `请求模型：${runtime.requestedModel} · 运行时未返回`,
+                      `Requested: ${runtime.requestedModel} · runtime did not report`,
+                    )
+                  : tr("运行时未返回模型", "Runtime did not report model")}
+            </Text>
+          ) : null}
+          <View style={styles.messageFooter}>
+            {!user && !status ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={tr("模型信息", "Model info")}
+                onPress={() => setShowModelInfo((current) => !current)}
+              >
+                <Text style={styles.copyText}>{tr("模型信息", "Model info")}</Text>
+              </Pressable>
+            ) : null}
+            {message.content ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={tr("复制消息", "Copy message")}
+                onPress={() =>
+                  void Clipboard.setStringAsync(message.content).catch(() => undefined)
+                }
+              >
+                <Text style={styles.copyText}>{tr("复制", "Copy")}</Text>
+              </Pressable>
+            ) : null}
+            <Text style={styles.timestamp}>
+              {new Date(message.createdAt).toLocaleTimeString(undefined, {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -136,20 +145,23 @@ export function BotMessageRow({
 }
 
 const styles = StyleSheet.create({
-  messageRow: { flexDirection: "row", alignItems: "flex-end", gap: 8, marginVertical: 5 },
+  messageRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginVertical: 8 },
   userRow: { justifyContent: "flex-end" },
   senderAvatar: {
-    width: 27,
-    height: 27,
+    width: 32,
+    height: 32,
+    flexShrink: 0,
     borderRadius: 10,
-    marginBottom: 2,
+    marginTop: 2,
     alignItems: "center",
     justifyContent: "center",
   },
   senderInitial: { color: "#101014", fontFamily: Fonts.sansSemiBold, fontSize: 14 },
-  bubble: { borderRadius: 15, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "84%" },
+  messageContent: { maxWidth: "84%", flexShrink: 1, alignItems: "flex-start" },
+  senderName: { color: "#9A9AA0", fontSize: 12, lineHeight: 18, marginBottom: 4, maxWidth: "100%" },
+  bubble: { borderRadius: 15, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%" },
   userBubble: { backgroundColor: "#3157B9", borderBottomRightRadius: 5 },
-  botBubble: { backgroundColor: "#1C1C1E", borderBottomLeftRadius: 5, minWidth: 80 },
+  botBubble: { backgroundColor: "#1C1C1E", borderTopLeftRadius: 5, minWidth: 80 },
   statusBubble: { backgroundColor: "#151517", borderBottomLeftRadius: 5 },
   messageText: { color: "#fff", fontSize: 15, lineHeight: 21 },
   statusText: { color: "#A0A0A7", fontSize: 13 },
@@ -166,6 +178,6 @@ const styles = StyleSheet.create({
   running: { alignItems: "center", flexDirection: "row", gap: 7, paddingVertical: 4 },
   runningText: { color: "#A0A0A7", fontSize: 13 },
   failedText: { color: "#FF8DA5", fontSize: 12, marginTop: 5 },
-  activityRow: { marginLeft: 34 },
+  activityRow: { marginLeft: 40 },
   sourceHighlight: { backgroundColor: "rgba(110, 168, 255, 0.17)", borderRadius: 12 },
 });

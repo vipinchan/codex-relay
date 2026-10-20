@@ -64,17 +64,17 @@ jobs:
 
       - name: Build beta IPA
         env:
-          IOS_IPA_NAME: CodexRelay-1.5.0-beta.19.ipa
-          MOBILE_RELEASE_VERSION: 1.5.0-beta.19
+          IOS_IPA_NAME: CodexRelay-1.5.0-beta.20.ipa
+          MOBILE_RELEASE_VERSION: 1.5.0-beta.20
         run: bash scripts/build-ios-ipa.sh
 
       - name: Upload beta artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodexRelay-1.5.0-beta.19-${{ github.sha }}
+          name: CodexRelay-1.5.0-beta.20-${{ github.sha }}
           path: |
-            dist/ios/CodexRelay-1.5.0-beta.19.ipa
-            dist/ios/CodexRelay-1.5.0-beta.19.ipa.sha256
+            dist/ios/CodexRelay-1.5.0-beta.20.ipa
+            dist/ios/CodexRelay-1.5.0-beta.20.ipa.sha256
             dist/ios/build-info.txt
           if-no-files-found: error
           retention-days: 30
@@ -87,15 +87,16 @@ jobs:
           app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
           min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
           cat > /tmp/beta-release-notes.md <<EOF
-          ## Codex Relay iOS 1.5.0 Beta 19
+          ## Codex Relay iOS 1.5.0 Beta 20
 
-          Refines the BOT home title and group message presentation.
+          Refines sender labels and alignment in group conversations.
 
           ### Included
 
-          - Gives the BOT home title explicit line height and bold weight to prevent clipped lettering
-          - Removes duplicate BOT nicknames inside group message bubbles, including responding and queued replies
-          - Retains the sender avatar for identifying each BOT in group conversations
+          - Shows BOT names above group message bubbles, outside the bubble background
+          - Aligns sender avatars with the top of each message and keeps name and bubble edges aligned
+          - Uses consistent spacing for responding, queued, completed, and failed replies
+          - Truncates long sender names to preserve message width
 
           ### Relay compatibility
 
@@ -104,13 +105,13 @@ jobs:
           ### Build
 
           - App version: \`${app_version}\`
-          - Mobile beta: \`1.5.0-beta.19\`
+          - Mobile beta: \`1.5.0-beta.20\`
           - Minimum iOS: \`${min_ios}\`
           - Commit: \`${commit}\`
 
           ### Installation
 
-          Download **CodexRelay-1.5.0-beta.19.ipa** and install it with TrollStore on a compatible device.
+          Download **CodexRelay-1.5.0-beta.20.ipa** and install it with TrollStore on a compatible device.
           This is an ad-hoc signed sideload build, not an Apple distribution-signed or notarized release.
           Automated checks and IPA build run in CI; physical-device validation remains pending.
           EOF
@@ -121,8 +122,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.19'
-          ipa='dist/ios/CodexRelay-1.5.0-beta.19.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.20'
+          ipa='dist/ios/CodexRelay-1.5.0-beta.20.ipa'
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" \
@@ -132,7 +133,7 @@ jobs:
               --clobber
             gh release edit "$tag" \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 19' \
+              --title 'Codex Relay iOS 1.5.0 Beta 20' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           else
@@ -141,7 +142,7 @@ jobs:
               "$ipa.sha256" \
               dist/ios/build-info.txt \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 19' \
+              --title 'Codex Relay iOS 1.5.0 Beta 20' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           fi
@@ -152,8 +153,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.19'
-          ipa='CodexRelay-1.5.0-beta.19.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.20'
+          ipa='CodexRelay-1.5.0-beta.20.ipa'
           rm -rf /tmp/codex-relay-beta-check
           mkdir -p /tmp/codex-relay-beta-check
           gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check
