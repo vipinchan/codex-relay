@@ -18,7 +18,7 @@ concurrency:
 jobs:
   beta-ipa:
     name: Build and publish 1.5.0 beta IPA
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 60
 
     steps:
