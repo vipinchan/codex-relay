@@ -22,6 +22,12 @@ import {
 
 import { BotPage, BotRow, botError, botText } from "./bot-ui";
 import { botPreviewMarkdownPath } from "./bot-preview-path";
+import {
+  BotConfigurationRow,
+  BotPreferredCapabilities,
+  BotPreviewDisclosure,
+  BotRolePreview,
+} from "./BotDefinitionPreview";
 
 type PreviewTab = "definition" | "files" | "document";
 
@@ -256,9 +262,6 @@ export function BotPreviewScreen({
                 <Text style={[styles.sectionTitle, { color: theme.text }]}>
                   {definition.definition.name}
                 </Text>
-                <Text style={[styles.caption, { color: theme.textSecondary }]}>
-                  {definition.path}
-                </Text>
               </View>
               {definition.status === "invalid" ? (
                 <Text style={styles.error}>
@@ -278,7 +281,7 @@ export function BotPreviewScreen({
               <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
                 <View style={styles.cardHeading}>
                   <Text style={[styles.cardTitle, { color: theme.text }]}>
-                    {botText("定义文件", "Definition file")}
+                    {botText("角色说明", "Role instructions")}
                   </Text>
                   <Pressable
                     accessibilityRole="button"
@@ -291,22 +294,35 @@ export function BotPreviewScreen({
                     </Text>
                   </Pressable>
                 </View>
-                <Text selectable style={[styles.source, { color: theme.text }]}>
-                  {definition.content}
-                </Text>
+                {definition.status === "invalid" ? (
+                  <Text style={[styles.caption, { color: theme.textSecondary }]}>
+                    {botText(
+                      "定义文件无效，以下为当前保留的角色说明。",
+                      "The definition file is invalid. Showing the retained role instructions.",
+                    )}
+                  </Text>
+                ) : null}
+                <BotRolePreview instructions={definition.definition.instructions} />
+                <BotPreviewDisclosure
+                  title={botText("定义文件与源码", "Definition file and source")}
+                >
+                  <Text selectable style={[styles.caption, { color: theme.textSecondary }]}>
+                    {definition.path}
+                  </Text>
+                  <Text selectable style={[styles.source, { color: theme.text }]}>
+                    {definition.content}
+                  </Text>
+                </BotPreviewDisclosure>
               </View>
               <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>
                   {botText("常用能力", "Preferred capabilities")}
                 </Text>
-                <Text style={[styles.body, { color: theme.textSecondary }]}>
-                  {botText("技能", "Skills")}:{" "}
-                  {definition.definition.preferredSkills.join(" · ") || "—"}
-                </Text>
-                <Text style={[styles.body, { color: theme.textSecondary }]}>
-                  {botText("插件", "Plugins")}:{" "}
-                  {definition.definition.preferredPlugins.join(" · ") || "—"}
-                </Text>
+                <BotPreferredCapabilities
+                  skills={definition.definition.preferredSkills}
+                  plugins={definition.definition.preferredPlugins}
+                  focused={focused}
+                />
                 <Text style={[styles.caption, { color: theme.textSecondary }]}>
                   {botText(
                     "这里选择常用能力；安装在 Mac 上的共享能力仍可按需调用。",
@@ -332,42 +348,52 @@ export function BotPreviewScreen({
                           ? botText("等待执行", "Queued")
                           : botText("空闲", "Idle")}
                     </Text>
-                    <Text style={[styles.body, { color: theme.textSecondary }]}>
-                      {botText("最近执行模型", "Last run model")}:{" "}
-                      {runtime.active?.resolvedModel ??
+                    <BotConfigurationRow
+                      label={botText("最近执行模型", "Last run model")}
+                      value={
+                        runtime.active?.resolvedModel ??
                         runtime.active?.requestedModel ??
-                        botText("尚未执行", "No run yet")}
-                    </Text>
-                    <Text style={[styles.body, { color: theme.textSecondary }]}>
-                      {botText("推理 / 档位 / 权限", "Effort / tier / access")}:{" "}
-                      {[
-                        runtime.active?.reasoningEffort,
-                        runtime.active?.serviceTier,
-                        runtime.active?.runtimeMode,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") || "—"}
-                    </Text>
-                    <Text style={[styles.body, { color: theme.textSecondary }]}>
-                      {botText("定义版本", "Definition revision")}:{" "}
-                      {activeRevision?.slice(0, 12) ?? botText("尚未执行", "No run yet")}
-                    </Text>
+                        botText("尚未执行", "No run yet")
+                      }
+                    />
+                    <BotConfigurationRow
+                      label={botText("推理强度", "Reasoning effort")}
+                      value={runtime.active?.reasoningEffort}
+                    />
+                    <BotConfigurationRow
+                      label={botText("运行档位", "Service tier")}
+                      value={runtime.active?.serviceTier}
+                    />
+                    <BotConfigurationRow
+                      label={botText("运行权限", "Runtime access")}
+                      value={
+                        runtime.active?.runtimeMode
+                          ? {
+                              default: botText("默认", "Default"),
+                              "on-request": botText("按需批准", "Ask when needed"),
+                              auto: botText("自动", "Automatic"),
+                              "full-access": botText("完整访问", "Full access"),
+                            }[runtime.active.runtimeMode]
+                          : undefined
+                      }
+                    />
+                    <BotConfigurationRow
+                      label={botText("定义版本", "Definition revision")}
+                      value={activeRevision?.slice(0, 12) ?? botText("尚未执行", "No run yet")}
+                    />
                     {runtime.active?.instructions ? (
-                      <Text selectable style={[styles.body, { color: theme.textSecondary }]}>
-                        {botText("实际角色", "Active role")}: {runtime.active.instructions}
-                      </Text>
+                      <BotPreviewDisclosure title={botText("实际执行角色", "Active role")}>
+                        <BotRolePreview instructions={runtime.active.instructions} />
+                      </BotPreviewDisclosure>
                     ) : null}
-                    {runtime.active?.preferredSkills?.length ? (
-                      <Text style={[styles.body, { color: theme.textSecondary }]}>
-                        {botText("实际常用技能", "Active preferred skills")}:{" "}
-                        {runtime.active.preferredSkills.join(" · ")}
-                      </Text>
-                    ) : null}
-                    {runtime.active?.preferredPlugins?.length ? (
-                      <Text style={[styles.body, { color: theme.textSecondary }]}>
-                        {botText("实际常用插件", "Active preferred plugins")}:{" "}
-                        {runtime.active.preferredPlugins.join(" · ")}
-                      </Text>
+                    {runtime.active ? (
+                      <BotPreviewDisclosure title={botText("实际常用能力", "Active capabilities")}>
+                        <BotPreferredCapabilities
+                          skills={runtime.active.preferredSkills ?? []}
+                          plugins={runtime.active.preferredPlugins ?? []}
+                          focused={focused}
+                        />
+                      </BotPreviewDisclosure>
                     ) : null}
                     {latestRevision && activeRevision && latestRevision !== activeRevision ? (
                       <Text style={[styles.notice, { color: theme.powerBlue }]}>
@@ -380,22 +406,23 @@ export function BotPreviewScreen({
                     {definition?.status === "invalid" ? (
                       <Text style={[styles.error, { padding: 0 }]}>
                         {botText(
-                          "Mac 定义文件无效，继续使用上一份有效配置。修复文件后新配置才会生效。",
-                          "The Mac definition file is invalid. The last valid configuration remains in use until the file is fixed.",
+                          "Mac 定义文件无效，继续使用当前保留配置。修复文件后新配置才会生效。",
+                          "The Mac definition file is invalid. The retained configuration remains in use until the file is fixed.",
                         )}
                       </Text>
                     ) : null}
                     {definition?.status === "valid" &&
                     nextRevision &&
                     nextRevision !== activeRevision ? (
-                      <Text style={[styles.body, { color: theme.textSecondary }]}>
-                        {botText("下次版本", "Next revision")}: {nextRevision.slice(0, 12)}
-                      </Text>
+                      <BotConfigurationRow
+                        label={botText("下次版本", "Next revision")}
+                        value={nextRevision.slice(0, 12)}
+                      />
                     ) : null}
-                    <Text style={[styles.body, { color: theme.textSecondary }]}>
-                      {botText("下次任务", "Next task")}:{" "}
-                      {runtime.next.requestedModel ?? botText("默认模型", "Default model")}
-                    </Text>
+                    <BotConfigurationRow
+                      label={botText("下次任务模型", "Next task model")}
+                      value={runtime.next.requestedModel ?? botText("默认模型", "Default model")}
+                    />
                     {hasSessionPreferences ? (
                       <>
                         <Pressable

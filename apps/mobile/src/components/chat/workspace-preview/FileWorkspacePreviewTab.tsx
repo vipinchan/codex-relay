@@ -226,7 +226,7 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
           </View>
           <View style={styles.fileCountBadge}>
             <ThemedText type="code" themeColor="textSecondary">
-              {explorerEntries.length}
+              {filesQuery.data ? explorerEntries.length : "—"}
             </ThemedText>
           </View>
           <View style={styles.explorerToggleButton}>
@@ -279,6 +279,7 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
                   <ThemedText type="small" themeColor="textSecondary">
                     {errorMessage(filesQuery.error)}
                   </ThemedText>
+                  <HeaderActionButton label="Retry" onPress={() => void filesQuery.refetch()} />
                 </View>
               </View>
             ) : explorerEntries.length > 0 ? (
