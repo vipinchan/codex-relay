@@ -1,22 +1,15 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Bot, BotConversation, BotMessage } from "codex-relay/api-schema";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, View } from "react-native";
+import { KeyboardGestureArea, KeyboardStickyView } from "react-native-keyboard-controller";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
 import { createAssistantMarkdownStyle } from "@/components/chat/assistant-markdown-presentation";
+import { MessageList } from "@/components/chat/MessageList";
+import { useMessageListController } from "@/components/chat/use-message-list-controller";
 import {
   AppBottomSheet,
   AppBottomSheetTextInput,
@@ -25,7 +18,7 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
-import { Fonts } from "@/constants/theme";
+import { Fonts, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
   deleteBotConversation,
@@ -36,18 +29,28 @@ import {
   stopBotConversation,
   updateBotConversation,
 } from "@/lib/codex-relay-api";
-import { findMessageIndex, mergeBotMessagePages } from "./bot-compose";
+import { mergeBotMessagePages } from "./bot-compose";
 import { BotComposer } from "./BotComposer";
 import { BotMessageRow } from "./BotMessageRow";
 import { BotDirectComposer } from "./BotDirectComposer";
 import { BotDirectMessageRow } from "./BotDirectMessageRow";
-import { useBotMessageSource } from "./use-bot-message-source";
+import { useBotMessageHistory } from "./use-bot-message-history";
 
 const accent = "#6EA8FF";
 const zh = (Intl.DateTimeFormat().resolvedOptions().locale || "en").toLowerCase().startsWith("zh");
 const tr = (cn: string, en: string) => (zh ? cn : en);
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : tr("操作失败", "Operation failed");
+
+const buildBotRows = (messages: BotMessage[]) => messages;
+const botRowKey = (message: BotMessage) => message.id;
+const isUserBotRow = (message: BotMessage) => message.sender === "user";
+function latestUserMessageId(messages: BotMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].sender === "user") return messages[index].id;
+  }
+  return "no-user";
+}
 
 export function BotChatScreen({
   conversationId,
@@ -58,20 +61,13 @@ export function BotChatScreen({
 }) {
   const queryClient = useQueryClient();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const serverUrl = getCodexRelayServerUrl();
-  const listRef = useRef<FlatList<BotMessage>>(null);
-  const atLatest = useRef(true);
-  const initializedScroll = useRef(false);
-  const targetScrollAttempts = useRef(0);
-  const sourceScrolledId = useRef<string | undefined>(undefined);
-  const [showLatest, setShowLatest] = useState(false);
-  const [sourceUnavailable, setSourceUnavailable] = useState(false);
   const [sheet, setSheet] = useState<"group" | undefined>();
   const [groupName, setGroupName] = useState("");
   const [workspacePath, setWorkspacePath] = useState("");
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [defaultBotId, setDefaultBotId] = useState("");
-  const [loadingOlder, setLoadingOlder] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -91,9 +87,12 @@ export function BotChatScreen({
     refetchInterval: (query) =>
       query.state.data?.messages.some((message) => message.status === "running") ? 1500 : false,
   });
-  const { olderMessages, olderCursor, hasOlderCursor, sourceStatus, appendOlderPage } =
-    useBotMessageSource(conversationId, messageId, messagesQuery.data);
-  const sourceLoading = sourceStatus === "looking";
+  const timelineKey = `${serverUrl}:${conversationId}`;
+  const { olderMessages, hasOlder, loadEarlier } = useBotMessageHistory(
+    timelineKey,
+    conversationId,
+    messagesQuery.data,
+  );
 
   const conversation = conversationQuery.data;
   const bots = botsQuery.data ?? [];
@@ -104,7 +103,19 @@ export function BotChatScreen({
     [messagesQuery.data?.messages, olderMessages],
   );
   const hasRunning = messages.some((message) => message.status === "running");
-  const canLoadOlder = hasOlderCursor ? !!olderCursor : !!messagesQuery.data?.nextCursor;
+  const controller = useMessageListController<BotMessage, BotMessage>({
+    timelineKey,
+    messages,
+    buildRows: buildBotRows,
+    keyExtractor: botRowKey,
+    isUserRow: isUserBotRow,
+    isLoading: messagesQuery.isPending,
+    hasEarlierMessages: hasOlder,
+    onLoadEarlierMessages: loadEarlier,
+    isRunning: hasRunning,
+    followTrigger: `${latestUserMessageId(messages)}:${hasRunning}`,
+    sourceKey: messageId,
+  });
   const activeReplyId = messages.find(
     (message) => message.sender === "bot" && message.status === "running",
   )?.id;
@@ -145,38 +156,6 @@ export function BotChatScreen({
   async function refreshMessagesAfterSend() {
     await queryClient.invalidateQueries({ queryKey: ["bot-messages", serverUrl, conversationId] });
     void queryClient.invalidateQueries({ queryKey: ["bot-conversations", serverUrl] });
-    if (atLatest.current) setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
-  }
-
-  useEffect(() => {
-    if (!messageId || sourceStatus !== "found" || sourceScrolledId.current === messageId) return;
-    const index = findMessageIndex(messages, messageId);
-    if (index < 0) return;
-    targetScrollAttempts.current = 0;
-    setSourceUnavailable(false);
-    initializedScroll.current = true;
-    atLatest.current = false;
-    setShowLatest(true);
-    const timer = setTimeout(() => {
-      sourceScrolledId.current = messageId;
-      listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.32 });
-    }, 120);
-    return () => clearTimeout(timer);
-  }, [messageId, messages, sourceStatus]);
-
-  async function loadOlder() {
-    const cursor = hasOlderCursor ? olderCursor : messagesQuery.data?.nextCursor;
-    if (!cursor || loadingOlder) return;
-    setLoadingOlder(true);
-    atLatest.current = false;
-    try {
-      const page = await listBotMessages(conversationId, cursor);
-      appendOlderPage(page);
-    } catch (error) {
-      Alert.alert(tr("无法加载更早消息", "Couldn’t load older messages"), errorText(error));
-    } finally {
-      setLoadingOlder(false);
-    }
   }
 
   function openGroupEditor(group: BotConversation) {
@@ -270,7 +249,13 @@ export function BotChatScreen({
   }
 
   return (
-    <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.screen}>
+    <SafeAreaView
+      edges={["top", "left", "right"]}
+      style={[
+        styles.screen,
+        { paddingBottom: Math.max(Spacing.one, insets.bottom - Spacing.four) },
+      ]}
+    >
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -327,17 +312,12 @@ export function BotChatScreen({
         )}
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.content}
-      >
+      <KeyboardGestureArea interpolator="ios" style={styles.content}>
         {conversationQuery.error ? (
           <Text style={styles.error}>{errorText(conversationQuery.error)}</Text>
         ) : null}
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(message) => message.id}
+        <MessageList
+          controller={controller}
           renderItem={({ item }) =>
             conversation?.kind === "direct" || item.sender === "user" ? (
               <BotDirectMessageRow
@@ -361,62 +341,7 @@ export function BotChatScreen({
               />
             )
           }
-          style={styles.list}
           contentContainerStyle={styles.timeline}
-          keyboardShouldPersistTaps="handled"
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-          onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
-            const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-            atLatest.current =
-              contentSize.height - contentOffset.y - layoutMeasurement.height < 100;
-            setShowLatest(!atLatest.current);
-          }}
-          scrollEventThrottle={120}
-          onContentSizeChange={() => {
-            if (
-              !messages.length ||
-              (messageId &&
-                sourceScrolledId.current !== messageId &&
-                sourceStatus !== "unavailable")
-            )
-              return;
-            if (!initializedScroll.current) {
-              initializedScroll.current = true;
-              listRef.current?.scrollToEnd({ animated: false });
-            } else if (atLatest.current && !loadingOlder) {
-              listRef.current?.scrollToEnd({ animated: false });
-            }
-          }}
-          onScrollToIndexFailed={({ index, averageItemLength }) => {
-            if (targetScrollAttempts.current++ > 3) {
-              setSourceUnavailable(true);
-              return;
-            }
-            listRef.current?.scrollToOffset({
-              offset: Math.max(0, averageItemLength * index),
-              animated: false,
-            });
-            setTimeout(
-              () => listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.32 }),
-              180,
-            );
-          }}
-          ListHeaderComponent={
-            canLoadOlder && !sourceLoading ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={loadingOlder}
-                onPress={() => void loadOlder()}
-                style={styles.loadMore}
-              >
-                <Text style={styles.loadMoreText}>
-                  {loadingOlder
-                    ? tr("加载中…", "Loading…")
-                    : tr("加载更早消息", "Load older messages")}
-                </Text>
-              </Pressable>
-            ) : null
-          }
           ListEmptyComponent={
             messagesQuery.isLoading ? (
               <ActivityIndicator color={accent} />
@@ -427,82 +352,72 @@ export function BotChatScreen({
             )
           }
         />
-        {messagesQuery.error ? (
-          <Pressable onPress={() => void messagesQuery.refetch()}>
-            <Text style={styles.error}>
-              {errorText(messagesQuery.error)} · {tr("点击重试", "Tap to retry")}
-            </Text>
-          </Pressable>
-        ) : null}
-        {messageId && (sourceLoading || sourceStatus === "unavailable" || sourceUnavailable) ? (
-          <Text style={styles.sourceNotice}>
-            {sourceLoading
-              ? tr("正在查找来源消息…", "Finding source message…")
-              : tr("找不到这条来源消息", "Source message is unavailable")}
-          </Text>
-        ) : null}
-        {showLatest && !sourceLoading ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              atLatest.current = true;
-              listRef.current?.scrollToEnd({ animated: true });
-            }}
-            style={styles.latestButton}
-          >
-            <Text style={styles.latestText}>{tr("最新消息 ↓", "Latest ↓")}</Text>
-          </Pressable>
-        ) : null}
-
-        {hasRunning ? (
-          <View style={styles.progressRow}>
-            <Text style={styles.progressHint}>
-              {tr("BOT 正在依次回复", "BOTs are responding in order")}
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              disabled={stopping}
-              onPress={() => void stopReply()}
-            >
-              <Text style={styles.stopText}>
-                {stopping ? tr("停止中…", "Stopping…") : tr("停止", "Stop")}
+        <KeyboardStickyView>
+          {messagesQuery.error ? (
+            <Pressable onPress={() => void messagesQuery.refetch()}>
+              <Text style={styles.error}>
+                {errorText(messagesQuery.error)} · {tr("点击重试", "Tap to retry")}
               </Text>
             </Pressable>
-          </View>
-        ) : null}
-        {conversation?.kind === "direct" ? (
-          directBot ? (
-            <BotDirectComposer
+          ) : null}
+          {messageId &&
+          (controller.sourceStatus === "looking" || controller.sourceStatus === "unavailable") ? (
+            <Text style={styles.sourceNotice}>
+              {controller.sourceStatus === "looking"
+                ? tr("正在查找来源消息…", "Finding source message…")
+                : tr("找不到这条来源消息", "Source message is unavailable")}
+            </Text>
+          ) : null}
+          {hasRunning ? (
+            <View style={styles.progressRow}>
+              <Text style={styles.progressHint}>
+                {tr("BOT 正在依次回复", "BOTs are responding in order")}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                disabled={stopping}
+                onPress={() => void stopReply()}
+              >
+                <Text style={styles.stopText}>
+                  {stopping ? tr("停止中…", "Stopping…") : tr("停止", "Stop")}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {conversation?.kind === "direct" ? (
+            directBot ? (
+              <BotDirectComposer
+                key={`${serverUrl}:${conversationId}`}
+                conversation={conversation}
+                bot={directBot}
+                isFocused={focused}
+                hasRunning={hasRunning}
+                onCancel={() => void stopReply()}
+                onSent={refreshMessagesAfterSend}
+              />
+            ) : (
+              <Pressable onPress={() => void botsQuery.refetch()} style={styles.loadMore}>
+                <Text style={botsQuery.error ? styles.error : styles.empty}>
+                  {botsQuery.error
+                    ? `${errorText(botsQuery.error)} · ${tr("点击重试", "Tap to retry")}`
+                    : botsQuery.isPending
+                      ? tr("正在加载 BOT…", "Loading BOT…")
+                      : tr("BOT 不可用", "BOT is unavailable")}
+                </Text>
+              </Pressable>
+            )
+          ) : conversation?.kind === "group" ? (
+            <BotComposer
               key={`${serverUrl}:${conversationId}`}
               conversation={conversation}
-              bot={directBot}
-              isFocused={focused}
+              bots={bots}
               hasRunning={hasRunning}
               onCancel={() => void stopReply()}
               onSent={refreshMessagesAfterSend}
             />
-          ) : (
-            <Pressable onPress={() => void botsQuery.refetch()} style={styles.loadMore}>
-              <Text style={botsQuery.error ? styles.error : styles.empty}>
-                {botsQuery.error
-                  ? `${errorText(botsQuery.error)} · ${tr("点击重试", "Tap to retry")}`
-                  : botsQuery.isPending
-                    ? tr("正在加载 BOT…", "Loading BOT…")
-                    : tr("BOT 不可用", "BOT is unavailable")}
-              </Text>
-            </Pressable>
-          )
-        ) : conversation?.kind === "group" ? (
-          <BotComposer
-            key={`${serverUrl}:${conversationId}`}
-            conversation={conversation}
-            bots={bots}
-            hasRunning={hasRunning}
-            onCancel={() => void stopReply()}
-            onSent={refreshMessagesAfterSend}
-          />
-        ) : null}
-      </KeyboardAvoidingView>
+          ) : null}
+        </KeyboardStickyView>
+      </KeyboardGestureArea>
 
       <AppBottomSheet
         title={tr("群设置", "Group settings")}
@@ -591,18 +506,8 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1, minWidth: 0, alignItems: "center" },
   headerTitle: { color: "#fff", fontWeight: "700", fontSize: 17 },
   headerSubtitle: { color: "#8E8E93", fontSize: 11, marginTop: 3 },
-  list: { flex: 1 },
   timeline: { paddingHorizontal: 15, paddingTop: 12, paddingBottom: 16, flexGrow: 1 },
   sourceNotice: { color: "#9ABBF2", fontSize: 12, textAlign: "center", paddingVertical: 6 },
-  latestButton: {
-    alignSelf: "center",
-    backgroundColor: "#292D36",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    marginBottom: 5,
-  },
-  latestText: { color: "#9ABBF2", fontSize: 12, fontFamily: Fonts.sansMedium },
   progressRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -614,7 +519,6 @@ const styles = StyleSheet.create({
   stopText: { color: "#FF8DA5", fontSize: 12, fontWeight: "700" },
   disabled: { opacity: 0.45 },
   loadMore: { alignItems: "center", paddingVertical: 8 },
-  loadMoreText: { color: accent, fontSize: 13 },
   error: { color: "#FF8DA5", fontSize: 13, textAlign: "center", padding: 10 },
   empty: { color: "#77777C", fontSize: 13, textAlign: "center", marginTop: 30 },
   fieldLabel: { color: "#AEAEB2", fontSize: 13, fontWeight: "600", marginTop: 12, marginBottom: 4 },

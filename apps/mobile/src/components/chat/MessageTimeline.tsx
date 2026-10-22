@@ -1,12 +1,6 @@
 import type { ChatMessage } from "codex-relay/api-schema";
-import {
-  type LegendListRef,
-  type LegendListRenderItemProps,
-  type MaintainScrollAtEndOptions,
-  type MaintainVisibleContentPositionConfig,
-} from "@legendapp/list/react-native";
-import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type LegendListRenderItemProps } from "@legendapp/list/react-native";
+import { useCallback, useEffect } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import Animated, {
@@ -17,45 +11,23 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
 import { Colors, Spacing } from "@/constants/theme";
+import { getCodexRelayServerUrl } from "@/lib/codex-relay-api";
 
 import { MessageBubble } from "./MessageBubble";
+import { MessageList } from "./MessageList";
+import { useMessageListController } from "./use-message-list-controller";
 import { ActivityGroupCard } from "./ActivityGroupCard";
-import { previousUserJumpStep } from "./previous-user-jump-step";
 import { messageItemType } from "./timeline-message-items";
-import {
-  buildTimelineRows,
-  INITIAL_TIMELINE_WINDOW_SIZE,
-  nextTimelineWindowSize,
-  TIMELINE_WINDOW_INCREMENT,
-  timelineFollowTrigger,
-  timelineLatestRowIndex,
-  type TimelineRow,
-  visibleMessageWindow,
-} from "./timeline-rows";
+import { buildTimelineRows, timelineFollowTrigger, type TimelineRow } from "./timeline-rows";
 import type { WorkspaceMarkdownPreviewTarget } from "./workspace-preview/markdown-target";
 import { RunningFooter } from "./RunningFooter";
 
 export { implementablePlanId } from "./plan-progress";
 
-const MESSAGE_ESTIMATED_ITEM_SIZE = 48;
-const MAINTAIN_SCROLL_AT_END: MaintainScrollAtEndOptions = {
-  animated: false,
-  on: {
-    dataChange: true,
-    itemLayout: true,
-    layout: true,
-  },
-};
-const MAINTAIN_VISIBLE_CONTENT_POSITION: MaintainVisibleContentPositionConfig<TimelineRow> = {
-  data: true,
-  size: true,
-};
-const MAINTAIN_SCROLL_AT_END_THRESHOLD = 0.1;
 const TIMELINE_LOADING_ENTER = FadeIn.duration(140).easing(Easing.out(Easing.cubic));
 const TIMELINE_LOADING_EXIT = FadeOut.duration(120).easing(Easing.out(Easing.cubic));
 const TIMELINE_CONTENT_SETTLE_OFFSET = 10;
@@ -95,111 +67,27 @@ export function MessageTimeline({
   onRetry?: () => void;
   threadId?: string;
 }) {
-  const listRef = useRef<LegendListRef | null>(null);
-  const isAtLatestRef = useRef(true);
-  const isJumpingToLatestRef = useRef(false);
-  const pendingPreviousUserJumpAnchorRef = useRef<string | undefined>(undefined);
-  const previousRowsRef = useRef<readonly TimelineRow[]>([]);
-  const { bottom } = useSafeAreaInsets();
-  const timelineKey = threadId ?? "no-thread";
-  const timelineKeyRef = useRef(timelineKey);
-  timelineKeyRef.current = timelineKey;
-  const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_TIMELINE_WINDOW_SIZE);
-  const messageWindow = useMemo(
-    () => visibleMessageWindow(messages, visibleMessageCount),
-    [messages, visibleMessageCount],
-  );
-  const rows = useMemo(
-    () => buildTimelineRows(messageWindow.messages, previousRowsRef.current),
-    [messageWindow.messages],
-  );
-  const [settledTimelineKey, setSettledTimelineKey] = useState<string | undefined>(undefined);
-  const [isAtLatest, setAtLatest] = useState(true);
-  const [firstVisibleRowIndex, setFirstVisibleRowIndex] = useState(0);
-  const extraContentPadding = useSharedValue(0);
+  const controller = useMessageListController({
+    timelineKey: `${getCodexRelayServerUrl()}:${threadId ?? "no-thread"}`,
+    messages,
+    buildRows: buildTimelineRows,
+    keyExtractor: timelineRowKeyExtractor,
+    isUserRow: timelineRowIsUser,
+    isLoading,
+    isLoadingEarlierMessages,
+    hasEarlierMessages,
+    onLoadEarlierMessages,
+    olderMessagesError,
+    isRunning,
+    followTrigger: timelineFollowTrigger(messages, isRunning),
+  });
+  const { rows, timelineKey } = controller;
+  const showLoadingConversation = isLoading || (rows.length > 0 && !controller.isReady);
   const contentRevealProgress = useSharedValue(0);
-  const hasRows = rows.length > 0;
-  const isTimelineReady = !hasRows || settledTimelineKey === timelineKey;
-  const showLoadingConversation = isLoading || (hasRows && !isTimelineReady);
-  const followTrigger = timelineFollowTrigger(messages, isRunning);
   const timelineContentStyle = useAnimatedStyle(() => ({
     opacity: contentRevealProgress.value,
     transform: [{ translateY: TIMELINE_CONTENT_SETTLE_OFFSET * (1 - contentRevealProgress.value) }],
   }));
-
-  useEffect(() => {
-    extraContentPadding.value = withTiming(Math.max(0, bottomAccessoryHeight), {
-      duration: 140,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [bottomAccessoryHeight, extraContentPadding]);
-
-  useEffect(() => {
-    previousRowsRef.current = rows;
-  }, [rows]);
-
-  useEffect(() => {
-    setSettledTimelineKey(undefined);
-    setVisibleMessageCount(INITIAL_TIMELINE_WINDOW_SIZE);
-    pendingPreviousUserJumpAnchorRef.current = undefined;
-    isAtLatestRef.current = true;
-    setAtLatest(true);
-    setFirstVisibleRowIndex(0);
-  }, [timelineKey]);
-
-  useEffect(() => {
-    if (!isTimelineReady || !isAtLatestRef.current) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: false });
-    });
-    const settleTimer = isRunning
-      ? undefined
-      : setTimeout(() => {
-          if (isAtLatestRef.current) {
-            listRef.current?.scrollToEnd({ animated: false });
-          }
-        }, 240);
-    const lateSettleTimer = isRunning
-      ? undefined
-      : setTimeout(() => {
-          if (isAtLatestRef.current) {
-            listRef.current?.scrollToEnd({ animated: false });
-          }
-        }, 900);
-    return () => {
-      cancelAnimationFrame(frame);
-      if (settleTimer !== undefined) {
-        clearTimeout(settleTimer);
-      }
-      if (lateSettleTimer !== undefined) {
-        clearTimeout(lateSettleTimer);
-      }
-    };
-  }, [followTrigger, isRunning, isTimelineReady]);
-
-  useEffect(() => {
-    if (isLoading || !hasRows) {
-      return;
-    }
-    let didCancel = false;
-    let settleFrame: number | undefined;
-    const layoutFrame = requestAnimationFrame(() => {
-      settleFrame = requestAnimationFrame(() => {
-        if (!didCancel) {
-          setSettledTimelineKey(timelineKey);
-        }
-      });
-    });
-    return () => {
-      didCancel = true;
-      cancelAnimationFrame(layoutFrame);
-      if (settleFrame !== undefined) {
-        cancelAnimationFrame(settleFrame);
-      }
-    };
-  }, [hasRows, isLoading, timelineKey]);
 
   useEffect(() => {
     contentRevealProgress.value = withTiming(showLoadingConversation ? 0 : 1, {
@@ -233,150 +121,6 @@ export function MessageTimeline({
       ),
     [onMessageCopied, onMessageRewind, onOpenMarkdownAttachment],
   );
-  const handleTimelineLoad = useCallback(() => {
-    requestAnimationFrame(() => {
-      setSettledTimelineKey(timelineKey);
-    });
-  }, [timelineKey]);
-  const handleScroll = useCallback(() => {
-    if (isJumpingToLatestRef.current) {
-      return;
-    }
-    const nextIsAtLatest = listRef.current?.getState().isAtEnd;
-    if (nextIsAtLatest === undefined) {
-      return;
-    }
-    if (nextIsAtLatest === isAtLatestRef.current) {
-      return;
-    }
-    isAtLatestRef.current = nextIsAtLatest;
-    setAtLatest(nextIsAtLatest);
-  }, []);
-  const handleFirstVisibleItemChanged = useCallback((info: { index: number }) => {
-    setFirstVisibleRowIndex((current) => (current === info.index ? current : info.index));
-  }, []);
-  const scrollToUserRow = useCallback((index: number) => {
-    const list = listRef.current;
-    if (!list) return;
-    void list.scrollToIndex({ animated: true, index, viewPosition: 0.08 }).catch(() => undefined);
-  }, []);
-  const jumpToLatest = useCallback(() => {
-    const list = listRef.current;
-    const latestRowIndex = timelineLatestRowIndex(rows.length);
-    if (!list || latestRowIndex === undefined) {
-      return;
-    }
-    isJumpingToLatestRef.current = true;
-    isAtLatestRef.current = true;
-    setAtLatest(true);
-    void (async () => {
-      try {
-        await list.scrollToIndex({ animated: true, index: latestRowIndex, viewPosition: 1 });
-      } catch {
-        // LegendList can reject an estimated long-range jump before its measurements converge.
-      }
-      try {
-        await list.scrollToEnd({ animated: false });
-      } catch {
-        // Keep the button available if the final measured scroll cannot be completed.
-      }
-      requestAnimationFrame(() => {
-        const nextIsAtLatest = list.getState().isAtEnd;
-        isJumpingToLatestRef.current = false;
-        isAtLatestRef.current = nextIsAtLatest;
-        setAtLatest(nextIsAtLatest);
-      });
-    })();
-  }, [rows.length]);
-  const loadEarlierMessages = useCallback(async () => {
-    if (messageWindow.hiddenCount > 0) {
-      setVisibleMessageCount((current) => nextTimelineWindowSize(current, messages.length));
-      return true;
-    }
-    if (!hasEarlierMessages || !onLoadEarlierMessages || isLoadingEarlierMessages) {
-      return false;
-    }
-    const requestedTimelineKey = timelineKey;
-    const loaded = await onLoadEarlierMessages();
-    if (loaded && timelineKeyRef.current === requestedTimelineKey) {
-      setVisibleMessageCount((current) => current + TIMELINE_WINDOW_INCREMENT);
-    }
-    return loaded && timelineKeyRef.current === requestedTimelineKey;
-  }, [
-    hasEarlierMessages,
-    isLoadingEarlierMessages,
-    messageWindow.hiddenCount,
-    messages.length,
-    onLoadEarlierMessages,
-    timelineKey,
-  ]);
-  const jumpToPreviousUserMessage = useCallback(() => {
-    const step = previousUserJumpStep(
-      rows,
-      firstVisibleRowIndex,
-      messageWindow.hiddenCount,
-      hasEarlierMessages,
-    );
-    if (step.kind === "jump") {
-      scrollToUserRow(step.index);
-      return;
-    }
-    if (step.kind === "end") return;
-    pendingPreviousUserJumpAnchorRef.current = rows[firstVisibleRowIndex]?.key ?? rows[0]?.key;
-    if (isLoadingEarlierMessages) return;
-    void loadEarlierMessages();
-  }, [
-    firstVisibleRowIndex,
-    hasEarlierMessages,
-    isLoadingEarlierMessages,
-    loadEarlierMessages,
-    messageWindow.hiddenCount,
-    rows,
-    scrollToUserRow,
-  ]);
-
-  useEffect(() => {
-    const anchorKey = pendingPreviousUserJumpAnchorRef.current;
-    if (!anchorKey) return;
-    if (isLoadingEarlierMessages) return;
-    if (olderMessagesError) return;
-    const anchorIndex = rows.findIndex((row) => row.key === anchorKey);
-    if (anchorIndex < 0) return;
-    const step = previousUserJumpStep(
-      rows,
-      anchorIndex,
-      messageWindow.hiddenCount,
-      hasEarlierMessages,
-    );
-    if (step.kind === "jump") {
-      pendingPreviousUserJumpAnchorRef.current = undefined;
-      const frame = requestAnimationFrame(() => scrollToUserRow(step.index));
-      return () => cancelAnimationFrame(frame);
-    }
-    if (step.kind !== "end") {
-      const requestedTimelineKey = timelineKey;
-      void loadEarlierMessages().then((loaded) => {
-        if (!loaded && timelineKeyRef.current === requestedTimelineKey) {
-          pendingPreviousUserJumpAnchorRef.current = undefined;
-        }
-      });
-      return;
-    }
-    pendingPreviousUserJumpAnchorRef.current = undefined;
-  }, [
-    hasEarlierMessages,
-    isLoadingEarlierMessages,
-    loadEarlierMessages,
-    messageWindow.hiddenCount,
-    olderMessagesError,
-    rows,
-    scrollToUserRow,
-    timelineKey,
-    visibleMessageCount,
-  ]);
-  const canJumpToPreviousUser =
-    previousUserJumpStep(rows, firstVisibleRowIndex, messageWindow.hiddenCount, hasEarlierMessages)
-      .kind !== "end";
 
   return (
     <View onTouchStart={onKeyboardDismissRequest} style={styles.transitionHost}>
@@ -404,74 +148,17 @@ export function MessageTimeline({
             {loadError ? (
               <ConversationLoadError compact error={loadError} onRetry={onRetry} />
             ) : null}
-            <KeyboardAwareLegendList
-              key={timelineKey}
-              ref={listRef}
-              alignItemsAtEnd
-              automaticallyAdjustContentInsets={false}
-              contentInsetAdjustmentBehavior="never"
-              contentInsetEndAdjustment={extraContentPadding}
-              data={rows}
-              estimatedItemSize={MESSAGE_ESTIMATED_ITEM_SIZE}
-              freeze={keyboardLayoutFrozen}
-              getItemType={timelineRowItemType}
-              initialScrollAtEnd
-              keyExtractor={timelineRowKeyExtractor}
+            <MessageList
+              controller={controller}
               renderItem={renderRow}
+              getItemType={timelineRowItemType}
               contentContainerStyle={styles.content}
-              keyboardDismissMode="interactive"
-              keyboardLiftBehavior="whenAtEnd"
-              keyboardOffset={bottom - 24}
-              keyboardShouldPersistTaps="handled"
-              maintainScrollAtEnd={isAtLatest ? MAINTAIN_SCROLL_AT_END : false}
-              maintainScrollAtEndThreshold={MAINTAIN_SCROLL_AT_END_THRESHOLD}
-              maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
-              onFirstVisibleItemChanged={handleFirstVisibleItemChanged}
-              onLoad={handleTimelineLoad}
-              onScroll={handleScroll}
-              recycleItems={false}
-              scrollEventThrottle={48}
-              showsVerticalScrollIndicator={false}
-              style={styles.list}
+              bottomAccessoryHeight={bottomAccessoryHeight}
+              keyboardLayoutFrozen={keyboardLayoutFrozen}
               ListFooterComponent={
                 isRunning ? <RunningFooter /> : <View style={styles.listEndPad} />
               }
-              ListHeaderComponent={
-                messageWindow.hiddenCount > 0 || hasEarlierMessages ? (
-                  <EarlierMessagesButton
-                    hiddenCount={messageWindow.hiddenCount}
-                    isLoading={isLoadingEarlierMessages}
-                    error={olderMessagesError}
-                    onPress={() => void loadEarlierMessages()}
-                  />
-                ) : null
-              }
             />
-            {!isAtLatest ? (
-              <View style={styles.jumpNavigation}>
-                {canJumpToPreviousUser ? (
-                  <Pressable
-                    accessibilityLabel="Jump to previous message you sent"
-                    accessibilityRole="button"
-                    onPress={jumpToPreviousUserMessage}
-                    style={({ pressed }) => [styles.jumpToPrevious, pressed && styles.jumpPressed]}
-                  >
-                    <Icon name="up" size={17} tintColor="#F5F5F7" strokeWidth={2.2} />
-                  </Pressable>
-                ) : null}
-                <Pressable
-                  accessibilityLabel="Jump to latest message"
-                  accessibilityRole="button"
-                  onPress={jumpToLatest}
-                  style={({ pressed }) => [styles.jumpToLatest, pressed && styles.jumpPressed]}
-                >
-                  <Icon name="expand" size={14} tintColor="#F5F5F7" strokeWidth={2.2} />
-                  <ThemedText type="smallBold" style={styles.jumpLabel}>
-                    Latest
-                  </ThemedText>
-                </Pressable>
-              </View>
-            ) : null}
           </Animated.View>
         )
       ) : null}
@@ -531,47 +218,12 @@ function ConversationLoadError({
   );
 }
 
-function EarlierMessagesButton({
-  hiddenCount,
-  isLoading,
-  error,
-  onPress,
-}: {
-  hiddenCount: number;
-  isLoading?: boolean;
-  error?: string;
-  onPress: () => void;
-}) {
-  const nextCount = Math.min(TIMELINE_WINDOW_INCREMENT, hiddenCount);
-  return (
-    <Pressable
-      accessibilityLabel={
-        hiddenCount > 0 ? `Load ${nextCount} earlier messages` : "Load earlier messages"
-      }
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.earlierMessages, pressed && styles.jumpPressed]}
-    >
-      {isLoading && hiddenCount === 0 ? (
-        <ActivityIndicator size="small" color={Colors.dark.textSecondary} />
-      ) : (
-        <Icon name="expand" size={13} tintColor={Colors.dark.textSecondary} strokeWidth={2.1} />
-      )}
-      <ThemedText type="code" themeColor="textSecondary" style={styles.earlierMessagesLabel}>
-        {hiddenCount > 0
-          ? `Show ${nextCount} earlier · ${hiddenCount} hidden`
-          : isLoading
-            ? "Loading earlier messages…"
-            : error
-              ? `Could not load earlier messages: ${error} · Retry`
-              : "Show earlier messages"}
-      </ThemedText>
-    </Pressable>
-  );
-}
-
 function timelineRowKeyExtractor(row: TimelineRow) {
   return row.key;
+}
+
+function timelineRowIsUser(row: TimelineRow) {
+  return row.type === "message" && row.message.role === "user";
 }
 
 function timelineRowItemType(row: TimelineRow) {
@@ -613,23 +265,6 @@ const styles = StyleSheet.create({
     maxWidth: 280,
     textAlign: "center",
   },
-  earlierMessages: {
-    alignItems: "center",
-    alignSelf: "center",
-    flexDirection: "row",
-    gap: 6,
-    marginBottom: Spacing.two,
-    minHeight: 34,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.one,
-  },
-  earlierMessagesLabel: {
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  list: {
-    flex: 1,
-  },
   listEndPad: {
     height: Spacing.two,
   },
@@ -645,39 +280,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.one,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
-  },
-  jumpNavigation: {
-    alignItems: "center",
-    alignSelf: "center",
-    bottom: 12,
-    gap: 7,
-    position: "absolute",
-  },
-  jumpToPrevious: {
-    alignItems: "center",
-    backgroundColor: "rgba(42, 42, 44, 0.96)",
-    borderColor: "rgba(255, 255, 255, 0.16)",
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  jumpToLatest: {
-    alignItems: "center",
-    backgroundColor: "rgba(42, 42, 44, 0.96)",
-    borderColor: "rgba(255, 255, 255, 0.16)",
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 5,
-    minHeight: 36,
-    paddingHorizontal: 13,
-  },
-  jumpLabel: {
-    color: "#F5F5F7",
-    fontSize: 12,
-    lineHeight: 16,
   },
   jumpPressed: {
     opacity: 0.72,

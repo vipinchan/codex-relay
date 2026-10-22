@@ -1,5 +1,7 @@
 import type { ChatMessage } from "codex-relay/api-schema";
 
+import { previousMessageIndex } from "./previous-user-jump-step";
+
 export const INITIAL_TIMELINE_WINDOW_SIZE = 300;
 export const TIMELINE_WINDOW_INCREMENT = 150;
 
@@ -97,13 +99,11 @@ export function nextTimelineWindowSize(currentSize: number, totalMessages: numbe
 }
 
 export function timelinePreviousUserRowIndex(rows: TimelineRow[], beforeIndex: number) {
-  for (let index = Math.min(rows.length - 1, beforeIndex - 1); index >= 0; index -= 1) {
-    const row = rows[index];
-    if (row?.type === "message" && row.message.role === "user") {
-      return index;
-    }
-  }
-  return undefined;
+  return previousMessageIndex(
+    rows,
+    beforeIndex,
+    (row) => row.type === "message" && row.message.role === "user",
+  );
 }
 
 export function timelineLatestRowIndex(rowCount: number) {

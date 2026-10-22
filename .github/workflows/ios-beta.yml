@@ -64,17 +64,17 @@ jobs:
 
       - name: Build beta IPA
         env:
-          IOS_IPA_NAME: CodexRelay-1.5.0-beta.22.ipa
-          MOBILE_RELEASE_VERSION: 1.5.0-beta.22
+          IOS_IPA_NAME: CodexRelay-1.5.0-beta.23.ipa
+          MOBILE_RELEASE_VERSION: 1.5.0-beta.23
         run: bash scripts/build-ios-ipa.sh
 
       - name: Upload beta artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodexRelay-1.5.0-beta.22-${{ github.sha }}
+          name: CodexRelay-1.5.0-beta.23-${{ github.sha }}
           path: |
-            dist/ios/CodexRelay-1.5.0-beta.22.ipa
-            dist/ios/CodexRelay-1.5.0-beta.22.ipa.sha256
+            dist/ios/CodexRelay-1.5.0-beta.23.ipa
+            dist/ios/CodexRelay-1.5.0-beta.23.ipa.sha256
             dist/ios/build-info.txt
           if-no-files-found: error
           retention-days: 30
@@ -87,17 +87,18 @@ jobs:
           app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
           min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
           cat > /tmp/beta-release-notes.md <<EOF
-          ## Codex Relay iOS 1.5.0 Beta 22
+          ## Codex Relay iOS 1.5.0 Beta 23
 
-          Improves the BOT definition preview opened from a conversation.
+          Unifies message-list scrolling and history navigation across conversations and BOT chats.
 
           ### Included
 
-          - Renders role instructions and the active execution role as Markdown in BOT Preview
-          - Keeps the definition file path and JSON source in an expandable section with source editing available
-          - Presents runtime model, reasoning effort, access, and definition revision in separate rows
-          - Shows readable skill and plugin names with expandable full identifiers
-          - Shows an unknown file count while loading and offers an explicit retry after a file-list error
+          - Uses shared message-list, scroll, and pagination components in ordinary conversations, BOT direct chats, and BOT groups
+          - Places matching previous-question and latest-message arrows in a compact control on the right side
+          - Expands local history and loads older pages through one serialized navigation flow
+          - Preserves message anchors and cancels pending navigation when dragging or returning to latest
+          - Isolates pending history requests when switching conversations or Relay servers
+          - Reuses the conversation keyboard and safe-area layout in BOT chats
 
           ### Relay compatibility
 
@@ -106,13 +107,13 @@ jobs:
           ### Build
 
           - App version: \`${app_version}\`
-          - Mobile beta: \`1.5.0-beta.22\`
+          - Mobile beta: \`1.5.0-beta.23\`
           - Minimum iOS: \`${min_ios}\`
           - Commit: \`${commit}\`
 
           ### Installation
 
-          Download **CodexRelay-1.5.0-beta.22.ipa** and install it with TrollStore on a compatible device.
+          Download **CodexRelay-1.5.0-beta.23.ipa** and install it with TrollStore on a compatible device.
           This is an ad-hoc signed sideload build, not an Apple distribution-signed or notarized release.
           Automated checks and IPA build run in CI; physical-device validation remains pending.
           EOF
@@ -123,8 +124,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.22'
-          ipa='dist/ios/CodexRelay-1.5.0-beta.22.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.23'
+          ipa='dist/ios/CodexRelay-1.5.0-beta.23.ipa'
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" \
@@ -134,7 +135,7 @@ jobs:
               --clobber
             gh release edit "$tag" \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 22' \
+              --title 'Codex Relay iOS 1.5.0 Beta 23' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           else
@@ -143,7 +144,7 @@ jobs:
               "$ipa.sha256" \
               dist/ios/build-info.txt \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 22' \
+              --title 'Codex Relay iOS 1.5.0 Beta 23' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           fi
@@ -154,8 +155,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.22'
-          ipa='CodexRelay-1.5.0-beta.22.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.23'
+          ipa='CodexRelay-1.5.0-beta.23.ipa'
           rm -rf /tmp/codex-relay-beta-check
           mkdir -p /tmp/codex-relay-beta-check
           gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check

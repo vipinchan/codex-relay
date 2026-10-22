@@ -1,5 +1,6 @@
 import {
   Archive,
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowRightToLine,
@@ -67,6 +68,7 @@ export type AppIconName =
   | "clock"
   | "controls"
   | "copy"
+  | "down"
   | "expand"
   | "externalLink"
   | "fast"
@@ -125,6 +127,7 @@ const iconComponents: Record<AppIconName, LucideComponent> = {
   chevronRight: ChevronRight,
   controls: SlidersHorizontal,
   copy: Copy,
+  down: ArrowDown,
   expand: ChevronDown,
   externalLink: ExternalLink,
   fast: Zap,
