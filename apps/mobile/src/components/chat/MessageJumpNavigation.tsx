@@ -34,6 +34,7 @@ export function MessageJumpNavigation({
               accessibilityRole="button"
               accessibilityState={{ busy: isLoadingPrevious, disabled: isLoadingPrevious }}
               disabled={isLoadingPrevious}
+              hitSlop={4}
               onPress={onJumpPrevious}
               style={({ pressed }) => [
                 styles.button,
@@ -52,6 +53,7 @@ export function MessageJumpNavigation({
         <Pressable
           accessibilityLabel={zh ? "回到最新消息" : "Jump to latest message"}
           accessibilityRole="button"
+          hitSlop={4}
           onPress={onJumpLatest}
           style={({ pressed }) => [
             styles.button,
@@ -72,28 +74,28 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 12,
     top: 0,
-    width: 46,
+    width: 42,
   },
   surface: {
     alignItems: "center",
-    borderColor: "rgba(255, 255, 255, 0.14)",
-    borderRadius: 23,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 21,
     borderWidth: StyleSheet.hairlineWidth,
-    elevation: 3,
+    elevation: 1,
     shadowColor: "#000",
     shadowOffset: { height: 2, width: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   button: {
-    borderRadius: 22,
+    borderRadius: 20,
     alignItems: "center",
-    height: 44,
+    height: 40,
     justifyContent: "center",
-    width: 44,
+    width: 40,
   },
   divider: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     height: StyleSheet.hairlineWidth,
     marginHorizontal: 10,
   },
