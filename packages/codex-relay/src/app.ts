@@ -226,6 +226,7 @@ const defaultWorkspacePath = process.cwd();
 const defaultCodexModel = "gpt-6-astra";
 const execFileAsync = promisify(execFile);
 const IMAGE_ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
+const WORKSPACE_IMAGE_PREVIEW_MAX_BYTES = 10 * 1024 * 1024;
 const WORKSPACE_FILE_PREVIEW_MAX_BYTES = 256 * 1024;
 const LOCAL_MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]*)\)/g;
 const LOCAL_IMAGE_REFERENCE_PATTERN = /\.(gif|heic|heif|jpe?g|png|webp)$/i;
@@ -11019,7 +11020,11 @@ async function readWorkspaceFileContent(workspacePath: string, requestedPath: st
     };
   }
 
-  const bytesToRead = Math.min(fileStat.size, WORKSPACE_FILE_PREVIEW_MAX_BYTES);
+  const isImageFile = imageMimeTypeFromWorkspaceFile(relativePath.path) !== null;
+  const previewMaxBytes = isImageFile
+    ? WORKSPACE_IMAGE_PREVIEW_MAX_BYTES
+    : WORKSPACE_FILE_PREVIEW_MAX_BYTES;
+  const bytesToRead = Math.min(fileStat.size, previewMaxBytes);
   const buffer = Buffer.alloc(bytesToRead);
   if (bytesToRead > 0) {
     const handle = await open(absolutePath, "r");
@@ -11032,16 +11037,19 @@ async function readWorkspaceFileContent(workspacePath: string, requestedPath: st
 
   const binary = buffer.includes(0);
   const content = binary ? "" : buffer.toString("utf8");
+  const mimeType = binary ? imageMimeTypeFromWorkspaceFile(relativePath.path) : null;
   return {
     content: {
+      base64Content: mimeType ? buffer.toString("base64") : "",
       binary,
       content,
       directory: dirname(relativePath.path) === "." ? "" : dirname(relativePath.path),
       language: languageFromWorkspaceFile(relativePath.path),
+      mimeType,
       name: basename(relativePath.path),
       path: relativePath.path,
       size: fileStat.size,
-      truncated: fileStat.size > WORKSPACE_FILE_PREVIEW_MAX_BYTES,
+      truncated: fileStat.size > previewMaxBytes,
     },
     success: true as const,
   };
@@ -11156,6 +11164,20 @@ function parentWorkspaceDirectory(directory: string) {
 function isPathInside(rootPath: string, targetPath: string) {
   const pathFromRoot = relative(rootPath, targetPath);
   return Boolean(pathFromRoot) && !pathFromRoot.startsWith("..") && !isAbsolute(pathFromRoot);
+}
+
+function imageMimeTypeFromWorkspaceFile(path: string) {
+  const extension = extname(basename(path).toLowerCase()).replace(/^\./, "");
+  return (
+    {
+      avif: "image/avif",
+      gif: "image/gif",
+      jpeg: "image/jpeg",
+      jpg: "image/jpeg",
+      png: "image/png",
+      webp: "image/webp",
+    }[extension] ?? null
+  );
 }
 
 function languageFromWorkspaceFile(path: string) {

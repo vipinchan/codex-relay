@@ -501,10 +501,12 @@ export const ListWorkspaceFilesResponseSchema = z.object({
 });
 
 export const WorkspaceFileContentResponseSchema = z.object({
+  base64Content: z.string(),
   binary: z.boolean(),
   content: z.string(),
   directory: z.string(),
   language: z.string(),
+  mimeType: z.string().nullable(),
   name: z.string().min(1),
   path: z.string().min(1),
   size: z.number().int().nonnegative(),
@@ -2020,10 +2022,12 @@ export function createOpenApiDocument() {
         WorkspaceFileContentResponse: {
           type: "object",
           required: [
+            "base64Content",
             "binary",
             "content",
             "directory",
             "language",
+            "mimeType",
             "name",
             "path",
             "size",
@@ -2031,10 +2035,12 @@ export function createOpenApiDocument() {
             "workspacePath",
           ],
           properties: {
+            base64Content: { type: "string" },
             binary: { type: "boolean" },
             content: { type: "string" },
             directory: { type: "string" },
             language: { type: "string" },
+            mimeType: { type: "string", nullable: true },
             name: { type: "string" },
             path: { type: "string" },
             size: { type: "integer", minimum: 0 },

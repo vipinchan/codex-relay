@@ -21,6 +21,7 @@ import { getWorkspaceFileContent, listWorkspaceFiles } from "@/lib/codex-relay-a
 import { hapticSelection } from "@/lib/haptics";
 import { workspaceFileContentQueryKey } from "@/lib/workspace-file-queries";
 
+import { WorkspaceFileContentView } from "./WorkspaceFileContentView";
 import { WorkspaceCodeWebView } from "./WorkspaceCodeWebView";
 
 type WorkspaceFile = ListWorkspaceFilesResponse["files"][number];
@@ -107,6 +108,17 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
   const fileContent = fileContentQuery.data;
   const editorLanguage = fileContent?.language || languageFromPath(fileContent?.path ?? "");
   const canEditFile = Boolean(fileContent && !fileContent.binary && !fileContent.truncated);
+  const isHtmlFile = (fileContent?.language ?? "") === "html";
+  const isImageFile = Boolean(fileContent?.mimeType?.startsWith("image/"));
+  const canRenderFile = isHtmlFile || isImageFile;
+  const [renderableFileViewMode, setRenderableFileViewMode] = useState<"render" | "source">(
+    "render",
+  );
+  useEffect(() => {
+    setRenderableFileViewMode("render");
+  }, [selectedPath]);
+  const showRenderedFile =
+    canRenderFile && renderableFileViewMode === "render" && !fileContent?.truncated;
 
   useEffect(() => {
     if (
@@ -323,6 +335,15 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
             </ThemedText>
           </View>
           <View style={styles.editorActions}>
+            {canRenderFile ? (
+              <HeaderActionButton
+                label={renderableFileViewMode === "render" ? "Source" : "Render"}
+                selected={renderableFileViewMode === "source"}
+                onPress={() =>
+                  setRenderableFileViewMode((mode) => (mode === "render" ? "source" : "render"))
+                }
+              />
+            ) : null}
             <HeaderActionButton disabled={!canEditFile} label="Edit" onPress={openEditor} />
           </View>
         </View>
@@ -346,6 +367,22 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
                 {errorMessage(fileContentQuery.error)}
               </ThemedText>
             </View>
+          ) : fileContent && isImageFile && showRenderedFile ? (
+            <WorkspaceFileContentView
+              base64Content={fileContent.base64Content}
+              content=""
+              isImage
+              mimeType={fileContent.mimeType}
+              viewMode="render"
+            />
+          ) : fileContent && isHtmlFile && showRenderedFile ? (
+            <WorkspaceFileContentView
+              base64Content=""
+              content={fileContent.content}
+              isImage={false}
+              mimeType={null}
+              viewMode="render"
+            />
           ) : fileContent?.binary ? (
             <View style={styles.emptyState}>
               <ThemedText type="smallBold">Binary file</ThemedText>
