@@ -119,6 +119,35 @@ describe("thread history pagination", () => {
     expect((await retry.json()).messages).toHaveLength(40);
   });
 
+  it.each([[[0, 1]], [[2, 3]], [[4, 5]], [[0, 1, 2, 3, 4, 5]]])(
+    "preserves pages and latest refresh with missing timestamps in turns %j",
+    async (missing) => {
+      const { app, turns } = historyServer();
+      turns.splice(6);
+      for (const index of missing) {
+        Object.assign(turns[index]!, { startedAt: null, completedAt: null });
+      }
+      const expected = turns.flatMap((_, index) => [`Question ${index}`, `Answer ${index}`]);
+      const collected: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const query = new URLSearchParams({ limit: "2" });
+        if (cursor) query.set("cursor", cursor);
+        const response = await app.request(`/v1/threads/long-thread?${query}`);
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        collected.unshift(...body.messages.map((message: { content: string }) => message.content));
+        cursor = body.olderMessagesCursor;
+      } while (cursor);
+      expect(collected).toEqual(expected);
+
+      const latest = await app.request("/v1/threads/long-thread?limit=2");
+      expect(
+        (await latest.json()).messages.map((message: { content: string }) => message.content),
+      ).toEqual(expected.slice(-4));
+    },
+  );
+
   it("does not mix cached messages from a replaced rollout path into the new first page", async () => {
     const { app, thread, turns } = historyServer();
     Object.assign(thread, { path: "/tmp/old-rollout.jsonl" });
@@ -146,5 +175,67 @@ describe("thread history pagination", () => {
       "replacement-user",
       "replacement-assistant",
     ]);
+  });
+  it("preserves chronological order when historical turns lack both timestamps", async () => {
+    const { app, turns } = historyServer();
+    turns.splice(3);
+    Object.assign(turns[1]!, {
+      startedAt: null,
+      completedAt: null,
+      items: [
+        {
+          id: "user-1",
+          type: "userMessage",
+          content: [{ type: "text", text: "开始执行", text_elements: [] }],
+        },
+        { id: "assistant-1", type: "agentMessage", text: "开始执行回复" },
+      ],
+    });
+
+    const response = await app.request("/v1/threads/long-thread?limit=20");
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages.map((message: { content: string }) => message.content)).toEqual([
+      "Question 0",
+      "Answer 0",
+      "开始执行",
+      "开始执行回复",
+      "Question 2",
+      "Answer 2",
+    ]);
+  });
+
+  it("keeps cached history ordered when full reads precede older pages with missing times", async () => {
+    const { app, turns } = historyServer();
+    turns.splice(3);
+    Object.assign(turns[1]!, { startedAt: null, completedAt: null });
+    const full = await app.request("/v1/threads/long-thread?refresh=true");
+    expect(full.status).toBe(200);
+    const latest = await app.request("/v1/threads/long-thread?limit=1");
+    const { olderMessagesCursor } = await latest.json();
+    const older = await app.request(
+      `/v1/threads/long-thread?limit=1&cursor=${olderMessagesCursor}`,
+    );
+    expect(older.status).toBe(200);
+    const cached = await app.request("/v1/threads/long-thread");
+    expect((await cached.json()).messages.map((message: { id: string }) => message.id)).toEqual([
+      "user-0",
+      "assistant-0",
+      "user-1",
+      "assistant-1",
+      "user-2",
+      "assistant-2",
+    ]);
+  });
+
+  it("keeps missing historical times stable when the thread changes after the latest read", async () => {
+    const { app, thread, turns } = historyServer();
+    turns.splice(1);
+    Object.assign(turns[0]!, { startedAt: null, completedAt: null });
+    const first = await app.request("/v1/threads/long-thread?limit=1");
+    const before = await first.json();
+    thread.updatedAt += 100;
+    const second = await app.request("/v1/threads/long-thread?limit=1");
+    expect((await second.json()).messages).toEqual(before.messages);
   });
 });

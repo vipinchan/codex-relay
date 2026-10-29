@@ -3433,6 +3433,7 @@ export function createApp(options: AppOptions = {}) {
         let pageMessages: ChatMessage[];
         let olderMessagesCursor: string | null;
         let pageThread = thread;
+        const cachedMessages = messagesByThreadId.get(threadId) ?? [];
         if (rolloutPath && historyPage.cursor?.source !== "app-server") {
           const fileStat = await stat(rolloutPath);
           const fileIdentity = createHash("sha256")
@@ -3468,20 +3469,41 @@ export function createApp(options: AppOptions = {}) {
             ...(historyPage.cursor ? { cursor: historyPage.cursor.value } : {}),
           });
           pageThread = { ...thread, turns: [...page.data].reverse() };
-          pageMessages = mapAppServerMessages(pageThread);
+          pageMessages = mapAppServerMessages(
+            pageThread,
+            historyPage.cursor?.before,
+            cachedMessages,
+          );
           olderMessagesCursor = page.nextCursor
-            ? historyCursor({ source: "app-server", threadId, value: page.nextCursor })
+            ? historyCursor({
+                source: "app-server",
+                threadId,
+                value: page.nextCursor,
+                before: pageMessages[0]
+                  ? Date.parse(pageMessages[0].createdAt) / 1000
+                  : (historyPage.cursor?.before ?? thread.updatedAt),
+              })
             : null;
         }
-        const cachedMessages = messagesByThreadId.get(threadId) ?? [];
         const oldestPageMessage = pageMessages[0];
         const recentLocalMessages = historyPage.cursor
           ? []
           : cachedMessages.filter(
-              (message) => !oldestPageMessage || message.createdAt >= oldestPageMessage.createdAt,
+              (message) =>
+                !oldestPageMessage ||
+                message.createdAt > oldestPageMessage.createdAt ||
+                (message.createdAt === oldestPageMessage.createdAt &&
+                  (!message.turnId || message.turnId === oldestPageMessage.turnId)),
             );
-        const messages = mergeThreadMessagePages(pageMessages, recentLocalMessages);
-        messagesByThreadId.set(threadId, mergeThreadMessagePages(messages, cachedMessages));
+        const messages = mergeThreadMessagePages(pageMessages, recentLocalMessages, "older");
+        messagesByThreadId.set(
+          threadId,
+          mergeThreadMessagePages(
+            messages,
+            cachedMessages,
+            historyPage.cursor ? "older" : "latest",
+          ),
+        );
         if (thread.path) appServerRolloutPathsByThreadId.set(threadId, thread.path);
         const responseThread = preserveKnownRunningThreadState(
           rememberRolloutThreadMessages(
@@ -8319,11 +8341,39 @@ function preserveKnownRunningThreadState(thread: ThreadMetadata, wasKnownRunning
   });
 }
 
-function mapAppServerMessages(thread: AppServerThread): ChatMessage[] {
+function mapAppServerMessages(
+  thread: AppServerThread,
+  missingTimestampUpperBound = thread.updatedAt,
+  cachedMessages: ChatMessage[] = [],
+): ChatMessage[] {
   const messages: ChatMessage[] = [];
-  for (const turn of thread.turns ?? []) {
+  const turns = thread.turns ?? [];
+  const timestamps = new Map<string, number>();
+  const cachedTurnTimes = new Map<string, number>();
+  for (const message of cachedMessages) {
+    if (message.turnId) {
+      cachedTurnTimes.set(
+        message.turnId,
+        Math.min(
+          cachedTurnTimes.get(message.turnId) ?? Infinity,
+          Date.parse(message.createdAt) / 1000,
+        ),
+      );
+    }
+  }
+  let nextTimestamp = missingTimestampUpperBound;
+  // Historical turns can omit both times. Use the next chronological anchor, never load time.
+  for (const turn of [...turns].reverse()) {
+    nextTimestamp =
+      turn.startedAt ??
+      turn.completedAt ??
+      Math.min(cachedTurnTimes.get(turn.id) ?? nextTimestamp, nextTimestamp);
+    timestamps.set(turn.id, nextTimestamp);
+  }
+  for (const turn of turns) {
+    const timedTurn = { ...turn, startedAt: timestamps.get(turn.id)! };
     for (const item of turn.items ?? []) {
-      const message = mapAppServerItem(thread.id, turn, item);
+      const message = mapAppServerItem(thread.id, timedTurn, item);
       if (message) {
         messages.push(message);
       }
@@ -8355,13 +8405,26 @@ function mergeAppServerMessagesWithLocalStatus(
   );
 }
 
-function mergeThreadMessagePages(incomingMessages: ChatMessage[], cachedMessages: ChatMessage[]) {
+function mergeThreadMessagePages(
+  incomingMessages: ChatMessage[],
+  cachedMessages: ChatMessage[],
+  pagePosition?: "older" | "latest",
+) {
   const byId = new Map<string, ChatMessage>();
   for (const message of cachedMessages) {
     byId.set(message.id, message);
   }
   for (const message of incomingMessages) {
     byId.set(message.id, message);
+  }
+  if (pagePosition) {
+    const incomingIds = new Set(incomingMessages.map((message) => message.id));
+    const otherMessages = cachedMessages.filter((message) => !incomingIds.has(message.id));
+    return dedupeThreadMessages(
+      pagePosition === "older"
+        ? [...incomingMessages, ...otherMessages]
+        : [...otherMessages, ...incomingMessages],
+    );
   }
   return dedupeThreadMessages(Array.from(byId.values()));
 }

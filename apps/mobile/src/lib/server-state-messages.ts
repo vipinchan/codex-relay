@@ -47,11 +47,12 @@ export function appendOptimisticSteeringMessageToDetail(
 export function mergeThreadDetailState(
   current: ThreadDetailResponse | undefined,
   response: ThreadDetailResponse,
+  incomingIsOlder = false,
 ) {
   if (!current || current.thread.id !== response.thread.id) {
     return response;
   }
-  const messages = mergeMessages(current.messages, response.messages);
+  const messages = mergeMessages(current.messages, response.messages, incomingIsOlder);
   return {
     ...response,
     thread: preferredThreadSnapshot(current.thread, response.thread),
@@ -76,7 +77,7 @@ export function mergeOlderThreadDetailState(
     return current;
   }
   return {
-    ...mergeThreadDetailState(current, response),
+    ...mergeThreadDetailState(current, response, true),
     olderMessagesCursor: response.olderMessagesCursor ?? null,
   };
 }
@@ -123,7 +124,11 @@ function optimisticSteeringMessageId(inputId: string) {
   return `${optimisticSteeringMessageIdPrefix}${inputId}`;
 }
 
-function mergeMessages(baseMessages: ChatMessage[], incomingMessages: ChatMessage[]) {
+function mergeMessages(
+  baseMessages: ChatMessage[],
+  incomingMessages: ChatMessage[],
+  incomingIsOlder = false,
+) {
   const replacedMessageIds = new Set(
     [...baseMessages, ...incomingMessages]
       .map(replacementMessageId)
@@ -134,14 +139,21 @@ function mergeMessages(baseMessages: ChatMessage[], incomingMessages: ChatMessag
     incomingMessages.map((message) => [
       message.id,
       baseById.has(message.id)
-        ? preferredMessageSnapshot(baseById.get(message.id)!, message)
+        ? {
+            ...preferredMessageSnapshot(baseById.get(message.id)!, message),
+            createdAt: message.createdAt,
+          }
         : message,
     ]),
   );
   const indexesById = new Map<string, number>();
   const seenIds = new Set<string>();
   const messages: ChatMessage[] = [];
-  for (const candidate of [...baseMessages, ...incomingMessages]) {
+  const baseOnly = baseMessages.filter((message) => !incomingById.has(message.id));
+  const candidates = incomingIsOlder
+    ? [...incomingMessages, ...baseOnly]
+    : [...baseOnly, ...incomingMessages];
+  for (const candidate of candidates) {
     const message = incomingById.get(candidate.id) ?? candidate;
     if (seenIds.has(message.id) || replacedMessageIds.has(message.id)) {
       continue;

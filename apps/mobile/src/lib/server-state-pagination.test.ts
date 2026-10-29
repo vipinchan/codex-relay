@@ -98,6 +98,63 @@ describe("mobile thread pagination cache", () => {
     ]);
   });
 
+  it("places an older page before current messages with the same creation time", async () => {
+    const queryClient = new QueryClient();
+    const current = detail("thread-a", ["message-3"], "cursor-2");
+    current.messages[0].createdAt = "2026-06-06T00:00:00.000Z";
+    queryClient.setQueryData(serverStateKeys.thread("thread-a"), current);
+    const older = detail("thread-a", ["message-1", "message-2"], null);
+    for (const message of older.messages) message.createdAt = current.messages[0].createdAt;
+    getThreadMock.mockResolvedValueOnce(older);
+
+    const result = await fetchOlderThreadMessagesState(queryClient, "thread-a");
+
+    expect(result?.messages.map((message) => message.id)).toEqual([
+      "message-1",
+      "message-2",
+      "message-3",
+    ]);
+  });
+
+  it("uses the latest page order for cached messages with the same creation time", async () => {
+    const queryClient = new QueryClient();
+    const current = detail("thread-a", ["message-2", "message-1"], "cursor-1");
+    const latest = detail("thread-a", ["message-1", "message-2", "message-3"], "cursor-1");
+    for (const message of [...current.messages, ...latest.messages]) {
+      message.createdAt = "2026-06-06T00:00:00.000Z";
+    }
+    queryClient.setQueryData(serverStateKeys.thread("thread-a"), current);
+    getThreadMock.mockResolvedValueOnce(latest);
+
+    const result = await fetchThreadState(queryClient, "thread-a");
+
+    expect(result.messages.map((message) => message.id)).toEqual([
+      "message-1",
+      "message-2",
+      "message-3",
+    ]);
+  });
+
+  it("uses corrected history creation time while retaining newer cached content", async () => {
+    const queryClient = new QueryClient();
+    const current = detail("thread-a", ["message-1"], "cursor-1");
+    current.messages[0].createdAt = "2026-06-06T00:00:03.000Z";
+    current.messages[0].updatedAt = "2026-06-06T00:00:05.000Z";
+    current.messages[0].content = "newer cached content";
+    queryClient.setQueryData(serverStateKeys.thread("thread-a"), current);
+    const latest = detail("thread-a", ["message-1", "message-2"], "cursor-1");
+    getThreadMock.mockResolvedValueOnce(latest);
+
+    const result = await fetchThreadState(queryClient, "thread-a");
+
+    expect(result.messages.map((message) => message.id)).toEqual(["message-1", "message-2"]);
+    expect(result.messages[0]).toMatchObject({
+      content: "newer cached content",
+      createdAt: "2026-06-06T00:00:01.000Z",
+      updatedAt: "2026-06-06T00:00:05.000Z",
+    });
+  });
+
   it("replaces stale history and cursor on explicit refresh", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(

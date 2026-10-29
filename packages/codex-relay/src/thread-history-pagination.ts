@@ -4,6 +4,7 @@ type HistoryCursor = {
   source: "app-server" | "local" | "rollout";
   threadId: string;
   value: string;
+  before?: number;
 };
 
 export function historyCursor(cursor: HistoryCursor) {
@@ -24,7 +25,9 @@ export function parseHistoryPage(threadId: string, limit: string | undefined, cu
         value.threadId !== threadId ||
         (value.source !== "app-server" && value.source !== "local" && value.source !== "rollout") ||
         typeof value.value !== "string" ||
-        !value.value
+        !value.value ||
+        (value.before !== undefined &&
+          (typeof value.before !== "number" || !Number.isFinite(value.before)))
       ) {
         throw new Error();
       }
