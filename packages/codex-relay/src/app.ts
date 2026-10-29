@@ -136,6 +136,7 @@ import {
 } from "es-git";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -595,9 +596,21 @@ export function createApp(options: AppOptions = {}) {
     });
     return result;
   }
-  function runAppServerMutation<T>(threadId: string, operation: () => Promise<T>) {
+  const activeAppServerMutationThreadIds = new AsyncLocalStorage<Set<string>>();
+
+  function runAppServerMutation<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
+    const activeThreadIds = activeAppServerMutationThreadIds.getStore();
+    if (activeThreadIds?.has(threadId)) {
+      return operation();
+    }
+
     const previous = appServerMutationTails.get(threadId) ?? Promise.resolve();
-    const result = previous.then(operation, operation);
+    const execute = async () => {
+      const nextStore = new Set(activeThreadIds ?? []);
+      nextStore.add(threadId);
+      return activeAppServerMutationThreadIds.run(nextStore, operation);
+    };
+    const result = previous.then(execute, execute);
     const tail = result.then(
       () => undefined,
       () => undefined,
@@ -5867,7 +5880,7 @@ async function runAppServerPromptStreamed(input: {
   const shouldGenerateInitialTitle =
     initialThread?.messageCount === 0 &&
     Boolean(initialTitle) &&
-    initialTitle === titleFromPrompt(prompt);
+    (isDefaultThreadTitle(initialTitle) || initialTitle === titleFromPrompt(prompt));
   let handedOffToQueuedTurn = false;
   let observedInputRequest = false;
   let producedTurnOutput = false;
@@ -7931,10 +7944,21 @@ function titleFromPrompt(prompt: string | undefined) {
   return firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine;
 }
 
+export function isDefaultThreadTitle(title: string | undefined): boolean {
+  if (!title) {
+    return true;
+  }
+  const normalized = title.trim();
+  return (
+    normalized === "" ||
+    normalized === "New chat" ||
+    normalized === "New Codex thread" ||
+    normalized === "Untitled thread"
+  );
+}
+
 function maybeReplaceDefaultTitle(currentTitle: string | undefined, prompt: string) {
-  return !currentTitle || currentTitle === "New Codex thread"
-    ? titleFromPrompt(prompt)
-    : currentTitle;
+  return isDefaultThreadTitle(currentTitle) ? titleFromPrompt(prompt) : currentTitle;
 }
 
 function promptWithAttachments(prompt: string, attachments: PromptAttachment[]) {

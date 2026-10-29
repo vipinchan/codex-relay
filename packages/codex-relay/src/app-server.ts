@@ -357,6 +357,7 @@ export class CodexAppServerClient {
     const params = {
       archived: false,
       limit,
+      modelProviders: [] as string[],
       sortDirection: "desc",
       sortKey: "recency_at",
       sourceKinds: ["cli", "vscode", "exec", "appServer"],

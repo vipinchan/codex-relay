@@ -263,6 +263,7 @@ describe("CodexAppServerClient shared socket mode", () => {
       expect(requests).toHaveLength(1);
       expect(requests[0]?.params).toMatchObject({
         limit: 1,
+        modelProviders: [],
         sortKey: "recency_at",
         sortDirection: "desc",
         sourceKinds: ["cli", "vscode", "exec", "appServer"],
@@ -364,8 +365,12 @@ describe("CodexAppServerClient shared socket mode", () => {
       await expect(client.listThreads()).resolves.toEqual([{ id: "legacy-thread" }]);
       const requests = server.requests.filter((request) => request.method === "thread/list");
       expect(requests).toHaveLength(2);
-      expect(requests[0]?.params).toMatchObject({ limit: 20, useStateDbOnly: true });
-      expect(requests[1]?.params).toMatchObject({ limit: 20 });
+      expect(requests[0]?.params).toMatchObject({
+        limit: 20,
+        modelProviders: [],
+        useStateDbOnly: true,
+      });
+      expect(requests[1]?.params).toMatchObject({ limit: 20, modelProviders: [] });
       expect(requests[1]?.params).not.toHaveProperty("useStateDbOnly");
       expect(requests[1]?.params).not.toHaveProperty("cursor");
       vi.stubEnv("CODEX_RELAY_THREAD_LIST_LIMIT", "10");
