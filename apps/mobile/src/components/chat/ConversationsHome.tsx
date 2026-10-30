@@ -34,9 +34,14 @@ import {
   setHasPairedSession,
 } from "@/state/chat-store";
 import { pinnedThreadStore$, togglePinnedThread } from "@/state/pinned-thread-store";
+import {
+  conversationsViewStore$,
+  toggleConversationsGroupingMode,
+  type ConversationsGroupingMode,
+} from "@/state/conversations-view-store";
 
 type Period = "pinned" | "today" | "yesterday" | "week" | "month" | "earlier";
-type GroupingMode = "project" | "time";
+type GroupingMode = ConversationsGroupingMode;
 type ThreadSection = { key: string; title: string; data: ThreadSummary[] };
 type ThreadGlyph = "agentAtom" | "branch" | "file" | "folder" | "terminal";
 
@@ -58,7 +63,10 @@ export function ConversationsHome() {
   const cachedThreadsById = useSelector(() => chatStore$.threadsById.get());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [groupingMode, setGroupingMode] = useState<GroupingMode>("time");
+  const groupingMode = useSelector(() => {
+    const mode = conversationsViewStore$.groupingMode.get();
+    return mode === "project" ? "project" : "time";
+  });
   const [collapsedSectionKeys, setCollapsedSectionKeys] = useState<Set<string>>(() => new Set());
   const [threadWithActions, setThreadWithActions] = useState<ThreadSummary>();
   const [isRenamingThread, setIsRenamingThread] = useState(false);
@@ -204,7 +212,7 @@ export function ConversationsHome() {
 
   function toggleGroupingMode() {
     hapticSelection();
-    setGroupingMode((mode) => (mode === "time" ? "project" : "time"));
+    toggleConversationsGroupingMode();
   }
 
   return (
