@@ -21,6 +21,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { hasCodexRelaySession } from "@/lib/codex-relay-api";
 import { hapticLightImpact, hapticSelection, hapticSuccess } from "@/lib/haptics";
 import {
+  archiveThreadServerState,
   regenerateThreadTitleServerState,
   renameThreadServerState,
   serverStateKeys,
@@ -33,7 +34,7 @@ import {
   setActiveThread,
   setHasPairedSession,
 } from "@/state/chat-store";
-import { pinnedThreadStore$, togglePinnedThread } from "@/state/pinned-thread-store";
+import { pinnedThreadStore$, togglePinnedThread, unpinThread } from "@/state/pinned-thread-store";
 import {
   conversationsViewStore$,
   toggleConversationsGroupingMode,
@@ -78,6 +79,9 @@ export function ConversationsHome() {
   });
   const regenerateTitleMutation = useMutation({
     mutationFn: (threadId: string) => regenerateThreadTitleServerState(queryClient, threadId),
+  });
+  const archiveThreadMutation = useMutation({
+    mutationFn: (threadId: string) => archiveThreadServerState(queryClient, threadId),
   });
 
   useEffect(() => {
@@ -140,14 +144,50 @@ export function ConversationsHome() {
     }
   }
 
+  async function removeThread(threadId: string) {
+    if (archiveThreadMutation.isPending) return;
+    try {
+      const response = await archiveThreadMutation.mutateAsync(threadId);
+      unpinThread(threadId);
+      if (chatStore$.activeThreadId.peek() === threadId) {
+        setActiveThread(response.threads[0]?.id);
+      }
+      hapticSuccess();
+      closeThreadActions();
+    } catch (caught) {
+      Alert.alert(
+        zh ? "无法移除会话" : "Couldn’t remove chat",
+        caught instanceof Error ? caught.message : zh ? "请检查连接后重试。" : "Please try again.",
+      );
+    }
+  }
+
+  function confirmRemoveThread() {
+    if (!threadWithActions || !canMutateAppServerThreads || archiveThreadMutation.isPending) return;
+    const thread = threadWithActions;
+    Alert.alert(
+      zh ? "移除会话？" : "Remove chat?",
+      zh
+        ? `“${thread.title}”将从会话列表移除，历史记录仍会保留。`
+        : `"${thread.title}" will be removed from the conversation list. Its history will be kept.`,
+      [
+        { style: "cancel", text: zh ? "取消" : "Cancel" },
+        {
+          style: "destructive",
+          text: zh ? "移除" : "Remove",
+          onPress: () => void removeThread(thread.id),
+        },
+      ],
+    );
+  }
+
   const locale = useMemo(() => Intl.DateTimeFormat().resolvedOptions().locale || "en", []);
   const zh = locale.toLowerCase().startsWith("zh");
 
   const threads = useMemo(() => {
     const serverThreads = threadsQuery.data?.threads;
-    const source = serverThreads?.length
-      ? serverThreads
-      : cachedThreadIds.map((id) => cachedThreadsById[id]).filter(Boolean);
+    const source =
+      serverThreads ?? cachedThreadIds.map((id) => cachedThreadsById[id]).filter(Boolean);
     return [...source].sort((a, b) => activityTime(b).getTime() - activityTime(a).getTime());
   }, [cachedThreadIds, cachedThreadsById, threadsQuery.data?.threads]);
 
@@ -431,6 +471,23 @@ export function ConversationsHome() {
                       : zh
                         ? "重新生成标题"
                         : "Regenerate title"
+                  }
+                />
+                <SheetActionRow
+                  accessibilityLabel={zh ? "移除会话" : "Remove chat"}
+                  disabled={archiveThreadMutation.isPending}
+                  icon="archive"
+                  iconTintColor="#FF8DA5"
+                  onPress={confirmRemoveThread}
+                  subtitle={zh ? "保留历史记录" : "Keeps chat history"}
+                  title={
+                    archiveThreadMutation.isPending
+                      ? zh
+                        ? "正在移除会话…"
+                        : "Removing chat…"
+                      : zh
+                        ? "移除会话"
+                        : "Remove chat"
                   }
                 />
               </>
