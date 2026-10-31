@@ -2,6 +2,13 @@ import type { ThreadSummary } from "codex-relay/api-schema";
 
 type WorkspaceThread = Pick<ThreadSummary, "createdAt" | "cwd" | "lastActivityAt" | "updatedAt">;
 
+export function workspacePathInputError(input: string) {
+  const path = input.trim();
+  if (!path) return "Enter a folder path.";
+  if (!path.startsWith("/")) return "Enter an absolute path starting with /.";
+  return undefined;
+}
+
 export function preferredNewChatWorkspacePath(
   threads: WorkspaceThread[],
   fallbackWorkspacePath: string | undefined,
