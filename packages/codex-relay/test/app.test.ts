@@ -1946,6 +1946,7 @@ describe("Codex Relay server routes", () => {
       }),
       startThread,
       startTurn,
+      readRateLimits: async () => ({ limitRequests: null, limitTokens: null }),
     };
     const app = createApp({
       appServer: appServer as never,
@@ -1980,6 +1981,125 @@ describe("Codex Relay server routes", () => {
       }),
     );
     expect(body.thread).toMatchObject({ id: "app-thread-title", title: "项目变更与风险总结" });
+  });
+
+  it("falls back to conversation model when default model fails during title regeneration", async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), "codex-relay-workspace-"));
+    const originalThread = {
+      ...appServerHistoryThread({
+        id: "app-thread-fallback",
+        name: "Current title",
+        turns: [],
+        workspacePath,
+      }),
+      runtimeConfig: {
+        model: "gpt-custom-convo",
+      },
+    };
+    const firstTurn = appServerTurn("turn-first", "请帮我写个自动化脚本", 1);
+    const latestTurn = appServerTurn("turn-latest", "请帮我写个自动化脚本", 2);
+    const listThreadTurns = vi.fn<
+      (_threadId: string, options: { sortDirection?: "asc" | "desc" }) => Promise<unknown>
+    >(async (_threadId, options) => ({
+      data: [options.sortDirection === "asc" ? firstTurn : latestTurn],
+      nextCursor: null,
+    }));
+
+    let currentThread = originalThread;
+    const startThread = vi.fn<
+      (input: { model?: string | null }) => Promise<{ cwd: string; id: string }>
+    >(async (input) => ({
+      cwd: workspacePath,
+      id: `helper-${input.model}`,
+    }));
+
+    const startTurn = vi.fn<
+      (input: { model?: string | null; threadId: string }) => Promise<{
+        completedAt: number;
+        id: string;
+        items: Array<{ id: string; text: string; type: "agentMessage" }>;
+        startedAt: number;
+        status: string;
+      }>
+    >(async (input) => {
+      if (input.model === "gpt-default") {
+        return {
+          completedAt: 2,
+          id: "turn-fail",
+          items: [],
+          startedAt: 1,
+          status: "failed",
+        };
+      }
+      return {
+        completedAt: 4,
+        id: "turn-success",
+        items: [{ id: "msg-1", text: "自动化脚本助手", type: "agentMessage" }],
+        startedAt: 3,
+        status: "completed",
+      };
+    });
+
+    const setThreadName = vi.fn<() => Promise<void>>(async () => {
+      currentThread = { ...originalThread, name: "自动化脚本助手" };
+    });
+
+    const appServer = {
+      archiveThread: vi.fn<() => Promise<void>>(async () => undefined),
+      listModels: vi.fn<() => Promise<unknown>>(async () => [
+        {
+          defaultReasoningEffort: "medium",
+          id: "gpt-custom-convo",
+          isDefault: false,
+          supportedReasoningEfforts: [{ reasoningEffort: "medium" }],
+        },
+        {
+          defaultReasoningEffort: "high",
+          id: "gpt-default",
+          isDefault: true,
+          supportedReasoningEfforts: [{ reasoningEffort: "low" }],
+        },
+      ]),
+      listThreadTurns,
+      onNotification: () => () => undefined,
+      readThread: vi.fn<() => Promise<unknown>>(async () => currentThread),
+      setThreadName,
+      startThread,
+      startTurn,
+    };
+
+    const app = createApp({
+      appServer: appServer as never,
+      codex: createMockCodex(),
+      workspacePath,
+    });
+
+    const response = await app.request("/v1/threads/app-thread-fallback/title/regenerate", {
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(startTurn).toHaveBeenCalledTimes(2);
+    expect(startTurn).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        effort: "low",
+        model: "gpt-default",
+        threadId: "helper-gpt-default",
+      }),
+    );
+    expect(startTurn).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        effort: "medium",
+        model: "gpt-custom-convo",
+        threadId: "helper-gpt-custom-convo",
+      }),
+    );
+    expect(body.thread).toMatchObject({ id: "app-thread-fallback", title: "自动化脚本助手" });
   });
 
   it("rewinds an app-server thread from a selected user turn", async () => {

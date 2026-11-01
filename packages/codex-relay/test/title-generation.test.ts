@@ -5,6 +5,7 @@ import {
   generateTitleWithAppServer,
   normalizeGeneratedTitle,
   selectTitleGenerationModel,
+  selectTitleGenerationModelCandidates,
 } from "../src/title-generation.js";
 
 describe("title generation", () => {
@@ -59,6 +60,28 @@ describe("title generation", () => {
         "thread-model",
       ),
     ).toEqual({ effort: "low", model: "title-model" });
+  });
+
+  it("returns candidate models with conversation model fallback when default differs", () => {
+    const candidates = selectTitleGenerationModelCandidates(
+      [
+        {
+          id: "thread-model",
+          isDefault: false,
+          supportedReasoningEfforts: [{ reasoningEffort: "medium" }],
+        },
+        {
+          id: "default-model",
+          isDefault: true,
+          supportedReasoningEfforts: [{ reasoningEffort: "low" }],
+        },
+      ],
+      "thread-model",
+    );
+    expect(candidates).toEqual([
+      { effort: "low", model: "default-model" },
+      { effort: "medium", model: "thread-model" },
+    ]);
   });
 
   it("falls back to the conversation model when there is no app-server default", () => {

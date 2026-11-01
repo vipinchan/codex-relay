@@ -192,7 +192,10 @@ import {
   type BotDefinition,
   type BotDefinitionPatch,
 } from "./bot-definitions.js";
-import { generateTitleWithAppServer, selectTitleGenerationModel } from "./title-generation.js";
+import {
+  generateTitleWithAppServer,
+  selectTitleGenerationModelCandidates,
+} from "./title-generation.js";
 import { codexRelayDataPath } from "./paths.js";
 import { relayDebugLog } from "./debug-log.js";
 import { historyCursor, localHistoryPage, parseHistoryPage } from "./thread-history-pagination.js";
@@ -638,31 +641,54 @@ export function createApp(options: AppOptions = {}) {
       return undefined;
     }
 
-    let titleGenerationThreadId: string | undefined;
+    const activeTitleGenerationThreadIds = new Set<string>();
     try {
       const availableModels = await appServer.listModels().catch(() => []);
-      const titleModel = selectTitleGenerationModel(
+      const conversationModel = input.model ?? threads.get(input.threadId)?.model;
+      const modelCandidates = selectTitleGenerationModelCandidates(
         availableModels,
-        input.model ?? threads.get(input.threadId)?.model,
+        conversationModel,
       );
       const startedAt = Date.now();
-      relayDebugLog("thread.title.generation.started", {
-        effort: titleModel.effort,
-        model: titleModel.model ?? "app-server-default",
-        threadId: input.threadId,
-      });
-      const title = await generateTitleWithAppServer({
-        appServer,
-        context: input.context,
-        cwd: initialThread.cwd || threads.get(input.threadId)?.cwd || workspacePath,
-        effort: titleModel.effort,
-        model: titleModel.model,
-        onThreadCreated(threadId) {
-          titleGenerationThreadId = threadId;
-          titleGenerationThreadIds.add(threadId);
-        },
-        serviceTier: input.serviceTier ?? threads.get(input.threadId)?.serviceTier,
-      });
+      let title: string | undefined;
+      let lastError: unknown;
+
+      for (const candidate of modelCandidates) {
+        relayDebugLog("thread.title.generation.started", {
+          effort: candidate.effort,
+          model: candidate.model ?? "app-server-default",
+          threadId: input.threadId,
+        });
+        try {
+          title = await generateTitleWithAppServer({
+            appServer,
+            context: input.context,
+            cwd: initialThread.cwd || threads.get(input.threadId)?.cwd || workspacePath,
+            effort: candidate.effort,
+            model: candidate.model,
+            onThreadCreated(threadId) {
+              activeTitleGenerationThreadIds.add(threadId);
+              titleGenerationThreadIds.add(threadId);
+            },
+            serviceTier: input.serviceTier ?? threads.get(input.threadId)?.serviceTier,
+          });
+          break;
+        } catch (error) {
+          lastError = error;
+          relayDebugLog("thread.title.generation.candidate_failed", {
+            candidateModel: candidate.model ?? "app-server-default",
+            error: errorMessage(error),
+            threadId: input.threadId,
+          });
+        }
+      }
+
+      if (!title) {
+        throw lastError instanceof Error
+          ? lastError
+          : new Error("Codex did not complete title generation.");
+      }
+
       relayDebugLog("thread.title.generation.completed", {
         elapsedMs: Date.now() - startedAt,
         threadId: input.threadId,
@@ -680,8 +706,8 @@ export function createApp(options: AppOptions = {}) {
         );
       });
     } finally {
-      if (titleGenerationThreadId) {
-        titleGenerationThreadIds.delete(titleGenerationThreadId);
+      for (const helperThreadId of activeTitleGenerationThreadIds) {
+        titleGenerationThreadIds.delete(helperThreadId);
       }
     }
   }
@@ -8236,6 +8262,8 @@ function mapAppServerThread(
     messageCount,
     lastMessagePreview: thread.preview ? preview(thread.preview) : undefined,
     lastActivityAt,
+    ...(thread.runtimeConfig?.model ? { model: thread.runtimeConfig.model } : {}),
+    ...(thread.runtimeConfig?.serviceTier ? { serviceTier: thread.runtimeConfig.serviceTier } : {}),
   });
 }
 

@@ -14,25 +14,54 @@ export type TitleGenerationContext = {
 };
 
 export function selectTitleGenerationModel(models: TitleModelOption[], conversationModel?: string) {
+  return selectTitleGenerationModelCandidates(models, conversationModel)[0];
+}
+
+export function selectTitleGenerationModelCandidates(
+  models: TitleModelOption[],
+  conversationModel?: string,
+): Array<{ effort: string; model: string | undefined }> {
   const supportsLowEffort = (model: TitleModelOption) =>
     model.supportedReasoningEfforts?.some((option) => option.reasoningEffort === "low") ?? false;
   const defaultModel = models.find((model) => model.isDefault);
-  const model =
+  const primaryModel =
     (defaultModel && supportsLowEffort(defaultModel) ? defaultModel : undefined) ??
     models.find(supportsLowEffort) ??
     defaultModel ??
     models.find((candidate) => candidate.id === conversationModel) ??
     models[0];
-  const supportedEfforts = model?.supportedReasoningEfforts?.map(
-    (option) => option.reasoningEffort,
-  );
 
-  return {
-    effort: supportedEfforts?.includes("low")
-      ? "low"
-      : (model?.defaultReasoningEffort ?? supportedEfforts?.[0] ?? "low"),
-    model: model?.id ?? conversationModel,
-  };
+  const candidateModels: TitleModelOption[] = [];
+  if (primaryModel) {
+    candidateModels.push(primaryModel);
+  }
+
+  if (conversationModel && primaryModel?.id !== conversationModel) {
+    const conversationMatch = models.find((m) => m.id === conversationModel);
+    candidateModels.push(
+      conversationMatch ?? {
+        id: conversationModel,
+        isDefault: false,
+        supportedReasoningEfforts: [],
+      },
+    );
+  }
+
+  if (candidateModels.length === 0) {
+    return [{ effort: "low", model: conversationModel }];
+  }
+
+  return candidateModels.map((model) => {
+    const supportedEfforts = model.supportedReasoningEfforts?.map(
+      (option) => option.reasoningEffort,
+    );
+    return {
+      effort: supportedEfforts?.includes("low")
+        ? "low"
+        : (model.defaultReasoningEffort ?? supportedEfforts?.[0] ?? "low"),
+      model: model.id,
+    };
+  });
 }
 
 export function buildTitleGenerationPrompt(context: TitleGenerationContext) {
