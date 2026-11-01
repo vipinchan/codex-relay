@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Bot } from "codex-relay/api-schema";
 import { router } from "expo-router";
@@ -10,11 +11,11 @@ import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
-  createBotConversation,
-  deleteBot,
-  getCodexRelayServerUrl,
-  listBotConversations,
-  listBots,
+  createBotConversation as rawCreateBotConversation,
+  deleteBot as rawDeleteBot,
+  getCodexRelayCacheIdentity,
+  listBotConversations as rawListBotConversations,
+  listBots as rawListBots,
 } from "@/lib/codex-relay-api";
 
 import { BotAvatar, BotPage, BotPrimaryButton, BotRow, botError, botText } from "./bot-ui";
@@ -28,9 +29,17 @@ const runtimeLabel = (mode: Bot["runtimeMode"]) =>
   })[mode];
 
 export function BotDetailScreen({ botId }: { botId: string }) {
+  const { createBotConversation, deleteBot, listBotConversations, listBots } =
+    useComputerOperations({
+      createBotConversation: rawCreateBotConversation,
+      deleteBot: rawDeleteBot,
+      listBotConversations: rawListBotConversations,
+      listBots: rawListBots,
+    });
+
   const theme = useTheme();
   const queryClient = useQueryClient();
-  const serverUrl = getCodexRelayServerUrl();
+  const serverUrl = getCodexRelayCacheIdentity();
   const botsQuery = useQuery({ queryKey: ["bots", serverUrl], queryFn: listBots });
   const [busy, setBusy] = useState(false);
   const bot = botsQuery.data?.find((item) => item.id === botId);

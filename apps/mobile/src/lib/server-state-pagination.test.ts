@@ -4,6 +4,7 @@ import type { ChatMessage, ThreadDetailResponse, ThreadSummary } from "codex-rel
 
 vi.mock("@/lib/codex-relay-api", () => ({
   getCodexRelayServerUrl: vi.fn<() => string>(),
+  getCodexRelayCacheIdentity: () => getServerUrlMock(),
   getThread: vi.fn<typeof getThread>(),
   getThreadContextWindow: vi.fn<() => void>(),
   listModels: vi.fn<() => void>(),

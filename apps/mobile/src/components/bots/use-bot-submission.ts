@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { captureConnection } from "@/lib/connection-context";
+import { useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
 
 import { attachComposerImages } from "@/lib/composer-images";
@@ -37,6 +38,7 @@ export function useBotSubmission({
   onAccepted?: (submitted: BotSubmission) => void;
   onSent: () => Promise<void>;
 }) {
+  const connection = useMemo(captureConnection, []);
   const busySend = useRef(false);
   const busyAttach = useRef(false);
   const [attaching, setAttaching] = useState(false);
@@ -111,7 +113,9 @@ export function useBotSubmission({
     try {
       savePendingBotSubmission(composerId, submitted);
       const { attachmentIds: _ids, draftText: _draft, ...request } = submitted;
+      connection.assertCurrent();
       await sendBotMessage(conversationId, request);
+      connection.assertCurrent();
       const remaining = remainingBotDraft(
         {
           text: getComposerDraft(composerId),
@@ -136,6 +140,7 @@ export function useBotSubmission({
   }
 
   function discardPending() {
+    if (!connection.isCurrent()) return;
     if (!pending || sending) return;
     clearPendingBotSubmission(composerId, pending.requestId);
     setPending(undefined);

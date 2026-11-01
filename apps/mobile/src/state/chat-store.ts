@@ -452,6 +452,7 @@ export function resetChatSessionState() {
   chatStore$.models.set([]);
   chatStore$.rateLimitBuckets.set([]);
   chatStore$.runtimePreferencesByWorkspacePath.set({});
+  chatStore$.runtimeMode.set("default");
   resetWorkspacePreviewState();
   chatStore$.machineName.set(undefined);
   chatStore$.selectedReasoningEffort.set(undefined);

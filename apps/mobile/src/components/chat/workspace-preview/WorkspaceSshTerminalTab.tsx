@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -14,11 +15,11 @@ import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
 import { Spacing } from "@/constants/theme";
 import {
-  closeWorkspaceTerminalSession,
-  createWorkspaceTerminalSession,
-  resizeWorkspaceTerminalSession,
-  streamWorkspaceTerminalOutput,
-  writeWorkspaceTerminalInput,
+  closeWorkspaceTerminalSession as rawCloseWorkspaceTerminalSession,
+  createWorkspaceTerminalSession as rawCreateWorkspaceTerminalSession,
+  resizeWorkspaceTerminalSession as rawResizeWorkspaceTerminalSession,
+  streamWorkspaceTerminalOutput as rawStreamWorkspaceTerminalOutput,
+  writeWorkspaceTerminalInput as rawWriteWorkspaceTerminalInput,
 } from "@/lib/codex-relay-api";
 
 import {
@@ -44,6 +45,20 @@ const terminalArrowSequences = {
 };
 
 export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: string }) {
+  const {
+    closeWorkspaceTerminalSession,
+    createWorkspaceTerminalSession,
+    resizeWorkspaceTerminalSession,
+    streamWorkspaceTerminalOutput,
+    writeWorkspaceTerminalInput,
+  } = useComputerOperations({
+    closeWorkspaceTerminalSession: rawCloseWorkspaceTerminalSession,
+    createWorkspaceTerminalSession: rawCreateWorkspaceTerminalSession,
+    resizeWorkspaceTerminalSession: rawResizeWorkspaceTerminalSession,
+    streamWorkspaceTerminalOutput: rawStreamWorkspaceTerminalOutput,
+    writeWorkspaceTerminalInput: rawWriteWorkspaceTerminalInput,
+  });
+
   const terminalIdRef = useRef<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
   const terminalInputRef = useRef<TextInput>(null);
@@ -319,7 +334,17 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
         );
       },
     });
-  }, [reconnectRequestId, terminalFontSize, terminalId, workspacePath]);
+  }, [
+    closeWorkspaceTerminalSession,
+    createWorkspaceTerminalSession,
+    reconnectRequestId,
+    resizeWorkspaceTerminalSession,
+    streamWorkspaceTerminalOutput,
+    terminalFontSize,
+    terminalId,
+    workspacePath,
+    writeWorkspaceTerminalInput,
+  ]);
 
   useEffect(() => {
     postWorkspaceSshTerminalState({
@@ -339,12 +364,14 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
       stopTerminalOutputStream();
       const activeSessionId = activeSessionIdRef.current;
       if (activeSessionId) {
-        void enqueueTerminalRequest(() => closeWorkspaceTerminalSession(activeSessionId));
+        void enqueueTerminalRequest(() => closeWorkspaceTerminalSession(activeSessionId)).catch(
+          () => undefined,
+        );
         activeSessionIdRef.current = null;
         activeSessionWorkspacePathRef.current = null;
       }
     },
-    [],
+    [closeWorkspaceTerminalSession],
   );
 
   return (

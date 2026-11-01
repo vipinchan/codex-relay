@@ -84,6 +84,7 @@ vi.mock("@/lib/haptics", () => ({
 vi.mock("@/lib/codex-relay-api", () => ({
   hasCodexRelaySession: () => true,
   getCodexRelayServerUrl: () => "http://relay.test",
+  getCodexRelayCacheIdentity: () => "http://relay.test",
   archiveThread: ui.archiveThread,
   getThreadContextWindow: vi.fn<() => void>(),
   listModels: vi.fn<() => void>(),

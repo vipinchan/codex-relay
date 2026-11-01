@@ -10,13 +10,26 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import Constants from "expo-constants";
 import { useFonts } from "expo-font";
 import * as Notifications from "expo-notifications";
-import { router, Stack } from "expo-router";
+import { router, Stack, usePathname } from "expo-router";
 import { DarkTheme, ThemeProvider } from "expo-router/react-navigation";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
-import { Text, TextInput } from "react-native";
+import React, { useEffect, useRef, useSyncExternalStore } from "react";
+import { AppState, Text, TextInput } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+
+import { useComputerConnection } from "@/hooks/use-computer-connection";
+import {
+  initializeComputerSessionState,
+  saveCurrentComputerState,
+} from "@/lib/computer-session-state";
+import { getConnectionGeneration, onConnectionInvalidated } from "@/lib/connection-context";
+import {
+  getActiveComputer,
+  getComputers,
+  subscribeComputerProfiles,
+  canRouteLegacyNotification,
+} from "@/lib/computer-profiles";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { useInitialPushNotificationRegistration } from "@/hooks/use-initial-push-notification-registration";
@@ -57,6 +70,20 @@ const queryClient = new QueryClient({
       staleTime: 0,
     },
   },
+});
+
+initializeComputerSessionState();
+onConnectionInvalidated(() => {
+  void queryClient.cancelQueries();
+});
+let savedComputerIds = getComputers().map((computer) => computer.id);
+subscribeComputerProfiles(() => {
+  const ids = getComputers().map((computer) => computer.id);
+  for (const id of savedComputerIds) {
+    if (!ids.includes(id))
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[1] === id });
+  }
+  savedComputerIds = ids;
 });
 
 const TextWithDefaults = Text as typeof Text & {
@@ -124,7 +151,32 @@ async function checkForLaunchUpdate() {
   );
 }
 
+function ComputerConnectionLifecycle() {
+  useComputerConnection();
+  return null;
+}
+
 function TabLayout() {
+  const connectionGeneration = useSyncExternalStore(
+    onConnectionInvalidated,
+    getConnectionGeneration,
+    getConnectionGeneration,
+  );
+  const pathname = usePathname();
+  const activeComputer = getActiveComputer();
+  const previousPairing = useRef(activeComputer?.credentialId);
+  useEffect(() => {
+    if (previousPairing.current === activeComputer?.credentialId) return;
+    previousPairing.current = activeComputer?.credentialId;
+    // Routes with thread or bot IDs belong to the previous computer.
+    router.replace(pathname.startsWith("/settings") ? "/settings" : activeComputer ? "/chat" : "/");
+  }, [activeComputer?.credentialId, pathname, activeComputer]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") saveCurrentComputerState();
+    });
+    return () => subscription.remove();
+  }, []);
   useInitialPushNotificationRegistration();
   const [fontsLoaded] = useFonts({
     GeistMono: require("../../assets/fonts/GeistMono-Regular.ttf"),
@@ -152,6 +204,11 @@ function TabLayout() {
       return;
     }
     const openNotificationThread = (response: Notifications.NotificationResponse) => {
+      if (!canRouteLegacyNotification() || !getActiveComputer()) {
+        router.replace("/");
+        Notifications.clearLastNotificationResponse();
+        return;
+      }
       const threadId = notificationResponseThreadId(response);
       if (!threadId) {
         return;
@@ -179,7 +236,7 @@ function TabLayout() {
       client={queryClient}
       onSuccess={() => restoreChatStoreFromQueryCache(queryClient)}
       persistOptions={{
-        buster: "codex-relay-server-state-v2",
+        buster: "codex-relay-server-state-v3",
         dehydrateOptions: {
           shouldDehydrateQuery: shouldPersistQuery,
         },
@@ -187,12 +244,14 @@ function TabLayout() {
         persister: queryClientPersister,
       }}
     >
+      <ComputerConnectionLifecycle />
       <ThemeProvider value={appTheme}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <KeyboardProvider>
             <BottomSheetModalProvider>
               <AnimatedSplashOverlay />
               <Stack
+                key={connectionGeneration}
                 screenOptions={{
                   contentStyle: {
                     backgroundColor: "#000000",

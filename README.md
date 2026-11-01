@@ -57,6 +57,7 @@ run.
   mobile.
 - Choose separate turn-complete and action-required push notifications.
 - Keep pairing and session data under your local relay state.
+- Save multiple computer pairings and switch computers from mobile Settings.
 
 ## Quick Start
 
@@ -133,6 +134,9 @@ Your phone must be able to open the `Mobile:` URL printed by Codex Relay.
 
 - Same Wi-Fi usually works.
 - Tailscale is a good default when the devices are on different networks.
+
+For multiple Macs or separate LAN and public server addresses, see
+[Multiple computers and server addresses](docs/multiple-computers.md).
 
 ### Tailscale and Web Previews
 

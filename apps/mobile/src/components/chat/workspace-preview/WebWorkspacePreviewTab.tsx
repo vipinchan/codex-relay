@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import type { WebPreviewTarget } from "codex-relay/api-schema";
 import { useSelector } from "@legendapp/state/react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
@@ -11,7 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text as UiText } from "@/components/ui/text";
 import { Colors, Fonts, Spacing } from "@/constants/theme";
-import { getCodexRelayServerUrl, startWorkspaceTailscaleServe } from "@/lib/codex-relay-api";
+import {
+  getCodexRelayServerUrl,
+  startWorkspaceTailscaleServe as rawStartWorkspaceTailscaleServe,
+} from "@/lib/codex-relay-api";
 import { hapticSelection } from "@/lib/haptics";
 import {
   updateWorkspacePreviewWebState,
@@ -28,6 +32,10 @@ export const WebWorkspacePreviewTab = memo(function WebWorkspacePreviewTab({
   workspacePath?: string;
   webPreviewTarget?: WebPreviewTarget;
 }) {
+  const { startWorkspaceTailscaleServe } = useComputerOperations({
+    startWorkspaceTailscaleServe: rawStartWorkspaceTailscaleServe,
+  });
+
   const baseServerUrl = serverUrl || getCodexRelayServerUrl();
   const insets = useSafeAreaInsets();
   const guessedPreviewUrl = useMemo(() => guessWebPreviewUrl(baseServerUrl), [baseServerUrl]);

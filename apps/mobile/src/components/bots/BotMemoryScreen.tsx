@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BotMemory } from "codex-relay/api-schema";
 import { router } from "expo-router";
@@ -9,20 +10,29 @@ import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
-  createBotMemory,
-  deleteBotMemory,
-  getCodexRelayServerUrl,
-  listBotMemories,
-  listBots,
-  updateBotMemory,
+  createBotMemory as rawCreateBotMemory,
+  deleteBotMemory as rawDeleteBotMemory,
+  getCodexRelayCacheIdentity,
+  listBotMemories as rawListBotMemories,
+  listBots as rawListBots,
+  updateBotMemory as rawUpdateBotMemory,
 } from "@/lib/codex-relay-api";
 
 import { BotPage, BotPrimaryButton, botError, botText } from "./bot-ui";
 
 export function BotMemoryScreen({ botId }: { botId: string }) {
+  const { createBotMemory, deleteBotMemory, listBotMemories, listBots, updateBotMemory } =
+    useComputerOperations({
+      createBotMemory: rawCreateBotMemory,
+      deleteBotMemory: rawDeleteBotMemory,
+      listBotMemories: rawListBotMemories,
+      listBots: rawListBots,
+      updateBotMemory: rawUpdateBotMemory,
+    });
+
   const theme = useTheme();
   const queryClient = useQueryClient();
-  const serverUrl = getCodexRelayServerUrl();
+  const serverUrl = getCodexRelayCacheIdentity();
   const botsQuery = useQuery({ queryKey: ["bots", serverUrl], queryFn: listBots });
   const memoriesQuery = useQuery({
     queryKey: ["bot-memories", serverUrl, botId],

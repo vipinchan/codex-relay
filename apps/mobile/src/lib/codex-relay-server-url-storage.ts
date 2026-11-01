@@ -1,5 +1,11 @@
 import { createMMKV } from "react-native-mmkv";
 
+import {
+  getActiveComputer,
+  setComputerConnectionMode,
+  saveComputerAddresses,
+} from "./computer-profiles";
+
 const defaultServerUrl = "http://localhost:8787";
 const serverUrlCandidatesStorageKey = "codex-relay.server-url-candidates";
 const serverUrlStorageKey = "codex-relay.server-url";
@@ -15,19 +21,21 @@ export const fallbackCodexRelayServerUrl =
   process.env.EXPO_PUBLIC_CODEX_RELAY_SERVER_URL?.replace(/\/$/, "") ?? defaultServerUrl;
 
 export function getCodexRelayServerUrl() {
-  return codexRelayStorage.getString(serverUrlStorageKey) ?? fallbackCodexRelayServerUrl;
+  return getActiveComputer()?.activeUrl ?? fallbackCodexRelayServerUrl;
 }
 
 export function getCodexRelayServerUrlCandidates(): CodexRelayServerUrlCandidate[] {
   return serverUrlCandidatesFromUrls([
     getCodexRelayServerUrl(),
-    ...readStoredServerUrlCandidates(),
+    ...(getActiveComputer()?.addresses ?? []),
   ]);
 }
 
 export function setCodexRelayServerUrl(url: string) {
   const normalizedUrl = normalizeServerUrl(url);
-  codexRelayStorage.set(serverUrlStorageKey, normalizedUrl);
+  const active = getActiveComputer();
+  if (active) setComputerConnectionMode(active.id, "manual", normalizedUrl);
+  else codexRelayStorage.set(serverUrlStorageKey, normalizedUrl);
   return normalizedUrl;
 }
 
@@ -37,7 +45,7 @@ export function clearCodexRelayServerUrlState() {
 }
 
 export function saveCodexRelayServerUrlCandidates(urls: string[]) {
-  codexRelayStorage.set(serverUrlCandidatesStorageKey, JSON.stringify(dedupeServerUrls(urls)));
+  saveComputerAddresses(urls);
 }
 
 export function normalizeServerUrl(url: string) {
@@ -89,22 +97,6 @@ export function isLocalIPv6Host(host: string) {
   return (
     normalized.startsWith("fe80:") || normalized.startsWith("fc") || normalized.startsWith("fd")
   );
-}
-
-function readStoredServerUrlCandidates() {
-  const stored = codexRelayStorage.getString(serverUrlCandidatesStorageKey);
-  if (!stored) {
-    return [];
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(stored);
-    return Array.isArray(parsed)
-      ? parsed.filter((url): url is string => typeof url === "string")
-      : [];
-  } catch {
-    return [];
-  }
 }
 
 function serverUrlCandidatesFromUrls(urls: string[]): CodexRelayServerUrlCandidate[] {

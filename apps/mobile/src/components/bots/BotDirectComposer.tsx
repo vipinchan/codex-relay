@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Bot, BotConversation } from "codex-relay/api-schema";
 import { useRef, useState } from "react";
@@ -9,11 +10,11 @@ import { ChatControls } from "@/components/chat/ChatControls";
 import { modelForSelection, reasoningEffortForModel } from "@/components/chat/model-picker-options";
 import { Text } from "@/components/ui/text";
 import {
-  getBotConversationRuntime,
-  getCodexRelayServerUrl,
+  getBotConversationRuntime as rawGetBotConversationRuntime,
+  getCodexRelayCacheIdentity,
   getCodexRelayPairingIdentity,
-  listSkills,
-  updateBotConversationPreferences,
+  listSkills as rawListSkills,
+  updateBotConversationPreferences as rawUpdateBotConversationPreferences,
   type BotConversationPreferencesPatch,
 } from "@/lib/codex-relay-api";
 import { serverStateKeys, serverStateQueryFns } from "@/lib/server-state";
@@ -38,8 +39,15 @@ export function BotDirectComposer({
   onCancel: () => void;
   onSent: () => Promise<void>;
 }) {
+  const { getBotConversationRuntime, listSkills, updateBotConversationPreferences } =
+    useComputerOperations({
+      getBotConversationRuntime: rawGetBotConversationRuntime,
+      listSkills: rawListSkills,
+      updateBotConversationPreferences: rawUpdateBotConversationPreferences,
+    });
+
   const queryClient = useQueryClient();
-  const serverUrl = getCodexRelayServerUrl();
+  const serverUrl = getCodexRelayCacheIdentity();
   const composerId = botComposerKey(getCodexRelayPairingIdentity(), conversation.id);
   const preferenceTail = useRef(Promise.resolve());
   const preferenceWrites = useRef(0);

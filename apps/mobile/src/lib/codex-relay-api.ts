@@ -1,9 +1,35 @@
+function assertNotAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    if (typeof signal.throwIfAborted === "function") {
+      signal.throwIfAborted();
+    }
+    throw new Error("This operation was aborted");
+  }
+}
+
 import "react-native-get-random-values";
+
+import {
+  createComputerId,
+  getActiveComputer,
+  getComputerToken,
+  removeComputer,
+  savePairedComputer,
+  rememberComputerAddress,
+} from "./computer-profiles";
+import {
+  captureConnection,
+  invalidateConnection,
+  onConnectionInvalidated,
+  ConnectionChangedError,
+} from "./connection-context";
+import { connectComputerAddress } from "./computer-addresses";
 
 import { errorMessage } from "./api-error-message";
 import { firstReachablePairingUrl } from "./pairing-reachability";
 
 import {
+  EncryptedPayloadSchema,
   ArchiveThreadResponseSchema,
   BotConversationResponseSchema,
   BotConversationRuntimeResponseSchema,
@@ -141,7 +167,6 @@ import {
 } from "./thread-run-stream";
 import { requestWithNetworkTimeout, withTimeout } from "./network-timeout";
 import {
-  clearCodexRelayServerUrlState,
   codexRelayStorage as storage,
   dedupeServerUrls,
   fallbackCodexRelayServerUrl,
@@ -151,7 +176,6 @@ import {
   isLocalIPv6Host,
   isPrivateIPv4Host,
   normalizeServerUrl,
-  saveCodexRelayServerUrlCandidates,
   setCodexRelayServerUrl,
   type CodexRelayServerUrlCandidate,
 } from "./codex-relay-server-url-storage";
@@ -160,8 +184,6 @@ const skillsPath = "/v1/skills";
 const skillsRequestTimeoutMs = 8000;
 const clientSessionIdStorageKey = "codex-relay.client-session-id";
 const legacyClientTokenExpiresAtStorageKey = "codex-relay.client-token-expires-at";
-const clientTokenStorageKey = "codex-relay.client-token";
-const pairingIdentityStorageKey = "codex-relay.pairing-identity";
 const pairingConnectTimeoutMs = 2500;
 const streamRequestTimeoutMs = 10 * 60 * 1000;
 const terminalStreamRequestTimeoutMs = 24 * 60 * 60 * 1000;
@@ -218,6 +240,14 @@ export function isPairingQrPayloadError(error: unknown) {
   return error instanceof PairingQrPayloadError;
 }
 
+export function pairingLinkMatchesActiveComputer(payload: string) {
+  try {
+    return getActiveComputer()?.serverPublicKey === parsePairingQrPayload(payload).serverPublicKey;
+  } catch {
+    return false;
+  }
+}
+
 export function resolveCodexRelayUrl(url: string) {
   if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
     return url;
@@ -234,7 +264,7 @@ export function codexRelayImageRequestHeaders() {
     accept: "image/*",
     "x-codex-relay-client-session-id": getClientSessionId(),
   };
-  const clientToken = storage.getString(clientTokenStorageKey);
+  const clientToken = getComputerToken();
   if (clientToken) {
     headers.authorization = `Bearer ${clientToken}`;
   }
@@ -242,21 +272,24 @@ export function codexRelayImageRequestHeaders() {
 }
 
 export function signOutCodexRelaySession() {
-  storage.remove(clientTokenStorageKey);
-  storage.remove(pairingIdentityStorageKey);
-  storage.remove(legacyClientTokenExpiresAtStorageKey);
-  clearSecureSession();
-  clearCodexRelayServerUrlState();
+  const active = getActiveComputer();
+  if (active) removeComputer(active.id);
 }
 
 export function hasCodexRelaySession() {
-  return Boolean(storage.getString(clientTokenStorageKey));
+  return Boolean(getComputerToken());
 }
 
 export async function pairWithQrPayload(
   payload: unknown,
-  handlers?: { onApprovalCode?: (approvalCode: string, serverUrl: string) => void },
+  handlers?: {
+    onApprovalCode?: (approvalCode: string, serverUrl: string) => void;
+    signal?: AbortSignal;
+    replaceComputerId?: string;
+  },
 ) {
+  assertNotAborted(handlers?.signal);
+  const pairingContext = captureConnection();
   const pairingPayload = parsePairingQrPayload(payload);
   const connectionErrors: PairingCandidateConnectionError[] = [];
 
@@ -265,6 +298,7 @@ export async function pairWithQrPayload(
     async (serverUrl) => {
       const response = await fetchWithNetworkContext(`${serverUrl}${apiPaths.version}`, {
         timeoutMs: pairingConnectTimeoutMs,
+        signal: handlers?.signal,
       });
       if (!response.ok || !VersionResponseSchema.safeParse(await response.json()).success) {
         throw new Error(`No Codex Relay found at ${serverUrl}.`);
@@ -281,8 +315,11 @@ export async function pairWithQrPayload(
   ];
   for (const serverUrl of serverUrls) {
     try {
-      const paired = await pairWithApproval(serverUrl, pairingPayload.serverPublicKey, handlers);
-      saveCodexRelayServerUrlCandidates([paired.serverUrl, ...pairingPayload.serverUrls]);
+      const paired = await pairWithApproval(serverUrl, pairingPayload.serverPublicKey, {
+        ...handlers,
+        serverUrls: pairingPayload.serverUrls,
+        pairingContext,
+      });
       return {
         ...pairingPayload,
         serverUrl: paired.serverUrl,
@@ -301,8 +338,16 @@ export async function pairWithQrPayload(
 async function pairWithApproval(
   serverUrl: string,
   serverPublicKey: string,
-  handlers?: { onApprovalCode?: (approvalCode: string, serverUrl: string) => void },
+  handlers: {
+    onApprovalCode?: (approvalCode: string, serverUrl: string) => void;
+    signal?: AbortSignal;
+    replaceComputerId?: string;
+    serverUrls: string[];
+    pairingContext: ReturnType<typeof captureConnection>;
+  },
 ) {
+  assertNotAborted(handlers.signal);
+  handlers.pairingContext.assertCurrent();
   const normalizedServerUrl = normalizeServerUrl(serverUrl);
   const securePairing = createSecurePairingAttempt({
     serverPublicKey,
@@ -312,6 +357,7 @@ async function pairWithApproval(
   const pairUrl = `${normalizedServerUrl}${apiPaths.pair}`;
   const response = await fetchWithNetworkContext(pairUrl, {
     method: "POST",
+    signal: handlers.signal,
     timeoutMs: pairingConnectTimeoutMs,
     headers: {
       accept: "application/json",
@@ -344,19 +390,44 @@ async function pairWithApproval(
 
   attachApprovalCode(securePairing, parsed.approvalCode);
   handlers?.onApprovalCode?.(parsed.approvalCode, normalizedServerUrl);
-  const approved = await waitForPairingApproval(normalizedServerUrl, parsed.approvalCode);
-  const session = completeSecurePairing(securePairing, approved);
-  saveSession(normalizedServerUrl, session.clientToken);
+  const approved = await waitForPairingApproval(
+    normalizedServerUrl,
+    parsed.approvalCode,
+    handlers.signal,
+  );
+  assertNotAborted(handlers.signal);
+  handlers.pairingContext.assertCurrent();
+  const credentialId = createComputerId();
+  const session = completeSecurePairing(securePairing, approved, credentialId);
+  try {
+    savePairedComputer({
+      serverPublicKey,
+      clientToken: session.clientToken,
+      credentialId,
+      serverUrl: normalizedServerUrl,
+      serverUrls: handlers.serverUrls,
+      replaceComputerId: handlers.replaceComputerId,
+    });
+  } catch (error) {
+    clearSecureSession(credentialId);
+    throw error;
+  }
   await startPairingTrialIfNeeded();
   return { approvalCode: parsed.approvalCode, serverUrl: normalizedServerUrl };
 }
 
-async function waitForPairingApproval(serverUrl: string, approvalCode: string) {
+async function waitForPairingApproval(
+  serverUrl: string,
+  approvalCode: string,
+  signal?: AbortSignal,
+) {
   const deadline = Date.now() + 5 * 60 * 1000;
   while (Date.now() < deadline) {
+    assertNotAborted(signal);
     const response = await fetchWithNetworkContext(
       `${serverUrl}${apiPaths.pairApproval(approvalCode)}`,
       {
+        signal,
         headers: {
           accept: "application/json",
         },
@@ -1047,14 +1118,17 @@ export function streamWorkspaceTerminalOutput(
     onError: (error: Error) => void;
   },
 ) {
+  const context = captureRequestContext();
   const requestUrl =
     `${getCodexRelayServerUrl()}${apiPaths.workspaceTerminalOutputStream(sessionId)}` +
     `?since=${encodeURIComponent(String(since))}`;
   let closed = false;
-  const dispatcher = createTerminalOutputSseDispatcher(handlers);
+  const dispatcher = createTerminalOutputSseDispatcher(handlers, (payload) =>
+    decryptForContext(payload, context),
+  );
 
   function fail(error: Error) {
-    if (closed) {
+    if (closed || !context.isCurrent()) {
       return;
     }
     closed = true;
@@ -1069,20 +1143,20 @@ export function streamWorkspaceTerminalOutput(
       timeoutMs: terminalStreamRequestTimeoutMs,
     },
     (text) => {
-      if (closed || !dispatcher.push(text)) {
+      if (closed || !context.isCurrent() || !dispatcher.push(text)) {
         closed = true;
       }
     },
   )
     .then((response) => {
-      if (closed) {
+      if (closed || !context.isCurrent()) {
         return;
       }
       if (!response.ok) {
         void response.text().then((text) => {
           let payload: unknown = text;
           try {
-            payload = decryptResponsePayload(JSON.parse(text));
+            payload = decryptForContext(JSON.parse(text), context);
           } catch {}
           fail(new Error(errorMessage(payload, `Codex Relay server returned ${response.status}`)));
         });
@@ -1096,15 +1170,18 @@ export function streamWorkspaceTerminalOutput(
       fail(new Error(errorMessage(error, "Codex Relay terminal stream failed.")));
     });
 
-  return () => {
+  return bindStreamToConnection(context, () => {
     closed = true;
-  };
+  });
 }
 
-function createTerminalOutputSseDispatcher(handlers: {
-  onOutput: (response: WorkspaceTerminalOutputResponse) => void;
-  onError: (error: Error) => void;
-}) {
+function createTerminalOutputSseDispatcher(
+  handlers: {
+    onOutput: (response: WorkspaceTerminalOutputResponse) => void;
+    onError: (error: Error) => void;
+  },
+  decrypt = decryptResponsePayload,
+) {
   let pendingChunk = "";
   let closed = false;
 
@@ -1117,7 +1194,7 @@ function createTerminalOutputSseDispatcher(handlers: {
       const parts = pendingChunk.split(/\r?\n\r?\n/);
       pendingChunk = parts.pop() ?? "";
       for (const part of parts) {
-        if (!dispatchTerminalOutputSseChunk(part, handlers)) {
+        if (!dispatchTerminalOutputSseChunk(part, handlers, decrypt)) {
           closed = true;
           return false;
         }
@@ -1128,7 +1205,7 @@ function createTerminalOutputSseDispatcher(handlers: {
       if (closed) {
         return false;
       }
-      if (pendingChunk.trim() && !dispatchTerminalOutputSseChunk(pendingChunk, handlers)) {
+      if (pendingChunk.trim() && !dispatchTerminalOutputSseChunk(pendingChunk, handlers, decrypt)) {
         closed = true;
         return false;
       }
@@ -1144,6 +1221,7 @@ function dispatchTerminalOutputSseChunk(
     onOutput: (response: WorkspaceTerminalOutputResponse) => void;
     onError: (error: Error) => void;
   },
+  decrypt: typeof decryptResponsePayload,
 ) {
   const data = chunk
     .split(/\r?\n/)
@@ -1159,7 +1237,7 @@ function dispatchTerminalOutputSseChunk(
   }
 
   try {
-    const payload = decryptResponsePayload(JSON.parse(data));
+    const payload = decrypt(JSON.parse(data));
     handlers.onOutput(WorkspaceTerminalOutputResponseSchema.parse(payload));
     return true;
   } catch {
@@ -1198,17 +1276,14 @@ export async function closeWorkspaceTerminalSession(sessionId: string) {
 }
 
 async function requestNoContent(path: string, init: RequestInit) {
-  const headers = requestHeaders(init.headers);
-  const serverRequestUrl = `${getCodexRelayServerUrl()}${path}`;
-  const response = await fetchWithNetworkContext(serverRequestUrl, {
-    ...init,
-    headers,
-  });
+  const context = captureRequestContext();
+  const headers = requestHeaders(init.headers, undefined, context);
+  const response = await fetchForContext(path, { ...init, headers }, context);
   if (response.ok) {
     return;
   }
 
-  const payload = decryptResponsePayload(await response.json().catch(() => undefined));
+  const payload = decryptForContext(await response.json().catch(() => undefined), context);
   const message = errorMessage(payload, `Codex Relay server returned ${response.status}`);
   throw new CodexRelayApiError(message, response.status, errorCode(payload));
 }
@@ -1316,10 +1391,11 @@ export function streamThreadRun(
     onClose?: () => void;
   },
 ) {
+  const context = captureRequestContext();
   const requestUrl = `${getCodexRelayServerUrl()}${apiPaths.threadRunStream(threadId)}`;
   const requestBody = encryptRequestPayload(body);
   if (shouldUseDirectFetch(requestUrl, { body: requestBody })) {
-    return streamThreadRunWithDirectFetch(requestUrl, requestBody, handlers);
+    return streamThreadRunWithDirectFetch(requestUrl, requestBody, handlers, context);
   }
 
   const source = new EventSource<StreamThreadRunEvent["type"]>(requestUrl, {
@@ -1335,12 +1411,14 @@ export function streamThreadRun(
 
   for (const type of threadRunStreamEventTypes) {
     source.addEventListener(type, (event) => {
-      if (!event.data) {
+      if (!context.isCurrent() || !event.data) {
         return;
       }
 
       try {
-        handlers.onEvent(parseThreadRunStreamPayload(event.data, decryptResponsePayload));
+        handlers.onEvent(
+          parseThreadRunStreamPayload(event.data, (payload) => decryptForContext(payload, context)),
+        );
       } catch {
         handlers.onError(new Error("Codex Relay server returned an invalid stream event."));
       }
@@ -1348,16 +1426,15 @@ export function streamThreadRun(
   }
 
   source.addEventListener("error", (event) => {
+    if (!context.isCurrent()) return;
     const message = "message" in event ? event.message : "Codex Relay stream failed.";
     handlers.onError(new Error(message));
   });
   source.addEventListener("close", () => {
-    handlers.onClose?.();
+    if (context.isCurrent()) handlers.onClose?.();
   });
 
-  return () => {
-    source.close();
-  };
+  return bindStreamToConnection(context, () => source.close());
 }
 
 function streamThreadRunWithDirectFetch(
@@ -1368,12 +1445,15 @@ function streamThreadRunWithDirectFetch(
     onError: (error: Error) => void;
     onClose?: () => void;
   },
+  context: RequestContext,
 ) {
   let closed = false;
-  const dispatcher = createThreadRunSseDispatcher(handlers, decryptResponsePayload);
+  const dispatcher = createThreadRunSseDispatcher(handlers, (payload) =>
+    decryptForContext(payload, context),
+  );
 
   function close() {
-    if (closed) {
+    if (closed || !context.isCurrent()) {
       return;
     }
     closed = true;
@@ -1381,7 +1461,7 @@ function streamThreadRunWithDirectFetch(
   }
 
   function fail(error: Error) {
-    if (closed) {
+    if (closed || !context.isCurrent()) {
       return;
     }
     closed = true;
@@ -1389,7 +1469,7 @@ function streamThreadRunWithDirectFetch(
   }
 
   function processText(text: string) {
-    if (closed) {
+    if (closed || !context.isCurrent()) {
       return;
     }
     if (!dispatcher.push(text)) {
@@ -1408,14 +1488,14 @@ function streamThreadRunWithDirectFetch(
     processText,
   )
     .then((response) => {
-      if (closed) {
+      if (closed || !context.isCurrent()) {
         return;
       }
       if (!response.ok) {
         void response.text().then((text) => {
           let payload: unknown = text;
           try {
-            payload = decryptResponsePayload(JSON.parse(text));
+            payload = decryptForContext(JSON.parse(text), context);
           } catch {}
           fail(new Error(errorMessage(payload, `Codex Relay server returned ${response.status}`)));
         });
@@ -1431,9 +1511,9 @@ function streamThreadRunWithDirectFetch(
       fail(new Error(errorMessage(error, "Codex Relay stream failed.")));
     });
 
-  return () => {
+  return bindStreamToConnection(context, () => {
     closed = true;
-  };
+  });
 }
 
 function streamRequestHeaders(options: { jsonContentType?: boolean } = {}) {
@@ -1568,19 +1648,118 @@ export async function resolveApproval(
   }
 }
 
+function bindStreamToConnection(context: RequestContext, stop: () => void) {
+  const unsubscribe = onConnectionInvalidated(stop);
+  if (!context.isCurrent()) stop();
+  return () => {
+    unsubscribe();
+    stop();
+  };
+}
+
+type RequestContext = ReturnType<typeof captureConnection> & {
+  computerId?: string;
+  credentialId?: string;
+  token?: string;
+  url: string;
+};
+
+function captureRequestContext(): RequestContext {
+  const computer = getActiveComputer();
+  return {
+    ...captureConnection(),
+    computerId: computer?.id,
+    credentialId: computer?.credentialId,
+    token: getComputerToken(computer),
+    url: getCodexRelayServerUrl(),
+  };
+}
+
+let validatedGeneration: number | undefined;
+let connecting: { generation: number; promise: Promise<void> } | undefined;
+onConnectionInvalidated(() => {
+  validatedGeneration = undefined;
+  connecting = undefined;
+});
+
+async function ensureComputerConnection(context: RequestContext) {
+  if (!context.computerId || !context.token) throw new Error("Pair with a computer to continue.");
+  if (validatedGeneration === context.generation) return;
+  if (connecting?.generation !== context.generation) {
+    const computer = getActiveComputer()!;
+    const promise = (async () => {
+      const url = await connectComputerAddress(
+        computer,
+        async (candidate, signal) => {
+          const response = await fetchWithNetworkContext(`${candidate}${apiPaths.status}`, {
+            signal,
+            headers: requestHeaders(undefined, undefined, context),
+            timeoutMs: 2500,
+          });
+          context.assertCurrent();
+          if (!response.ok) throw new Error("The saved pairing was not accepted.");
+          const envelope = EncryptedPayloadSchema.parse(await response.json());
+          context.assertCurrent();
+          StatusResponseSchema.parse(decryptResponsePayload(envelope, context.credentialId));
+        },
+        context.signal,
+      );
+      context.assertCurrent();
+      if (url !== computer.activeUrl) {
+        rememberComputerAddress(computer.id, url);
+        invalidateConnection();
+        throw new ConnectionChangedError();
+      }
+      validatedGeneration = context.generation;
+    })();
+    connecting = { generation: context.generation, promise };
+  }
+  try {
+    await connecting.promise;
+  } finally {
+    if (connecting?.generation === context.generation) connecting = undefined;
+  }
+  context.assertCurrent();
+  context.url = getCodexRelayServerUrl();
+}
+
+function decryptForContext(payload: unknown, context: RequestContext) {
+  context.assertCurrent();
+  return decryptResponsePayload(payload, context.credentialId);
+}
+
+async function fetchForContext(
+  path: string,
+  init: NetworkRequestInit | undefined,
+  context: RequestContext,
+) {
+  await ensureComputerConnection(context);
+  context.assertCurrent();
+  try {
+    const response = await fetchWithNetworkContext(`${context.url}${path}`, {
+      ...init,
+      signal: context.signal,
+    });
+    context.assertCurrent();
+    return response;
+  } catch (error) {
+    if (!context.isCurrent()) throw new ConnectionChangedError();
+    // A later connection attempt may select another address. Never replay this operation.
+    validatedGeneration = undefined;
+    throw error;
+  }
+}
+
 async function request<T>(
   path: string,
   init: NetworkRequestInit | undefined,
   parse: (payload: unknown) => T,
   options?: { jsonContentType?: boolean },
 ) {
-  const headers = requestHeaders(init?.headers, options);
-  const serverRequestUrl = `${getCodexRelayServerUrl()}${path}`;
-  const response = await fetchWithNetworkContext(serverRequestUrl, {
-    ...init,
-    headers,
-  });
-  const payload = decryptResponsePayload(await response.json().catch(() => undefined));
+  const context = captureRequestContext();
+  const headers = requestHeaders(init?.headers, options, context);
+  const response = await fetchForContext(path, { ...init, headers }, context);
+  const payload = decryptForContext(await response.json().catch(() => undefined), context);
 
   if (!response.ok) {
     const message = errorMessage(payload, `Codex Relay server returned ${response.status}`);
@@ -1593,6 +1772,7 @@ async function request<T>(
 function requestHeaders(
   initHeaders: HeadersInit | undefined,
   options: { jsonContentType?: boolean } = {},
+  context = captureRequestContext(),
 ) {
   const headers = new Headers({
     accept: "application/json",
@@ -1604,7 +1784,7 @@ function requestHeaders(
     headers.set(key, value);
   }
 
-  const clientToken = storage.getString(clientTokenStorageKey);
+  const clientToken = context.token;
   if (clientToken && !headers.has("authorization")) {
     headers.set("authorization", `Bearer ${clientToken}`);
   }
@@ -1615,29 +1795,23 @@ function requestHeaders(
   return headers;
 }
 
-function saveSession(serverUrl: string, clientToken: string) {
-  setCodexRelayServerUrl(serverUrl);
-  storage.set(clientTokenStorageKey, clientToken);
-  storage.set(pairingIdentityStorageKey, createUuidV4());
-  storage.remove(legacyClientTokenExpiresAtStorageKey);
+export function getCodexRelayCacheIdentity() {
+  return getActiveComputer()?.id ?? getCodexRelayServerUrl();
 }
 
 export function getCodexRelayPairingIdentity() {
-  const existing = storage.getString(pairingIdentityStorageKey);
-  if (existing) return existing;
-  const identity = createUuidV4();
-  storage.set(pairingIdentityStorageKey, identity);
-  return identity;
+  return getActiveComputer()?.pairingIdentity ?? "unpaired";
 }
 
-export function getClientSessionId() {
-  const existing = storage.getString(clientSessionIdStorageKey);
+function getClientSessionId() {
+  const key = `${clientSessionIdStorageKey}:${getActiveComputer()?.id ?? "unpaired"}`;
+  const existing = storage.getString(key);
   if (existing) {
     return existing;
   }
 
   const next = createUuidV4();
-  storage.set(clientSessionIdStorageKey, next);
+  storage.set(key, next);
   return next;
 }
 
@@ -1653,7 +1827,7 @@ export function createUuidV4() {
 }
 
 function authorizationHeader() {
-  const clientToken = storage.getString(clientTokenStorageKey);
+  const clientToken = getComputerToken();
   return clientToken ? { authorization: `Bearer ${clientToken}` } : {};
 }
 

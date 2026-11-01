@@ -1,6 +1,6 @@
 import { HotUpdater } from "@hot-updater/react-native";
 import { useSelector } from "@legendapp/state/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { router } from "expo-router";
 import { Heart } from "lucide-react-native";
@@ -9,6 +9,11 @@ import { Alert, Linking, Pressable, ScrollView, Switch, View } from "react-nativ
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
+
+import { useComputerOperations } from "@/hooks/use-computer-operations";
+import { getActiveComputer, removeComputer } from "@/lib/computer-profiles";
+
+import { ComputerSettings } from "@/components/settings/ComputerSettings";
 
 import { FaGithub } from "@/assets/icons/fa";
 import { ThemedText } from "@/components/themed-text";
@@ -21,14 +26,9 @@ import {
 } from "@/constants/links";
 import { Colors, Fonts, MaxContentWidth, Spacing } from "@/constants/theme";
 import {
-  getCodexRelayServerUrlCandidates,
-  getPushNotificationSettings,
-  registerPushNotifications,
-  refreshSession,
-  setCodexRelayServerUrl,
-  signOutCodexRelaySession,
-  unregisterPushNotifications,
-  type CodexRelayServerUrlCandidate,
+  getPushNotificationSettings as rawGetPushNotificationSettings,
+  registerPushNotifications as rawRegisterPushNotifications,
+  unregisterPushNotifications as rawUnregisterPushNotifications,
 } from "@/lib/codex-relay-api";
 import { hapticSelection, hapticWarning } from "@/lib/haptics";
 import {
@@ -45,15 +45,8 @@ import {
   supportsPushNotifications,
 } from "@/lib/push-notifications";
 import { formatRateLimitRemaining, visibleRateLimitRows } from "@/lib/rate-limits";
-import {
-  clearServerState,
-  fetchRateLimitsState,
-  fetchStatusState,
-  serverStateKeys,
-  serverStateQueryFns,
-  setStatusState,
-} from "@/lib/server-state";
-import { chatStore$, resetChatSessionState, setConnection, setServerUrl } from "@/state/chat-store";
+import { serverStateKeys, serverStateQueryFns } from "@/lib/server-state";
+import { chatStore$ } from "@/state/chat-store";
 
 import mobilePackage from "../../package.json";
 
@@ -67,24 +60,20 @@ const pushNotificationTrackColor = {
 type PushNotificationPreference = keyof typeof defaultPushNotificationPreferences;
 
 export default function SettingsScreen() {
-  const queryClient = useQueryClient();
+  const { getPushNotificationSettings, registerPushNotifications, unregisterPushNotifications } =
+    useComputerOperations({
+      getPushNotificationSettings: rawGetPushNotificationSettings,
+      registerPushNotifications: rawRegisterPushNotifications,
+      unregisterPushNotifications: rawUnregisterPushNotifications,
+    });
   const connection = useSelector(() => chatStore$.connection.get());
   const hasPairedSession = useSelector(() => chatStore$.hasPairedSession.get());
   const serverUrl = useSelector(() => chatStore$.serverUrl.get());
-  const statusQuery = useQuery({
-    queryKey: serverStateKeys.status(),
-    queryFn: serverStateQueryFns.status,
-    enabled: false,
-  });
   const rateLimitsQuery = useQuery({
     queryKey: serverStateKeys.rateLimits(),
     queryFn: serverStateQueryFns.rateLimits,
     enabled: connection === "connected",
   });
-  const machineName = statusQuery.data?.machineName;
-  const computerName = hasPairedSession
-    ? (machineName ?? connectedComputerName(serverUrl))
-    : "No paired computer";
   const [appVersion] = useState(
     () => HotUpdater.getAppVersion() ?? Constants.expoConfig?.version ?? "1.0.0",
   );
@@ -93,10 +82,6 @@ export default function SettingsScreen() {
   const hotUpdaterTapCountRef = useRef(0);
   const [showHotUpdaterLogs, setShowHotUpdaterLogs] = useState(false);
   const hotUpdaterLogs = useHotUpdaterLogs();
-  const [serverUrlCandidates, setServerUrlCandidates] = useState(() =>
-    getCodexRelayServerUrlCandidates(),
-  );
-  const [switchingServerUrl, setSwitchingServerUrl] = useState<string | undefined>();
   const [appUpdate, setAppUpdate] = useState<AppUpdateState>({
     status: "checking",
     updateInfo: null,
@@ -172,10 +157,6 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => {
-    setServerUrlCandidates(getCodexRelayServerUrlCandidates());
-  }, [serverUrl]);
-
-  useEffect(() => {
     let isActive = true;
     if (!hasPairedSession || !pushNotificationsSupported) {
       setPushNotificationPreferences(defaultPushNotificationPreferences);
@@ -206,7 +187,7 @@ export default function SettingsScreen() {
     return () => {
       isActive = false;
     };
-  }, [hasPairedSession, pushNotificationsSupported, serverUrl]);
+  }, [hasPairedSession, pushNotificationsSupported, serverUrl, getPushNotificationSettings]);
 
   function closeSettings() {
     hapticSelection();
@@ -218,11 +199,23 @@ export default function SettingsScreen() {
   }
 
   function signOut() {
+    const id = getActiveComputer()?.id;
     hapticWarning();
-    signOutCodexRelaySession();
-    clearServerState(queryClient);
-    resetChatSessionState();
-    router.replace("/");
+    Alert.alert(
+      "Remove current pairing?",
+      "This removes this computer from your phone. Other saved computers and tasks on your Mac are kept.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            if (id) removeComputer(id);
+            router.replace("/");
+          },
+        },
+      ],
+    );
   }
 
   async function updatePushNotificationPreference(
@@ -255,36 +248,6 @@ export default function SettingsScreen() {
       Alert.alert("Notifications unavailable", settingsErrorMessage(caught));
     } finally {
       setPushNotificationsUpdating(false);
-    }
-  }
-
-  async function selectServerAddress(candidate: CodexRelayServerUrlCandidate) {
-    if (candidate.url === serverUrl || switchingServerUrl) {
-      return;
-    }
-
-    hapticSelection();
-    setSwitchingServerUrl(candidate.url);
-    const normalizedServerUrl = setCodexRelayServerUrl(candidate.url);
-    setServerUrl(normalizedServerUrl);
-    setServerUrlCandidates(getCodexRelayServerUrlCandidates());
-    clearServerState(queryClient);
-    setConnection("checking");
-
-    try {
-      await refreshSession().catch(() => false);
-      const [status] = await Promise.all([
-        fetchStatusState(queryClient),
-        fetchRateLimitsState(queryClient).catch(() => undefined),
-      ]);
-      setStatusState(queryClient, status);
-      setConnection("connected");
-    } catch (caught) {
-      const message = settingsErrorMessage(caught);
-      setConnection("offline", message);
-      Alert.alert("Server unavailable", message);
-    } finally {
-      setSwitchingServerUrl(undefined);
     }
   }
 
@@ -452,89 +415,7 @@ export default function SettingsScreen() {
             </Animated.View>
           </Animated.View>
 
-          <Animated.View layout={settingsLayoutTransition} style={styles.section}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
-              Connected Computer
-            </ThemedText>
-            <Animated.View layout={settingsLayoutTransition} style={styles.connectionPanel}>
-              <Animated.View layout={settingsFastLayoutTransition} style={styles.connectionHeader}>
-                <View
-                  style={[
-                    styles.connectionDot,
-                    connection === "connected" && styles.connectionDotConnected,
-                    connection === "offline" && styles.connectionDotOffline,
-                  ]}
-                />
-                <ThemedText type="smallBold" style={styles.connectionTitle} numberOfLines={1}>
-                  {computerName}
-                </ThemedText>
-                <View style={styles.connectionBadge}>
-                  <ThemedText type="code" style={styles.connectionBadgeText}>
-                    {connectionLabel(connection)}
-                  </ThemedText>
-                </View>
-              </Animated.View>
-              {hasPairedSession ? (
-                <>
-                  <InfoLine label="Server" value={compactServer(serverUrl)} />
-                  <View style={styles.serverAddressList}>
-                    {serverUrlCandidates.map((candidate) => {
-                      const isSelected = candidate.url === serverUrl;
-                      const isSwitching = switchingServerUrl === candidate.url;
-                      return (
-                        <Pressable
-                          key={candidate.url}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Use ${compactServer(candidate.url)}`}
-                          disabled={isSelected || Boolean(switchingServerUrl)}
-                          onPress={() => void selectServerAddress(candidate)}
-                          style={({ pressed }) => [
-                            styles.serverAddressRow,
-                            isSelected && styles.serverAddressRowSelected,
-                            pressed && styles.pressed,
-                          ]}
-                        >
-                          <View style={styles.serverAddressCopy}>
-                            <ThemedText type="smallBold" style={styles.serverAddressLabel}>
-                              {candidate.label}
-                            </ThemedText>
-                            <ThemedText
-                              type="code"
-                              themeColor="textSecondary"
-                              style={styles.serverAddressValue}
-                              numberOfLines={1}
-                            >
-                              {compactServer(candidate.url)}
-                            </ThemedText>
-                          </View>
-                          <View
-                            style={[
-                              styles.serverAddressStatus,
-                              isSelected && styles.serverAddressStatusSelected,
-                            ]}
-                          >
-                            <ThemedText
-                              type="code"
-                              style={[
-                                styles.serverAddressStatusText,
-                                isSelected && styles.serverAddressStatusTextSelected,
-                              ]}
-                            >
-                              {isSwitching ? "CHECKING" : isSelected ? "ACTIVE" : "USE"}
-                            </ThemedText>
-                          </View>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </>
-              ) : (
-                <ThemedText type="small" themeColor="textSecondary" style={styles.unpairedCopy}>
-                  Pair this device from the main screen to choose a relay server.
-                </ThemedText>
-              )}
-            </Animated.View>
-          </Animated.View>
+          <ComputerSettings />
 
           {hasPairedSession ? (
             <Animated.View layout={settingsLayoutTransition} style={styles.section}>
@@ -898,59 +779,6 @@ function RateLimitProgressRow({
   );
 }
 
-function InfoLine({
-  label,
-  numberOfLines = 1,
-  value,
-}: {
-  label: string;
-  numberOfLines?: number;
-  value: string;
-}) {
-  return (
-    <Animated.View
-      entering={settingsEnterTransition}
-      exiting={settingsExitTransition}
-      layout={settingsLayoutTransition}
-      style={styles.infoLine}
-    >
-      <ThemedText type="small" themeColor="textSecondary" style={styles.infoLineLabel}>
-        {label}
-      </ThemedText>
-      <ThemedText type="code" style={styles.infoLineValue} numberOfLines={numberOfLines}>
-        {value}
-      </ThemedText>
-    </Animated.View>
-  );
-}
-
-function connectedComputerName(serverUrl: string) {
-  if (!serverUrl) {
-    return "No computer paired";
-  }
-
-  try {
-    return new URL(serverUrl).hostname;
-  } catch {
-    return compactServer(serverUrl);
-  }
-}
-
-function compactServer(serverUrl: string) {
-  return serverUrl ? serverUrl.replace(/^https?:\/\//, "") : "Not paired";
-}
-
-function connectionLabel(connection: "checking" | "connected" | "offline") {
-  switch (connection) {
-    case "connected":
-      return "ONLINE";
-    case "checking":
-      return "CHECKING";
-    case "offline":
-      return "OFFLINE";
-  }
-}
-
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -992,7 +820,6 @@ type AppUpdateState = {
 };
 
 const settingsLayoutTransition = LinearTransition.duration(180);
-const settingsFastLayoutTransition = LinearTransition.duration(120);
 const settingsEnterTransition = FadeIn.duration(120);
 const settingsExitTransition = FadeOut.duration(90);
 

@@ -28,6 +28,7 @@ import {
   createThread,
   getThreadGoal,
   getCodexRelayServerUrl,
+  getCodexRelayCacheIdentity,
   getRateLimits,
   getStatus,
   getThread,
@@ -78,7 +79,7 @@ function advanceThreadHistoryGeneration(queryClient: QueryClient, requestKey: st
 }
 
 export const serverStateKeys = {
-  all: () => [rootKey, getCodexRelayServerUrl()] as const,
+  all: () => [rootKey, getCodexRelayCacheIdentity()] as const,
   contextWindow: (threadId: string) =>
     [...serverStateKeys.threadScope(threadId), "context-window"] as const,
   models: () => [...serverStateKeys.all(), "models"] as const,

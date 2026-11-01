@@ -15,7 +15,7 @@ import Animated, {
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
 import { Colors, Spacing } from "@/constants/theme";
-import { getCodexRelayServerUrl } from "@/lib/codex-relay-api";
+import { getCodexRelayCacheIdentity } from "@/lib/codex-relay-api";
 
 import { MessageBubble } from "./MessageBubble";
 import { MessageList } from "./MessageList";
@@ -68,7 +68,7 @@ export function MessageTimeline({
   threadId?: string;
 }) {
   const controller = useMessageListController({
-    timelineKey: `${getCodexRelayServerUrl()}:${threadId ?? "no-thread"}`,
+    timelineKey: `${getCodexRelayCacheIdentity()}:${threadId ?? "no-thread"}`,
     messages,
     buildRows: buildTimelineRows,
     keyExtractor: timelineRowKeyExtractor,

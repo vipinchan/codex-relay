@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -8,13 +9,22 @@ import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
-import { getCodexRelayServerUrl, listBots, searchBotHistory } from "@/lib/codex-relay-api";
+import {
+  getCodexRelayCacheIdentity,
+  listBots as rawListBots,
+  searchBotHistory as rawSearchBotHistory,
+} from "@/lib/codex-relay-api";
 
 import { BotPage, BotPrimaryButton, botError, botText } from "./bot-ui";
 
 export function BotHistoryScreen({ botId }: { botId: string }) {
+  const { listBots, searchBotHistory } = useComputerOperations({
+    listBots: rawListBots,
+    searchBotHistory: rawSearchBotHistory,
+  });
+
   const theme = useTheme();
-  const serverUrl = getCodexRelayServerUrl();
+  const serverUrl = getCodexRelayCacheIdentity();
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const botsQuery = useQuery({ queryKey: ["bots", serverUrl], queryFn: listBots });

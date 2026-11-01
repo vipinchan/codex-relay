@@ -15,6 +15,8 @@ import { fromByteArray, toByteArray } from "base64-js";
 import { createMMKV } from "react-native-mmkv";
 import { z } from "zod";
 
+import { getActiveComputer } from "./computer-profiles";
+
 const secureProtocolVersion = 1;
 const handshakeTag = "codex-relay-e2ee-v1";
 const storage = createMMKV({ id: "codex-relay-secure" });
@@ -67,7 +69,11 @@ export function attachApprovalCode(attempt: SecurePairingAttempt, approvalCode: 
   attempt.approvalCode = approvalCode;
 }
 
-export function completeSecurePairing(attempt: SecurePairingAttempt, response: PairResponse) {
+export function completeSecurePairing(
+  attempt: SecurePairingAttempt,
+  response: PairResponse,
+  credentialId = getActiveComputer()?.credentialId,
+) {
   if (!response.secure) {
     throw new Error("Server did not return a secure pairing response.");
   }
@@ -104,12 +110,15 @@ export function completeSecurePairing(attempt: SecurePairingAttempt, response: P
     response.secure.encryptedPayload,
   );
   const payload = PairEncryptedPayloadSchema.parse(JSON.parse(decrypted));
-  saveSecureSession(session);
+  saveSecureSession(session, credentialId);
   return payload;
 }
 
-export function encryptRequestPayload(payload: unknown) {
-  const session = readSecureSession();
+export function encryptRequestPayload(
+  payload: unknown,
+  credentialId = getActiveComputer()?.credentialId,
+) {
+  const session = readSecureSession(credentialId);
   if (!session) {
     return JSON.stringify(payload);
   }
@@ -122,12 +131,15 @@ export function encryptRequestPayload(payload: unknown) {
     JSON.stringify(payload),
   );
   session.nextMobileCounter += 1;
-  saveSecureSession(session);
+  saveSecureSession(session, credentialId);
   return JSON.stringify(EncryptedPayloadSchema.parse(envelope));
 }
 
-export function decryptResponsePayload(payload: unknown) {
-  const session = readSecureSession();
+export function decryptResponsePayload(
+  payload: unknown,
+  credentialId = getActiveComputer()?.credentialId,
+) {
+  const session = readSecureSession(credentialId);
   const envelope = EncryptedPayloadSchema.safeParse(payload);
   if (!session || !envelope.success) {
     return payload;
@@ -161,12 +173,25 @@ export function decryptResponsePayload(payload: unknown) {
     floor,
     received: [...window.received.filter((counter) => counter > floor), envelope.data.counter],
   };
-  saveSecureSession(session);
+  saveSecureSession(session, credentialId);
   return result;
 }
 
-export function clearSecureSession() {
-  storage.clearAll();
+export function clearSecureSession(credentialId = getActiveComputer()?.credentialId) {
+  for (const key of [
+    keyEpochStorageKey,
+    mobileToServerKeyStorageKey,
+    serverToMobileKeyStorageKey,
+    nextMobileCounterStorageKey,
+    lastServerCounterStorageKey,
+    serverReplayWindowStorageKey,
+  ]) {
+    storage.remove(scopedKey(key, credentialId));
+  }
+}
+
+function scopedKey(key: string, credentialId?: string) {
+  return credentialId ? `${credentialId}:${key}` : key;
 }
 
 function deriveSession(
@@ -256,12 +281,18 @@ function nonceFor(sender: "mobile" | "server", counter: number) {
   return nonce;
 }
 
-function saveSecureSession(session: SecureSession) {
-  storage.set(keyEpochStorageKey, session.keyEpoch);
-  storage.set(mobileToServerKeyStorageKey, bytesToBase64(session.mobileToServerKey));
-  storage.set(serverToMobileKeyStorageKey, bytesToBase64(session.serverToMobileKey));
-  storage.set(nextMobileCounterStorageKey, session.nextMobileCounter);
-  storage.set(lastServerCounterStorageKey, session.lastServerCounter);
+function saveSecureSession(session: SecureSession, credentialId?: string) {
+  storage.set(scopedKey(keyEpochStorageKey, credentialId), session.keyEpoch);
+  storage.set(
+    scopedKey(mobileToServerKeyStorageKey, credentialId),
+    bytesToBase64(session.mobileToServerKey),
+  );
+  storage.set(
+    scopedKey(serverToMobileKeyStorageKey, credentialId),
+    bytesToBase64(session.serverToMobileKey),
+  );
+  storage.set(scopedKey(nextMobileCounterStorageKey, credentialId), session.nextMobileCounter);
+  storage.set(scopedKey(lastServerCounterStorageKey, credentialId), session.lastServerCounter);
   storage.set(
     serverReplayWindowStorageKey,
     JSON.stringify(
@@ -274,19 +305,22 @@ function saveSecureSession(session: SecureSession) {
   );
 }
 
-function readSecureSession() {
-  const mobileToServerKey = storage.getString(mobileToServerKeyStorageKey);
-  const serverToMobileKey = storage.getString(serverToMobileKeyStorageKey);
-  const keyEpoch = storage.getNumber(keyEpochStorageKey);
+function readSecureSession(credentialId?: string) {
+  const mobileToServerKey = storage.getString(scopedKey(mobileToServerKeyStorageKey, credentialId));
+  const serverToMobileKey = storage.getString(scopedKey(serverToMobileKeyStorageKey, credentialId));
+  const keyEpoch = storage.getNumber(scopedKey(keyEpochStorageKey, credentialId));
   if (!mobileToServerKey || !serverToMobileKey || keyEpoch === undefined) {
     return undefined;
   }
 
-  const lastServerCounter = storage.getNumber(lastServerCounterStorageKey) ?? 0;
+  const lastServerCounter =
+    storage.getNumber(scopedKey(lastServerCounterStorageKey, credentialId)) ?? 0;
   let serverReplayWindow: SecureSession["serverReplayWindow"];
   try {
     const parsed = ServerReplayWindowSchema.safeParse(
-      JSON.parse(storage.getString(serverReplayWindowStorageKey) ?? "null"),
+      JSON.parse(
+        storage.getString(scopedKey(serverReplayWindowStorageKey, credentialId)) ?? "null",
+      ),
     );
     if (parsed.success && parsed.data.highest >= lastServerCounter) {
       serverReplayWindow = parsed.data;
@@ -300,7 +334,7 @@ function readSecureSession() {
     lastServerCounter,
     serverReplayWindow,
     mobileToServerKey: base64ToBytes(mobileToServerKey),
-    nextMobileCounter: storage.getNumber(nextMobileCounterStorageKey) ?? 0,
+    nextMobileCounter: storage.getNumber(scopedKey(nextMobileCounterStorageKey, credentialId)) ?? 0,
     serverToMobileKey: base64ToBytes(serverToMobileKey),
   };
 }

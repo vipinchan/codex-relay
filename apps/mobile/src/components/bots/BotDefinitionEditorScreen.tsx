@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import { router, useNavigation } from "expo-router";
@@ -10,18 +11,23 @@ import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
-  getBotDefinition,
-  getCodexRelayServerUrl,
-  updateBotDefinition,
+  getBotDefinition as rawGetBotDefinition,
+  getCodexRelayCacheIdentity,
+  updateBotDefinition as rawUpdateBotDefinition,
 } from "@/lib/codex-relay-api";
 
 import { BotPage, botError, botText } from "./bot-ui";
 
 export function BotDefinitionEditorScreen({ botId }: { botId: string }) {
+  const { getBotDefinition, updateBotDefinition } = useComputerOperations({
+    getBotDefinition: rawGetBotDefinition,
+    updateBotDefinition: rawUpdateBotDefinition,
+  });
+
   const theme = useTheme();
   const navigation = useNavigation();
   const queryClient = useQueryClient();
-  const serverUrl = getCodexRelayServerUrl();
+  const serverUrl = getCodexRelayCacheIdentity();
   const definitionKey = ["bot-definition", serverUrl, botId];
   const definitionQuery = useQuery({
     queryKey: definitionKey,

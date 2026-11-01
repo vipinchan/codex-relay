@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -11,13 +12,13 @@ import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
-  getBotConversation,
-  getBotConversationRuntime,
-  getBotDefinition,
-  getCodexRelayServerUrl,
-  resetBotConversationContext,
-  resetBotConversationPreferences,
-  updateBot,
+  getBotConversation as rawGetBotConversation,
+  getBotConversationRuntime as rawGetBotConversationRuntime,
+  getBotDefinition as rawGetBotDefinition,
+  getCodexRelayCacheIdentity,
+  resetBotConversationContext as rawResetBotConversationContext,
+  resetBotConversationPreferences as rawResetBotConversationPreferences,
+  updateBot as rawUpdateBot,
 } from "@/lib/codex-relay-api";
 
 import { BotPage, BotRow, botError, botText } from "./bot-ui";
@@ -38,9 +39,25 @@ export function BotPreviewScreen({
   conversationId: string;
   filePath?: string;
 }) {
+  const {
+    getBotConversation,
+    getBotConversationRuntime,
+    getBotDefinition,
+    resetBotConversationContext,
+    resetBotConversationPreferences,
+    updateBot,
+  } = useComputerOperations({
+    getBotConversation: rawGetBotConversation,
+    getBotConversationRuntime: rawGetBotConversationRuntime,
+    getBotDefinition: rawGetBotDefinition,
+    resetBotConversationContext: rawResetBotConversationContext,
+    resetBotConversationPreferences: rawResetBotConversationPreferences,
+    updateBot: rawUpdateBot,
+  });
+
   const theme = useTheme();
   const queryClient = useQueryClient();
-  const serverUrl = getCodexRelayServerUrl();
+  const serverUrl = getCodexRelayCacheIdentity();
   const [tab, setTab] = useState<PreviewTab>(filePath ? "document" : "definition");
   const [focused, setFocused] = useState(false);
   const [resetting, setResetting] = useState(false);

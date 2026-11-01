@@ -5,6 +5,8 @@ import {
 } from "codex-relay/api-schema";
 import { createMMKV } from "react-native-mmkv";
 
+import { getActiveComputer } from "./computer-profiles";
+
 const storage = createMMKV({ id: "codex-relay-workspace-runtime-preferences" });
 
 export function readCachedWorkspaceRuntimePreferences(
@@ -15,7 +17,13 @@ export function readCachedWorkspaceRuntimePreferences(
     return undefined;
   }
 
-  const raw = storage.getString(cacheKey(serverUrl, workspacePath));
+  const key = cacheKey(serverUrl, workspacePath);
+  const legacyKey = `${normalizeServerUrl(serverUrl)}::${workspacePath}`;
+  const raw = storage.getString(key) ?? storage.getString(legacyKey);
+  if (raw && key !== legacyKey) {
+    storage.set(key, raw);
+    storage.remove(legacyKey);
+  }
   if (!raw) {
     return undefined;
   }
@@ -56,9 +64,17 @@ export function cacheWorkspaceRuntimePreferencesFromStatus(
 }
 
 function cacheKey(serverUrl: string, workspacePath: string) {
-  return `${normalizeServerUrl(serverUrl)}::${workspacePath}`;
+  const computer = getActiveComputer();
+  const namespace = computer?.addresses.includes(normalizeServerUrl(serverUrl))
+    ? computer.id
+    : normalizeServerUrl(serverUrl);
+  return `${namespace}::${workspacePath}`;
 }
 
 function normalizeServerUrl(serverUrl: string) {
   return serverUrl.trim().replace(/\/$/, "");
+}
+
+export function clearComputerRuntimePreferences(id: string) {
+  for (const key of storage.getAllKeys()) if (key.startsWith(`${id}::`)) storage.remove(key);
 }

@@ -1,3 +1,8 @@
+import {
+  captureConnection,
+  guardConnectionWrite,
+  guardConnectionOperation,
+} from "@/lib/connection-context";
 import { useSelector } from "@legendapp/state/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -58,16 +63,18 @@ import { Colors, Fonts, Spacing } from "@/constants/theme";
 import { activeThreadAfterRefresh } from "@/lib/active-thread-selection";
 import { consumeHydratedDefaultThread } from "@/lib/server-state-hydration";
 import {
+  getCodexRelayCacheIdentity,
   getCodexRelayServerUrl,
   hasCodexRelaySession,
-  interruptThreadRun,
+  interruptThreadRun as rawInterruptThreadRun,
   isPairingQrPayloadError,
-  listSkills,
-  pairWithQrPayload,
-  refreshSession,
-  resolveApproval,
+  listSkills as rawListSkills,
+  pairWithQrPayload as rawPairWithQrPayload,
+  pairingLinkMatchesActiveComputer,
+  refreshSession as rawRefreshSession,
+  resolveApproval as rawResolveApproval,
   resolveCodexRelayUrl,
-  streamThreadRun,
+  streamThreadRun as rawStreamThreadRun,
 } from "@/lib/codex-relay-api";
 import {
   hapticLightImpact,
@@ -82,41 +89,41 @@ import {
   runtimePreferencesScope,
 } from "@/lib/runtime-preferences";
 import {
-  applyStreamEventToServerState,
-  checkoutWorkspaceBranchServerState,
-  clearThreadGoalServerState,
-  clearServerState,
-  commitPushWorkspaceServerState,
-  createThreadServerState,
-  fetchContextWindowState,
-  fetchOlderThreadMessagesState,
-  fetchModelsState,
-  fetchQueuedInputsState,
-  fetchRateLimitsState,
-  fetchStatusState,
-  fetchThreadGoalState,
-  fetchThreadQueryState,
-  fetchThreadState,
-  fetchThreadsState,
-  fetchWorkspaceChangesState,
-  optimisticallySteerQueuedInputState,
-  removePendingInputRequestState,
-  removeQueuedThreadInputServerState,
-  rewindThreadServerState,
-  restoreOptimisticSteerQueuedInputState,
+  applyStreamEventToServerState as rawApplyStreamEventToServerState,
+  checkoutWorkspaceBranchServerState as rawCheckoutWorkspaceBranchServerState,
+  clearThreadGoalServerState as rawClearThreadGoalServerState,
+  clearServerState as rawClearServerState,
+  commitPushWorkspaceServerState as rawCommitPushWorkspaceServerState,
+  createThreadServerState as rawCreateThreadServerState,
+  fetchContextWindowState as rawFetchContextWindowState,
+  fetchOlderThreadMessagesState as rawFetchOlderThreadMessagesState,
+  fetchModelsState as rawFetchModelsState,
+  fetchQueuedInputsState as rawFetchQueuedInputsState,
+  fetchRateLimitsState as rawFetchRateLimitsState,
+  fetchStatusState as rawFetchStatusState,
+  fetchThreadGoalState as rawFetchThreadGoalState,
+  fetchThreadQueryState as rawFetchThreadQueryState,
+  fetchThreadState as rawFetchThreadState,
+  fetchThreadsState as rawFetchThreadsState,
+  fetchWorkspaceChangesState as rawFetchWorkspaceChangesState,
+  optimisticallySteerQueuedInputState as rawOptimisticallySteerQueuedInputState,
+  removePendingInputRequestState as rawRemovePendingInputRequestState,
+  removeQueuedThreadInputServerState as rawRemoveQueuedThreadInputServerState,
+  rewindThreadServerState as rawRewindThreadServerState,
+  restoreOptimisticSteerQueuedInputState as rawRestoreOptimisticSteerQueuedInputState,
   serverStateKeys,
   serverStateQueryFns,
-  setQueuedInputsState,
-  setRuntimePreferencesResponseState,
-  setStatusState,
-  setThreadDetailState,
-  setThreadRunningState,
-  setThreadsState,
-  steerQueuedThreadInputServerState,
-  submitThreadInputServerState,
-  updateThreadGoalServerState,
-  updateRuntimePreferencesServerState,
-  upsertThreadState,
+  setQueuedInputsState as rawSetQueuedInputsState,
+  setRuntimePreferencesResponseState as rawSetRuntimePreferencesResponseState,
+  setStatusState as rawSetStatusState,
+  setThreadDetailState as rawSetThreadDetailState,
+  setThreadRunningState as rawSetThreadRunningState,
+  setThreadsState as rawSetThreadsState,
+  steerQueuedThreadInputServerState as rawSteerQueuedThreadInputServerState,
+  submitThreadInputServerState as rawSubmitThreadInputServerState,
+  updateThreadGoalServerState as rawUpdateThreadGoalServerState,
+  updateRuntimePreferencesServerState as rawUpdateRuntimePreferencesServerState,
+  upsertThreadState as rawUpsertThreadState,
 } from "@/lib/server-state";
 import { recordSuccessfulAiConversationForReviewPrompt } from "@/lib/store-review-prompt";
 import {
@@ -127,29 +134,29 @@ import {
 import { readCachedWorkspaceRuntimePreferences } from "@/lib/workspace-runtime-preferences-cache";
 import {
   chatStore$,
-  clearComposerDraft,
-  clearThreadStreamReconnectRequest,
+  clearComposerDraft as rawClearComposerDraft,
+  clearThreadStreamReconnectRequest as rawClearThreadStreamReconnectRequest,
   composerThreadKey,
   getCollaborationMode,
   getComposerAttachments,
   getComposerDraft,
   getComposerSkills,
-  moveNewThreadCollaborationMode,
-  requestThreadStreamReconnect,
-  resetChatSessionState,
-  setActiveThread,
-  setComposerAttachments,
-  setComposerDraft,
-  setComposerSkills,
-  setConnection,
-  setHasPairedSession,
-  setServerUrl,
-  setThreadCollaborationMode,
-  setThreadMessagesLoading,
+  moveNewThreadCollaborationMode as rawMoveNewThreadCollaborationMode,
+  requestThreadStreamReconnect as rawRequestThreadStreamReconnect,
+  resetChatSessionState as rawResetChatSessionState,
+  setActiveThread as rawSetActiveThread,
+  setComposerAttachments as rawSetComposerAttachments,
+  setComposerDraft as rawSetComposerDraft,
+  setComposerSkills as rawSetComposerSkills,
+  setConnection as rawSetConnection,
+  setHasPairedSession as rawSetHasPairedSession,
+  setServerUrl as rawSetServerUrl,
+  setThreadCollaborationMode as rawSetThreadCollaborationMode,
+  setThreadMessagesLoading as rawSetThreadMessagesLoading,
   type LocalPromptAttachment,
   type QueuedComposerPrompt,
 } from "@/state/chat-store";
-import { addWorkspacePreviewTab } from "@/state/workspace-preview-store";
+import { addWorkspacePreviewTab as rawAddWorkspacePreviewTab } from "@/state/workspace-preview-store";
 
 import { attachComposerImages } from "@/lib/composer-images";
 
@@ -180,7 +187,6 @@ import type { WorkspaceMarkdownPreviewTarget } from "./workspace-preview/markdow
 
 const CHAT_INPUT_NATIVE_ID = "chat-composer-input";
 const CONNECTION_HEALTH_CHECK_MS = 5000;
-const CONNECTION_RETRY_MS = 2500;
 const STREAM_STALL_RECONNECT_MS = 45_000;
 const STREAM_WATCHDOG_INTERVAL_MS = 10_000;
 const SCANNER_TO_APPROVAL_SHEET_DELAY_MS = 450;
@@ -197,6 +203,193 @@ type ChatScreenProps = {
 };
 
 export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
+  const screenConnection = useMemo(captureConnection, []);
+  const {
+    applyStreamEventToServerState,
+    clearServerState,
+    removePendingInputRequestState,
+    restoreOptimisticSteerQueuedInputState,
+    setQueuedInputsState,
+    setRuntimePreferencesResponseState,
+    setStatusState,
+    setThreadDetailState,
+    setThreadRunningState,
+    setThreadsState,
+    upsertThreadState,
+    clearComposerDraft,
+    clearThreadStreamReconnectRequest,
+    moveNewThreadCollaborationMode,
+    requestThreadStreamReconnect,
+    resetChatSessionState,
+    setActiveThread,
+    setComposerAttachments,
+    setComposerDraft,
+    setComposerSkills,
+    setConnection,
+    setHasPairedSession,
+    setServerUrl,
+    setThreadCollaborationMode,
+    setThreadMessagesLoading,
+    addWorkspacePreviewTab,
+  } = useMemo(
+    () => ({
+      applyStreamEventToServerState: guardConnectionWrite(
+        rawApplyStreamEventToServerState,
+        screenConnection,
+      ),
+      clearServerState: guardConnectionWrite(rawClearServerState, screenConnection),
+      removePendingInputRequestState: guardConnectionWrite(
+        rawRemovePendingInputRequestState,
+        screenConnection,
+      ),
+      restoreOptimisticSteerQueuedInputState: guardConnectionWrite(
+        rawRestoreOptimisticSteerQueuedInputState,
+        screenConnection,
+      ),
+      setQueuedInputsState: guardConnectionWrite(rawSetQueuedInputsState, screenConnection),
+      setRuntimePreferencesResponseState: guardConnectionWrite(
+        rawSetRuntimePreferencesResponseState,
+        screenConnection,
+      ),
+      setStatusState: guardConnectionWrite(rawSetStatusState, screenConnection),
+      setThreadDetailState: guardConnectionWrite(rawSetThreadDetailState, screenConnection),
+      setThreadRunningState: guardConnectionWrite(rawSetThreadRunningState, screenConnection),
+      setThreadsState: guardConnectionWrite(rawSetThreadsState, screenConnection),
+      upsertThreadState: guardConnectionWrite(rawUpsertThreadState, screenConnection),
+      clearComposerDraft: guardConnectionWrite(rawClearComposerDraft, screenConnection),
+      clearThreadStreamReconnectRequest: guardConnectionWrite(
+        rawClearThreadStreamReconnectRequest,
+        screenConnection,
+      ),
+      moveNewThreadCollaborationMode: guardConnectionWrite(
+        rawMoveNewThreadCollaborationMode,
+        screenConnection,
+      ),
+      requestThreadStreamReconnect: guardConnectionWrite(
+        rawRequestThreadStreamReconnect,
+        screenConnection,
+      ),
+      resetChatSessionState: guardConnectionWrite(rawResetChatSessionState, screenConnection),
+      setActiveThread: guardConnectionWrite(rawSetActiveThread, screenConnection),
+      setComposerAttachments: guardConnectionWrite(rawSetComposerAttachments, screenConnection),
+      setComposerDraft: guardConnectionWrite(rawSetComposerDraft, screenConnection),
+      setComposerSkills: guardConnectionWrite(rawSetComposerSkills, screenConnection),
+      setConnection: guardConnectionWrite(rawSetConnection, screenConnection),
+      setHasPairedSession: guardConnectionWrite(rawSetHasPairedSession, screenConnection),
+      setServerUrl: guardConnectionWrite(rawSetServerUrl, screenConnection),
+      setThreadCollaborationMode: guardConnectionWrite(
+        rawSetThreadCollaborationMode,
+        screenConnection,
+      ),
+      setThreadMessagesLoading: guardConnectionWrite(rawSetThreadMessagesLoading, screenConnection),
+      addWorkspacePreviewTab: guardConnectionWrite(rawAddWorkspacePreviewTab, screenConnection),
+    }),
+    [screenConnection],
+  );
+  const {
+    interruptThreadRun,
+    listSkills,
+    pairWithQrPayload,
+    refreshSession,
+    resolveApproval,
+    streamThreadRun,
+    checkoutWorkspaceBranchServerState,
+    clearThreadGoalServerState,
+    commitPushWorkspaceServerState,
+    createThreadServerState,
+    fetchContextWindowState,
+    fetchOlderThreadMessagesState,
+    fetchModelsState,
+    fetchQueuedInputsState,
+    fetchRateLimitsState,
+    fetchStatusState,
+    fetchThreadGoalState,
+    fetchThreadQueryState,
+    fetchThreadState,
+    fetchThreadsState,
+    fetchWorkspaceChangesState,
+    optimisticallySteerQueuedInputState,
+    removeQueuedThreadInputServerState,
+    rewindThreadServerState,
+    steerQueuedThreadInputServerState,
+    submitThreadInputServerState,
+    updateThreadGoalServerState,
+    updateRuntimePreferencesServerState,
+  } = useMemo(
+    () => ({
+      interruptThreadRun: guardConnectionOperation(rawInterruptThreadRun, screenConnection),
+      listSkills: guardConnectionOperation(rawListSkills, screenConnection),
+      pairWithQrPayload: guardConnectionOperation(rawPairWithQrPayload, screenConnection),
+      refreshSession: guardConnectionOperation(rawRefreshSession, screenConnection),
+      resolveApproval: guardConnectionOperation(rawResolveApproval, screenConnection),
+      streamThreadRun: guardConnectionOperation(rawStreamThreadRun, screenConnection),
+      checkoutWorkspaceBranchServerState: guardConnectionOperation(
+        rawCheckoutWorkspaceBranchServerState,
+        screenConnection,
+      ),
+      clearThreadGoalServerState: guardConnectionOperation(
+        rawClearThreadGoalServerState,
+        screenConnection,
+      ),
+      commitPushWorkspaceServerState: guardConnectionOperation(
+        rawCommitPushWorkspaceServerState,
+        screenConnection,
+      ),
+      createThreadServerState: guardConnectionOperation(
+        rawCreateThreadServerState,
+        screenConnection,
+      ),
+      fetchContextWindowState: guardConnectionOperation(
+        rawFetchContextWindowState,
+        screenConnection,
+      ),
+      fetchOlderThreadMessagesState: guardConnectionOperation(
+        rawFetchOlderThreadMessagesState,
+        screenConnection,
+      ),
+      fetchModelsState: guardConnectionOperation(rawFetchModelsState, screenConnection),
+      fetchQueuedInputsState: guardConnectionOperation(rawFetchQueuedInputsState, screenConnection),
+      fetchRateLimitsState: guardConnectionOperation(rawFetchRateLimitsState, screenConnection),
+      fetchStatusState: guardConnectionOperation(rawFetchStatusState, screenConnection),
+      fetchThreadGoalState: guardConnectionOperation(rawFetchThreadGoalState, screenConnection),
+      fetchThreadQueryState: guardConnectionOperation(rawFetchThreadQueryState, screenConnection),
+      fetchThreadState: guardConnectionOperation(rawFetchThreadState, screenConnection),
+      fetchThreadsState: guardConnectionOperation(rawFetchThreadsState, screenConnection),
+      fetchWorkspaceChangesState: guardConnectionOperation(
+        rawFetchWorkspaceChangesState,
+        screenConnection,
+      ),
+      optimisticallySteerQueuedInputState: guardConnectionOperation(
+        rawOptimisticallySteerQueuedInputState,
+        screenConnection,
+      ),
+      removeQueuedThreadInputServerState: guardConnectionOperation(
+        rawRemoveQueuedThreadInputServerState,
+        screenConnection,
+      ),
+      rewindThreadServerState: guardConnectionOperation(
+        rawRewindThreadServerState,
+        screenConnection,
+      ),
+      steerQueuedThreadInputServerState: guardConnectionOperation(
+        rawSteerQueuedThreadInputServerState,
+        screenConnection,
+      ),
+      submitThreadInputServerState: guardConnectionOperation(
+        rawSubmitThreadInputServerState,
+        screenConnection,
+      ),
+      updateThreadGoalServerState: guardConnectionOperation(
+        rawUpdateThreadGoalServerState,
+        screenConnection,
+      ),
+      updateRuntimePreferencesServerState: guardConnectionOperation(
+        rawUpdateRuntimePreferencesServerState,
+        screenConnection,
+      ),
+    }),
+    [screenConnection],
+  );
   const isHandlingPairingLink = useRef(false);
   const lastHandledPairingUrl = useRef<string | undefined>(undefined);
   const { width } = useWindowDimensions();
@@ -251,8 +444,9 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   const queryClient = useQueryClient();
   const fetchCurrentStatus = useCallback(async () => {
     await runtimePreferencesCoordinator.afterUpdates();
+    screenConnection.assertCurrent();
     return fetchStatusState(queryClient);
-  }, [queryClient, runtimePreferencesCoordinator]);
+  }, [queryClient, runtimePreferencesCoordinator, fetchStatusState, screenConnection]);
   const checkoutWorkspaceBranchMutation = useMutation({
     mutationFn: (body: Parameters<typeof checkoutWorkspaceBranchServerState>[1]) =>
       checkoutWorkspaceBranchServerState(queryClient, body),
@@ -506,7 +700,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   const isRunningAppThread = activeThread?.source === "app" && activeThread.state === "running";
   const activeWorkspacePath = activeThread?.cwd ?? workspacePath;
   const skillsQuery = useQuery({
-    queryKey: ["codex-relay-skills", serverUrl, activeWorkspacePath ?? null],
+    queryKey: ["codex-relay-skills", getCodexRelayCacheIdentity(), activeWorkspacePath ?? null],
     queryFn: () => listSkills(activeWorkspacePath),
     enabled: Boolean(activeWorkspacePath && hasPairedSession),
     staleTime: 30_000,
@@ -542,7 +736,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
     (mode: ThreadCollaborationMode) => {
       setThreadCollaborationMode(activeThreadId, mode);
     },
-    [activeThreadId],
+    [activeThreadId, setThreadCollaborationMode],
   );
   const messages = activeThreadDetailQuery.data?.messages ?? [];
   const isLoadingSelectedThreadMessages = activeThreadId
@@ -583,7 +777,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
     (status: Awaited<ReturnType<typeof serverStateQueryFns.status>>) => {
       setStatusState(queryClient, status);
     },
-    [queryClient],
+    [queryClient, setStatusState],
   );
 
   const clearQueuedPrompts = useCallback(
@@ -592,7 +786,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         setQueuedInputsState(queryClient, threadId, []);
       }
     },
-    [queryClient],
+    [queryClient, setQueuedInputsState],
   );
 
   function markQueuedPromptStarted(threadId: string, prompt?: string) {
@@ -633,7 +827,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       resetChatSessionState();
     }
     return hasSession;
-  }, [queryClient]);
+  }, [queryClient, clearServerState, setHasPairedSession, resetChatSessionState]);
 
   const clearThreadStatusPoll = useCallback(() => {
     if (!threadStatusPollRef.current) {
@@ -691,7 +885,16 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         setThreadMessagesLoading(threadId, false);
       }
     },
-    [queryClient, syncPairedSessionState],
+    [
+      queryClient,
+      syncPairedSessionState,
+      setThreadMessagesLoading,
+      fetchContextWindowState,
+      fetchQueuedInputsState,
+      setConnection,
+      fetchThreadState,
+      fetchThreadGoalState,
+    ],
   );
 
   const scheduleThreadStatusPoll = useCallback(
@@ -725,7 +928,14 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         setThreadRunningState(queryClient, threadId, false);
       }
     },
-    [clearThreadStatusPoll, queryClient, syncThreadSnapshot],
+    [
+      clearThreadStatusPoll,
+      queryClient,
+      syncThreadSnapshot,
+      requestThreadStreamReconnect,
+      setThreadRunningState,
+      setActiveThread,
+    ],
   );
 
   const loadEarlierThreadMessages = useCallback(
@@ -765,7 +975,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         return false;
       }
     },
-    [queryClient],
+    [queryClient, fetchOlderThreadMessagesState],
   );
   const handleLoadEarlierMessages = useCallback(
     () => (activeThreadId ? loadEarlierThreadMessages(activeThreadId) : Promise.resolve(false)),
@@ -778,6 +988,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       const contextResponse = threadId
         ? await safeAsyncValue(() => fetchContextWindowState(queryClient, threadId))
         : undefined;
+      if (!screenConnection.isCurrent()) return;
       if (rateLimitsResponse) {
         queryClient.setQueryData(serverStateKeys.rateLimits(), rateLimitsResponse);
       }
@@ -785,7 +996,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         queryClient.setQueryData(serverStateKeys.contextWindow(threadId), contextResponse);
       }
     },
-    [queryClient],
+    [queryClient, fetchRateLimitsState, screenConnection, fetchContextWindowState],
   );
 
   const refresh = useCallback(async () => {
@@ -794,6 +1005,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
     }
 
     const request = (async () => {
+      if (!screenConnection.isCurrent()) return;
       if (chatStore$.connection.peek() !== "checking") {
         setConnection("checking");
       }
@@ -814,6 +1026,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
             setConnection("connected");
           },
         );
+        screenConnection.assertCurrent();
         setThreadsState(queryClient, response.threads, response.source);
         queryClient.setQueryData(serverStateKeys.models(), modelsResponse);
         if (rateLimitsResponse) {
@@ -869,6 +1082,16 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
     queryClient,
     syncPairedSessionState,
     syncThreadSnapshot,
+    fetchRateLimitsState,
+    fetchModelsState,
+    setServerUrl,
+    fetchThreadsState,
+    screenConnection,
+    refreshSession,
+    setThreadsState,
+    setActiveThread,
+    setConnection,
+    requestThreadStreamReconnect,
   ]);
 
   const keepConnectionIfSessionIsValid = useCallback(
@@ -884,7 +1107,13 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         setConnection("offline", caught instanceof Error ? caught.message : fallbackError);
       }
     },
-    [applyStatusFromServer, fetchCurrentStatus, syncPairedSessionState],
+    [
+      applyStatusFromServer,
+      fetchCurrentStatus,
+      syncPairedSessionState,
+      setConnection,
+      refreshSession,
+    ],
   );
 
   const recoverThreadAfterStreamLoss = useCallback(
@@ -918,6 +1147,9 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       scheduleThreadStatusPoll,
       syncPairedSessionState,
       syncThreadSnapshot,
+      refreshSession,
+      requestThreadStreamReconnect,
+      setConnection,
     ],
   );
 
@@ -941,7 +1173,16 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
 
       void keepConnectionIfSessionIsValid(fallbackError);
     },
-    [clearQueuedPrompts, keepConnectionIfSessionIsValid, queryClient, syncThreadSnapshot],
+    [
+      clearQueuedPrompts,
+      keepConnectionIfSessionIsValid,
+      queryClient,
+      syncThreadSnapshot,
+      requestThreadStreamReconnect,
+      setQueuedInputsState,
+      setThreadRunningState,
+      setConnection,
+    ],
   );
 
   const attachRunningThreadStream = useCallback(
@@ -1049,6 +1290,11 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       recoverThreadAfterStreamLoss,
       refreshUsageStatus,
       queryClient,
+      applyStreamEventToServerState,
+      streamThreadRun,
+      setThreadRunningState,
+      setQueuedInputsState,
+      setConnection,
     ],
   );
 
@@ -1058,7 +1304,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
     }
     clearThreadStreamReconnectRequest(threadStreamReconnectRequest.requestId);
     attachRunningThreadStream(threadStreamReconnectRequest.threadId);
-  }, [attachRunningThreadStream, threadStreamReconnectRequest]);
+  }, [attachRunningThreadStream, threadStreamReconnectRequest, clearThreadStreamReconnectRequest]);
 
   useEffect(() => {
     if (
@@ -1072,7 +1318,13 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
     }
 
     requestThreadStreamReconnect(activeThreadId);
-  }, [activeThread?.source, activeThread?.state, activeThreadId, threadStreamReconnectRequest]);
+  }, [
+    activeThread?.source,
+    activeThread?.state,
+    activeThreadId,
+    threadStreamReconnectRequest,
+    requestThreadStreamReconnect,
+  ]);
 
   const loadWorkspaceChanges = useCallback(
     async (options: { staleTime?: number } = {}) => {
@@ -1089,7 +1341,13 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         setLoadingChanges(false);
       }
     },
-    [activeWorkspacePath, queryClient, syncPairedSessionState],
+    [
+      activeWorkspacePath,
+      queryClient,
+      syncPairedSessionState,
+      fetchWorkspaceChangesState,
+      setConnection,
+    ],
   );
 
   useEffect(() => {
@@ -1157,7 +1415,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         });
       }
     },
-    [activeThreadId, activeWorkspacePath, showPagerPage, usesWideLayout],
+    [activeThreadId, activeWorkspacePath, showPagerPage, usesWideLayout, addWorkspacePreviewTab],
   );
 
   const openMarkdownAttachmentPreview = useCallback(
@@ -1242,7 +1500,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       isModernScannerOpenRef.current = false;
       void CameraView.dismissScanner().catch(() => undefined);
     };
-  }, [clearThreadStatusPoll, detachCurrentStream, refresh, syncPairedSessionState]);
+  }, [clearThreadStatusPoll, detachCurrentStream, refresh, syncPairedSessionState, setServerUrl]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1293,18 +1551,14 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
     }, STREAM_WATCHDOG_INTERVAL_MS);
 
     return () => clearInterval(watchdog);
-  }, [activeThreadId, connection, detachCurrentStream, isRunning, syncThreadSnapshot]);
-
-  useEffect(() => {
-    if (connection !== "offline" || !hasPairedSession) {
-      return undefined;
-    }
-
-    const retry = setTimeout(() => {
-      void refresh();
-    }, CONNECTION_RETRY_MS);
-    return () => clearTimeout(retry);
-  }, [connection, hasPairedSession, refresh]);
+  }, [
+    activeThreadId,
+    connection,
+    detachCurrentStream,
+    isRunning,
+    syncThreadSnapshot,
+    requestThreadStreamReconnect,
+  ]);
 
   useEffect(() => {
     if (connection !== "connected" || isRunning) {
@@ -1364,6 +1618,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       const pairingUrl = url?.trim();
       if (
         !pairingUrl?.startsWith("codex-relay://pair") ||
+        (hasCodexRelaySession() && pairingLinkMatchesActiveComputer(pairingUrl)) ||
         (pairingUrl === lastHandledPairingUrl.current && hasCodexRelaySession()) ||
         isHandlingPairingLink.current
       ) {
@@ -1403,7 +1658,14 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         setPastePairing(false);
       }
     },
-    [queryClient, refresh, syncPairedSessionState],
+    [
+      queryClient,
+      refresh,
+      syncPairedSessionState,
+      pairWithQrPayload,
+      setServerUrl,
+      clearServerState,
+    ],
   );
 
   useEffect(() => {
@@ -1492,6 +1754,9 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       queryClient,
       refresh,
       syncPairedSessionState,
+      pairWithQrPayload,
+      setServerUrl,
+      clearServerState,
     ],
   );
 

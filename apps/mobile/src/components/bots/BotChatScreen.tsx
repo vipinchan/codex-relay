@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Bot, BotConversation, BotMessage } from "codex-relay/api-schema";
 import { router, useFocusEffect } from "expo-router";
@@ -21,13 +22,13 @@ import { Text } from "@/components/ui/text";
 import { Fonts, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
-  deleteBotConversation,
-  getBotConversation,
-  getCodexRelayServerUrl,
-  listBotMessages,
-  listBots,
-  stopBotConversation,
-  updateBotConversation,
+  deleteBotConversation as rawDeleteBotConversation,
+  getBotConversation as rawGetBotConversation,
+  getCodexRelayCacheIdentity,
+  listBotMessages as rawListBotMessages,
+  listBots as rawListBots,
+  stopBotConversation as rawStopBotConversation,
+  updateBotConversation as rawUpdateBotConversation,
 } from "@/lib/codex-relay-api";
 import { mergeBotMessagePages } from "./bot-compose";
 import { BotComposer } from "./BotComposer";
@@ -59,10 +60,26 @@ export function BotChatScreen({
   conversationId: string;
   messageId?: string;
 }) {
+  const {
+    deleteBotConversation,
+    getBotConversation,
+    listBotMessages,
+    listBots,
+    stopBotConversation,
+    updateBotConversation,
+  } = useComputerOperations({
+    deleteBotConversation: rawDeleteBotConversation,
+    getBotConversation: rawGetBotConversation,
+    listBotMessages: rawListBotMessages,
+    listBots: rawListBots,
+    stopBotConversation: rawStopBotConversation,
+    updateBotConversation: rawUpdateBotConversation,
+  });
+
   const queryClient = useQueryClient();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const serverUrl = getCodexRelayServerUrl();
+  const serverUrl = getCodexRelayCacheIdentity();
   const [sheet, setSheet] = useState<"group" | undefined>();
   const [groupName, setGroupName] = useState("");
   const [workspacePath, setWorkspacePath] = useState("");

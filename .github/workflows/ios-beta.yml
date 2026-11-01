@@ -64,17 +64,17 @@ jobs:
 
       - name: Build beta IPA
         env:
-          IOS_IPA_NAME: CodexRelay-1.5.0-beta.31.ipa
-          MOBILE_RELEASE_VERSION: 1.5.0-beta.31
+          IOS_IPA_NAME: CodexRelay-1.5.0-beta.32.ipa
+          MOBILE_RELEASE_VERSION: 1.5.0-beta.32
         run: bash scripts/build-ios-ipa.sh
 
       - name: Upload beta artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodexRelay-1.5.0-beta.31-${{ github.sha }}
+          name: CodexRelay-1.5.0-beta.32-${{ github.sha }}
           path: |
-            dist/ios/CodexRelay-1.5.0-beta.31.ipa
-            dist/ios/CodexRelay-1.5.0-beta.31.ipa.sha256
+            dist/ios/CodexRelay-1.5.0-beta.32.ipa
+            dist/ios/CodexRelay-1.5.0-beta.32.ipa.sha256
             dist/ios/build-info.txt
           if-no-files-found: error
           retention-days: 30
@@ -87,17 +87,18 @@ jobs:
           app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
           min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
           cat > /tmp/beta-release-notes.md <<EOF
-          ## Codex Relay iOS 1.5.0 Beta 31
+          ## Codex Relay iOS 1.5.0 Beta 32
 
-          Adds custom working-directory path entry when starting a new chat.
+          Adds multiple computer pairing and multi-address management (LAN, Tailscale, public IP).
 
           ### Included
 
-          - Adds a folder path input and Go action to the New Chat screen
-          - Opens and validates absolute Mac paths before enabling New Chat Here
-          - Preserves entered paths and shows folder errors without marking the Relay offline
-          - Prevents duplicate requests, stale-folder creation, and late status updates replacing typed paths
-          - Adds 18 regression cases for path validation, directory selection, errors, and request locking
+          - Pair and manage multiple Mac computers in Settings > Computers with individual credential and crypto state isolation
+          - Multi-address candidate support (LAN, Tailscale, and public IP/port) per computer with automatic failover and manual fixed-address mode
+          - Seamless switching between computers with isolated UI state snapshots (chat history, drafts, pinned threads, workspace preview)
+          - Connection generation guards preventing delayed responses or cross-computer uploads after switching
+          - Prevents ambiguous legacy notifications from misrouting across multiple computers
+          - Preserves existing single-computer pairing via automatic migration
 
           ### Relay compatibility
 
@@ -112,7 +113,7 @@ jobs:
 
           ### Installation
 
-          Download **CodexRelay-1.5.0-beta.31.ipa** and install it with TrollStore on a compatible device.
+          Download **CodexRelay-1.5.0-beta.32.ipa** and install it with TrollStore on a compatible device.
           This is an ad-hoc signed sideload build, not an Apple distribution-signed or notarized release.
           Automated checks and IPA build run in CI; physical-device validation remains pending.
           EOF
@@ -123,8 +124,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.31'
-          ipa='dist/ios/CodexRelay-1.5.0-beta.31.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.32'
+          ipa='dist/ios/CodexRelay-1.5.0-beta.32.ipa'
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" \
@@ -134,7 +135,7 @@ jobs:
               --clobber
             gh release edit "$tag" \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 31' \
+              --title 'Codex Relay iOS 1.5.0 Beta 32' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           else
@@ -143,7 +144,7 @@ jobs:
               "$ipa.sha256" \
               dist/ios/build-info.txt \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 31' \
+              --title 'Codex Relay iOS 1.5.0 Beta 32' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           fi
@@ -154,8 +155,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.31'
-          ipa='CodexRelay-1.5.0-beta.31.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.32'
+          ipa='CodexRelay-1.5.0-beta.32.ipa'
           rm -rf /tmp/codex-relay-beta-check
           mkdir -p /tmp/codex-relay-beta-check
           gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check

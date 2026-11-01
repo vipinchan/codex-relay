@@ -11,6 +11,9 @@ import {
   pushNotificationPlatform,
   supportsPushNotifications,
 } from "@/lib/push-notifications";
+import { captureConnection } from "@/lib/connection-context";
+import { getActiveComputer } from "@/lib/computer-profiles";
+
 import { chatStore$ } from "@/state/chat-store";
 
 export function useInitialPushNotificationRegistration() {
@@ -33,22 +36,26 @@ export function useInitialPushNotificationRegistration() {
 }
 
 async function registerInitialPushNotifications() {
+  const context = captureConnection();
+  const computerId = getActiveComputer()?.id;
   try {
     const currentSettings = await getPushNotificationSettings();
     if (currentSettings.registered) {
-      markInitialPushNotificationRegistrationCompleted();
+      markInitialPushNotificationRegistrationCompleted(computerId);
       return;
     }
 
+    const expoPushToken = await getExpoPushToken();
+    context.assertCurrent();
     await registerPushNotifications({
-      expoPushToken: await getExpoPushToken(),
+      expoPushToken,
       platform: pushNotificationPlatform(),
       preferences: defaultPushNotificationPreferences,
     });
-    markInitialPushNotificationRegistrationCompleted();
+    markInitialPushNotificationRegistrationCompleted(computerId);
   } catch (error) {
     if (error instanceof PushNotificationPermissionDeniedError) {
-      markInitialPushNotificationRegistrationCompleted();
+      markInitialPushNotificationRegistrationCompleted(computerId);
     }
   }
 }

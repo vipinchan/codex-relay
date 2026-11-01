@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { useSelector } from "@legendapp/state/react";
 import { useQuery } from "@tanstack/react-query";
@@ -53,7 +54,10 @@ import { Icon, type AppIconName } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
-import { listWorkspaceFiles } from "@/lib/codex-relay-api";
+import {
+  getCodexRelayCacheIdentity,
+  listWorkspaceFiles as rawListWorkspaceFiles,
+} from "@/lib/codex-relay-api";
 import { hapticMediumImpact, hapticSelection, hapticWarning } from "@/lib/haptics";
 import { formatRateLimitRemaining, visibleRateLimitRows } from "@/lib/rate-limits";
 import {
@@ -303,6 +307,10 @@ export const ChatComposer = memo(function ChatComposer({
   skillsLoadState: "idle" | "loading" | "loaded" | "failed";
   workspacePath?: string;
 }) {
+  const { listWorkspaceFiles } = useComputerOperations({
+    listWorkspaceFiles: rawListWorkspaceFiles,
+  });
+
   const theme = useTheme();
   const composerKey = composerThreadKey(composerThreadId);
   const attachments = useSelector(
@@ -370,7 +378,12 @@ export const ChatComposer = memo(function ChatComposer({
   const fileSuggestionsQuery = useQuery({
     enabled: shouldFetchFileSuggestions,
     queryFn: () => listWorkspaceFiles({ query: fileMentionQuery, workspacePath }),
-    queryKey: ["codex-relay-workspace-files", workspacePath ?? null, fileMentionQuery ?? ""],
+    queryKey: [
+      "codex-relay-workspace-files",
+      getCodexRelayCacheIdentity(),
+      workspacePath ?? null,
+      fileMentionQuery ?? "",
+    ],
     staleTime: 10_000,
   });
   const visibleFiles = fileSuggestionsQuery.data?.files ?? [];

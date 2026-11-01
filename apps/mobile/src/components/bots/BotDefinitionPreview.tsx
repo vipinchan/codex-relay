@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -7,7 +8,11 @@ import { WorkspaceMarkdownPreview } from "@/components/chat/workspace-preview/Wo
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { useTheme } from "@/hooks/use-theme";
-import { getCodexRelayServerUrl, listBotPlugins, listSkills } from "@/lib/codex-relay-api";
+import {
+  getCodexRelayCacheIdentity,
+  listBotPlugins as rawListBotPlugins,
+  listSkills as rawListSkills,
+} from "@/lib/codex-relay-api";
 
 import { botText } from "./bot-ui";
 
@@ -66,8 +71,12 @@ export function BotPreferredCapabilities({
   plugins: string[];
   focused: boolean;
 }) {
+  const { listBotPlugins, listSkills } = useComputerOperations({
+    listBotPlugins: rawListBotPlugins,
+    listSkills: rawListSkills,
+  });
   const theme = useTheme();
-  const serverUrl = getCodexRelayServerUrl();
+  const serverUrl = getCodexRelayCacheIdentity();
   const skillsQuery = useQuery({
     queryKey: ["bot-available-skills", serverUrl],
     queryFn: () => listSkills(),

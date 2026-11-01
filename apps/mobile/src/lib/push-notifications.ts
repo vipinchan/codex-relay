@@ -3,6 +3,8 @@ import * as Notifications from "expo-notifications";
 import type { PushNotificationPreferences } from "codex-relay/api-schema";
 import { Platform } from "react-native";
 
+import { getActiveComputer } from "./computer-profiles";
+
 import { codexRelayStorage } from "./codex-relay-server-url-storage";
 
 const initialPushNotificationRegistrationStorageKey =
@@ -68,11 +70,20 @@ export async function getExpoPushToken() {
 }
 
 export function hasCompletedInitialPushNotificationRegistration() {
-  return codexRelayStorage.getBoolean(initialPushNotificationRegistrationStorageKey) ?? false;
+  return (
+    codexRelayStorage.getBoolean(
+      `${initialPushNotificationRegistrationStorageKey}:${getActiveComputer()?.id ?? "unpaired"}`,
+    ) ?? false
+  );
 }
 
-export function markInitialPushNotificationRegistrationCompleted() {
-  codexRelayStorage.set(initialPushNotificationRegistrationStorageKey, true);
+export function markInitialPushNotificationRegistrationCompleted(
+  computerId = getActiveComputer()?.id,
+) {
+  codexRelayStorage.set(
+    `${initialPushNotificationRegistrationStorageKey}:${computerId ?? "unpaired"}`,
+    true,
+  );
 }
 
 export function notificationResponseThreadId(response: Notifications.NotificationResponse) {

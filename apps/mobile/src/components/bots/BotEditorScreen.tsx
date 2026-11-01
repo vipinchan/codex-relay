@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Bot, ReasoningEffort } from "codex-relay/api-schema";
 import * as Clipboard from "expo-clipboard";
@@ -15,13 +16,13 @@ import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
-  createBot,
-  getBotDefinition,
-  getCodexRelayServerUrl,
-  listBotPlugins,
-  listBots,
-  listSkills,
-  updateBot,
+  createBot as rawCreateBot,
+  getBotDefinition as rawGetBotDefinition,
+  getCodexRelayCacheIdentity,
+  listBotPlugins as rawListBotPlugins,
+  listBots as rawListBots,
+  listSkills as rawListSkills,
+  updateBot as rawUpdateBot,
 } from "@/lib/codex-relay-api";
 import { serverStateKeys, serverStateQueryFns } from "@/lib/server-state";
 
@@ -75,10 +76,20 @@ function toggleSelected(current: string[], value: string) {
 }
 
 export function BotEditorScreen({ botId }: { botId?: string }) {
+  const { createBot, getBotDefinition, listBotPlugins, listBots, listSkills, updateBot } =
+    useComputerOperations({
+      createBot: rawCreateBot,
+      getBotDefinition: rawGetBotDefinition,
+      listBotPlugins: rawListBotPlugins,
+      listBots: rawListBots,
+      listSkills: rawListSkills,
+      updateBot: rawUpdateBot,
+    });
+
   const theme = useTheme();
   const navigation = useNavigation();
   const queryClient = useQueryClient();
-  const serverUrl = getCodexRelayServerUrl();
+  const serverUrl = getCodexRelayCacheIdentity();
   const botsQuery = useQuery({
     queryKey: ["bots", serverUrl],
     queryFn: listBots,

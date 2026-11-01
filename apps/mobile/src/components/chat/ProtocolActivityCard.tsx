@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import type { ChatMessage, ThreadMessageDetailField } from "codex-relay/api-schema";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -12,13 +13,20 @@ import { Text } from "@/components/ui/text";
 import { AppBottomSheet } from "@/components/ui/bottom-sheet";
 import { Fonts, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
-import { getThreadMessageDetail, resolveApproval } from "@/lib/codex-relay-api";
+import {
+  getThreadMessageDetail as rawGetThreadMessageDetail,
+  resolveApproval as rawResolveApproval,
+} from "@/lib/codex-relay-api";
 import { hapticSelection, hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { markMessageApprovalResolvedState } from "@/lib/server-state";
 
 const INLINE_PATCH_LINE_LIMIT = 48;
 
 export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
+  const { resolveApproval } = useComputerOperations({
+    resolveApproval: rawResolveApproval,
+  });
+
   const [isDetailVisible, setIsDetailVisible] = useState(false);
   const [isActivityExpanded, setActivityExpanded] = useState(false);
   const [answer, setAnswer] = useState("");
@@ -496,6 +504,10 @@ function ActivityDetailSheet({
   onClose: () => void;
   visible: boolean;
 }) {
+  const { getThreadMessageDetail } = useComputerOperations({
+    getThreadMessageDetail: rawGetThreadMessageDetail,
+  });
+
   const theme = useTheme();
   const isPlan = message.kind === "plan";
   const sections = isPlan ? [] : detailSections(message);

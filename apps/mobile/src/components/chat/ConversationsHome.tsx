@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useSelector } from "@legendapp/state/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ThreadSummary } from "codex-relay/api-schema";
@@ -21,9 +22,9 @@ import { useTheme } from "@/hooks/use-theme";
 import { hasCodexRelaySession } from "@/lib/codex-relay-api";
 import { hapticLightImpact, hapticSelection, hapticSuccess } from "@/lib/haptics";
 import {
-  archiveThreadServerState,
-  regenerateThreadTitleServerState,
-  renameThreadServerState,
+  archiveThreadServerState as rawArchiveThreadServerState,
+  regenerateThreadTitleServerState as rawRegenerateThreadTitleServerState,
+  renameThreadServerState as rawRenameThreadServerState,
   serverStateKeys,
   serverStateQueryFns,
 } from "@/lib/server-state";
@@ -56,6 +57,13 @@ const iconPalettes = [
 ] as const;
 
 export function ConversationsHome() {
+  const { archiveThreadServerState, regenerateThreadTitleServerState, renameThreadServerState } =
+    useComputerOperations({
+      archiveThreadServerState: rawArchiveThreadServerState,
+      regenerateThreadTitleServerState: rawRegenerateThreadTitleServerState,
+      renameThreadServerState: rawRenameThreadServerState,
+    });
+
   const queryClient = useQueryClient();
   const theme = useTheme();
   const hasPairedSession = useSelector(() => chatStore$.hasPairedSession.get());

@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, View } from "react-native";
@@ -6,7 +7,10 @@ import { StyleSheet } from "react-native-unistyles";
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
 import { Colors, Spacing } from "@/constants/theme";
-import { getWorkspaceFileContent } from "@/lib/codex-relay-api";
+import {
+  getCodexRelayCacheIdentity,
+  getWorkspaceFileContent as rawGetWorkspaceFileContent,
+} from "@/lib/codex-relay-api";
 
 import { HighlightedCodeBlock } from "../MessageBubble";
 import type { WorkspaceMarkdownPreviewTarget } from "./markdown-target";
@@ -19,6 +23,10 @@ export const MarkdownWorkspacePreviewTab = memo(function MarkdownWorkspacePrevie
   target?: WorkspaceMarkdownPreviewTarget;
   workspacePath?: string;
 }) {
+  const { getWorkspaceFileContent } = useComputerOperations({
+    getWorkspaceFileContent: rawGetWorkspaceFileContent,
+  });
+
   const targetWorkspacePath = target?.workspacePath ?? workspacePath;
   const [isPullRefreshing, setPullRefreshing] = useState(false);
   const fileContentQuery = useQuery({
@@ -30,6 +38,7 @@ export const MarkdownWorkspacePreviewTab = memo(function MarkdownWorkspacePrevie
       }),
     queryKey: [
       "codex-relay-workspace-preview-markdown",
+      getCodexRelayCacheIdentity(),
       targetWorkspacePath ?? null,
       target?.path ?? null,
     ],

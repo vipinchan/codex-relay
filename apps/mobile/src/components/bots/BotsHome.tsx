@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -16,20 +17,28 @@ import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
-  createBotConversation,
-  getCodexRelayServerUrl,
+  createBotConversation as rawCreateBotConversation,
+  getCodexRelayCacheIdentity,
   hasCodexRelaySession,
-  listBotConversations,
-  listBots,
-  listThreads,
+  listBotConversations as rawListBotConversations,
+  listBots as rawListBots,
+  listThreads as rawListThreads,
 } from "@/lib/codex-relay-api";
 
 import { BotAvatar, BotPrimaryButton, BotRow, botError, botText } from "./bot-ui";
 
 export function BotsHome() {
+  const { createBotConversation, listBotConversations, listBots, listThreads } =
+    useComputerOperations({
+      createBotConversation: rawCreateBotConversation,
+      listBotConversations: rawListBotConversations,
+      listBots: rawListBots,
+      listThreads: rawListThreads,
+    });
+
   const theme = useTheme();
   const queryClient = useQueryClient();
-  const [serverUrl, setServerUrl] = useState(getCodexRelayServerUrl());
+  const [serverUrl, setServerUrl] = useState(getCodexRelayCacheIdentity());
   const [paired, setPaired] = useState(hasCodexRelaySession());
   const [focused, setFocused] = useState(false);
   const [search, setSearch] = useState("");
@@ -43,7 +52,7 @@ export function BotsHome() {
   useFocusEffect(
     useCallback(() => {
       setPaired(hasCodexRelaySession());
-      setServerUrl(getCodexRelayServerUrl());
+      setServerUrl(getCodexRelayCacheIdentity());
       setFocused(true);
       return () => setFocused(false);
     }, []),

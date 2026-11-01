@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import type { ListWorkspaceFilesResponse } from "codex-relay/api-schema";
 import { router } from "expo-router";
 import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
@@ -17,9 +18,12 @@ import { StyleSheet } from "react-native-unistyles";
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
 import { Colors, Fonts, Spacing } from "@/constants/theme";
-import { getWorkspaceFileContent, listWorkspaceFiles } from "@/lib/codex-relay-api";
+import {
+  getWorkspaceFileContent as rawGetWorkspaceFileContent,
+  listWorkspaceFiles as rawListWorkspaceFiles,
+} from "@/lib/codex-relay-api";
 import { hapticSelection } from "@/lib/haptics";
-import { workspaceFileContentQueryKey } from "@/lib/workspace-file-queries";
+import { workspaceFileContentQueryKey, workspaceFilesQueryKey } from "@/lib/workspace-file-queries";
 
 import { WorkspaceFileContentView } from "./WorkspaceFileContentView";
 import { WorkspaceCodeWebView } from "./WorkspaceCodeWebView";
@@ -52,18 +56,21 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
 }: {
   workspacePath?: string;
 }) {
+  const { getWorkspaceFileContent, listWorkspaceFiles } = useComputerOperations({
+    getWorkspaceFileContent: rawGetWorkspaceFileContent,
+    listWorkspaceFiles: rawListWorkspaceFiles,
+  });
+
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 180);
   const [currentDirectory, setCurrentDirectory] = useState("");
   const [isExplorerExpanded, setExplorerExpanded] = useState(true);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [isPullRefreshing, setPullRefreshing] = useState(false);
-  const fileListQueryKey = [
-    "codex-relay-workspace-preview-files",
-    workspacePath ?? null,
-    currentDirectory,
-    debouncedQuery,
-  ];
+  const fileListQueryKey = useMemo(
+    () => workspaceFilesQueryKey(workspacePath, currentDirectory, debouncedQuery),
+    [currentDirectory, debouncedQuery, workspacePath],
+  );
   const filesQuery = useQuery({
     queryFn: () =>
       listWorkspaceFiles({

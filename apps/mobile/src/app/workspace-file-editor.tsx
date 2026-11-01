@@ -1,3 +1,4 @@
+import { useComputerOperations } from "@/hooks/use-computer-operations";
 import type { WorkspaceFileContentResponse } from "codex-relay/api-schema";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,7 +18,10 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { WorkspaceCodeWebView } from "@/components/chat/workspace-preview/WorkspaceCodeWebView";
 import { Colors, Spacing } from "@/constants/theme";
-import { getWorkspaceFileContent, updateWorkspaceFileContent } from "@/lib/codex-relay-api";
+import {
+  getWorkspaceFileContent as rawGetWorkspaceFileContent,
+  updateWorkspaceFileContent as rawUpdateWorkspaceFileContent,
+} from "@/lib/codex-relay-api";
 import { hapticSelection } from "@/lib/haptics";
 import {
   workspaceFileContentQueryKey,
@@ -25,6 +29,11 @@ import {
 } from "@/lib/workspace-file-queries";
 
 export default function WorkspaceFileEditorScreen() {
+  const { getWorkspaceFileContent, updateWorkspaceFileContent } = useComputerOperations({
+    getWorkspaceFileContent: rawGetWorkspaceFileContent,
+    updateWorkspaceFileContent: rawUpdateWorkspaceFileContent,
+  });
+
   const params = useLocalSearchParams<{ path?: string; workspacePath?: string }>();
   const path = normalizedParam(params.path);
   const workspacePath = normalizedParam(params.workspacePath);

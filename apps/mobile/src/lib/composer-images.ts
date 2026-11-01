@@ -1,5 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import { Alert } from "react-native";
+import { captureConnection } from "./connection-context";
 
 import { uploadImageAttachments } from "./codex-relay-api";
 import { appendComposerAttachments, getComposerAttachments } from "@/state/chat-store";
@@ -8,6 +9,7 @@ const MAX_IMAGE_ATTACHMENTS = 3;
 const MAX_ATTACHMENT_PAYLOAD_BYTES = 8 * 1024 * 1024;
 
 export async function attachComposerImages(composerId?: string) {
+  const connection = captureConnection();
   const remainingSlots = MAX_IMAGE_ATTACHMENTS - getComposerAttachments(composerId).length;
   if (remainingSlots <= 0) {
     Alert.alert("Image limit reached", `Attach up to ${MAX_IMAGE_ATTACHMENTS} images at a time.`);
@@ -15,6 +17,7 @@ export async function attachComposerImages(composerId?: string) {
   }
 
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  connection.assertCurrent();
   if (!permission.granted) {
     Alert.alert("Photo access required", "Allow photo library access to attach images.");
     return;
@@ -28,6 +31,7 @@ export async function attachComposerImages(composerId?: string) {
     selectionLimit: remainingSlots,
     shouldDownloadFromNetwork: true,
   });
+  connection.assertCurrent();
   if (result.canceled) return;
 
   let acceptedBytes = 0;
@@ -50,6 +54,7 @@ export async function attachComposerImages(composerId?: string) {
       uri: asset.uri,
     })),
   );
+  connection.assertCurrent();
   const attachments = uploaded.attachments.flatMap((attachment, index) => {
     const asset = assets[index];
     if (!asset) {
