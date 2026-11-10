@@ -247,11 +247,6 @@ export function ConversationsHome() {
     router.push("/chat");
   }
 
-  function openSettings() {
-    hapticSelection();
-    router.navigate("/settings-tab");
-  }
-
   function toggleSearch() {
     hapticSelection();
     setSearchOpen((open) => !open);
@@ -267,7 +262,19 @@ export function ConversationsHome() {
     <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
       <View style={styles.topBar}>
         <View style={styles.topBarSide}>
-          <RoundTopButton icon="settings" label="Settings" onPress={openSettings} />
+          <RoundTopButton
+            icon={searchOpen ? "x" : "search"}
+            label={
+              searchOpen
+                ? zh
+                  ? "关闭搜索"
+                  : "Close search"
+                : zh
+                  ? "搜索会话"
+                  : "Search conversations"
+            }
+            onPress={toggleSearch}
+          />
         </View>
         <ThemedText style={styles.appTitle}>Codex</ThemedText>
         <View style={[styles.topBarSide, styles.topBarSideEnd]}>
@@ -361,14 +368,6 @@ export function ConversationsHome() {
       />
 
       <View pointerEvents="box-none" style={styles.fabDock}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Search conversations"
-          onPress={toggleSearch}
-          style={({ pressed }) => [styles.searchFab, pressed && styles.pressed]}
-        >
-          <Icon name={searchOpen ? "x" : "search"} size={27} tintColor="#FFFFFF" />
-        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="New chat"
@@ -859,20 +858,8 @@ const styles = StyleSheet.create({
     right: 22,
     bottom: 14,
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
-  },
-  searchFab: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#1C1C1E",
-    shadowColor: "#000",
-    shadowOpacity: 0.38,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
   },
   newFab: {
     width: 58,
