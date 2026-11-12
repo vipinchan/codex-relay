@@ -4,6 +4,7 @@ import type { PushNotificationPreferences } from "codex-relay/api-schema";
 import { Platform } from "react-native";
 
 import { getActiveComputer } from "./computer-profiles";
+import { isMacLocalBuild } from "./build-platform";
 
 import { codexRelayStorage } from "./codex-relay-server-url-storage";
 
@@ -41,7 +42,7 @@ export function configurePushNotificationPresentation() {
 }
 
 export function supportsPushNotifications() {
-  return Platform.OS === "android" || Platform.OS === "ios";
+  return !isMacLocalBuild && (Platform.OS === "android" || Platform.OS === "ios");
 }
 
 export async function getExpoPushToken() {

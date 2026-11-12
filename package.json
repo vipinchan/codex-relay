@@ -18,6 +18,8 @@
     "format": "oxfmt . --write",
     "format:check": "oxfmt . --check",
     "build": "pnpm -r --if-present build",
+    "build:macos": "bash scripts/build-macos-app.sh",
+    "test:macos": "node --test scripts/macos/*.test.mjs",
     "changeset": "changeset",
     "version-packages:npm": "node scripts/version-packages.mjs npm",
     "version-packages:mobile": "node scripts/version-packages.mjs mobile",

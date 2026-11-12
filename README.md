@@ -195,6 +195,28 @@ release pull request and publishes it after that pull request is merged. See
 | `npx codex-relay@latest approve XXXX-XXXX`   | Approve a pending mobile pairing request.           |
 | `npx codex-relay@latest clear`               | Sign out every paired mobile app.                   |
 
+## Local Mac App
+
+On an Apple Silicon Mac, the mobile UI can also be built as a standalone
+Mac Catalyst app with its JavaScript bundle embedded. It does not need Metro at
+runtime; it connects to the same local relay and keeps its own pairing.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build:macos
+```
+
+The app is written to `dist/macos/Codex Relay Mac.app` along with a
+`build-info.json` record. Copy it into `~/Applications` to install it. Generated
+native files stay under `build/macos` and do not replace `apps/mobile/ios`.
+Use `pnpm build:macos --prepare-only` to validate project generation without
+installing Pods or compiling.
+
+Native math rendering, the system barcode scanner, push registration, and
+mobile OTA updates are intentionally unavailable in the local Mac build. See
+the generated project validation and `scripts/macos` for the compatibility
+boundary.
+
 ## Configuration
 
 The relay listens on `0.0.0.0:8787` by default.

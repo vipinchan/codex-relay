@@ -93,13 +93,15 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
       "expo-notifications",
       "expo-system-ui",
       "expo-web-browser",
-      [
-        "@hot-updater/expo",
-        {
-          channel: "production",
-          publicKeyPath: "./keys/public-key.pem",
-        },
-      ],
+      process.env.CODEX_RELAY_MACOS_BUILD === "1"
+        ? "./plugins/with-mac-catalyst.cjs"
+        : [
+            "@hot-updater/expo",
+            {
+              channel: "production",
+              publicKeyPath: "./keys/public-key.pem",
+            },
+          ],
       [
         "expo-secure-store",
         {

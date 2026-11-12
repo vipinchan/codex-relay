@@ -1,4 +1,5 @@
 import { HotUpdater } from "@hot-updater/react-native";
+import { isMacLocalBuild } from "@/lib/build-platform";
 import { useSelector } from "@legendapp/state/react";
 import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
@@ -83,7 +84,7 @@ export default function SettingsScreen() {
   const [showHotUpdaterLogs, setShowHotUpdaterLogs] = useState(false);
   const hotUpdaterLogs = useHotUpdaterLogs();
   const [appUpdate, setAppUpdate] = useState<AppUpdateState>({
-    status: "checking",
+    status: isMacLocalBuild ? "manual" : "checking",
     updateInfo: null,
   });
   const [pushNotificationPreferences, setPushNotificationPreferences] = useState(
@@ -110,6 +111,7 @@ export default function SettingsScreen() {
     let isActive = true;
 
     async function checkForAppUpdate() {
+      if (isMacLocalBuild) return;
       try {
         const updateInfo = await HotUpdater.checkForUpdate({
           updateStrategy: "appVersion",
@@ -526,6 +528,7 @@ export default function SettingsScreen() {
                 </View>
                 <ThemedText type="code" themeColor="textSecondary" style={styles.versionText}>
                   Version {releaseVersionLabel}
+                  {appUpdate.status === "manual" ? " · local Mac build" : null}
                   {appUpdate.status === "checking" ? " · checking" : null}
                   {appUpdate.status === "current" ? " · current" : null}
                   {appUpdate.status === "downloading" ? " · downloading" : null}
@@ -801,6 +804,7 @@ function settingsErrorMessage(error: unknown) {
 }
 
 function appliedHotUpdateBundleSuffix() {
+  if (isMacLocalBuild) return undefined;
   try {
     const bundleId = HotUpdater.getBundleId();
     if (!bundleId || bundleId === HotUpdater.getMinBundleId()) {
@@ -815,7 +819,7 @@ function appliedHotUpdateBundleSuffix() {
 type AppUpdateInfo = Awaited<ReturnType<typeof HotUpdater.checkForUpdate>>;
 
 type AppUpdateState = {
-  status: "checking" | "current" | "downloading" | "ready" | "updating" | "error";
+  status: "manual" | "checking" | "current" | "downloading" | "ready" | "updating" | "error";
   updateInfo: AppUpdateInfo;
 };
 

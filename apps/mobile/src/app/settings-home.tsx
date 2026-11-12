@@ -8,6 +8,7 @@ import { ThemedText } from "@/components/themed-text";
 import { Icon, type AppIconName } from "@/components/ui/icon";
 import { Colors } from "@/constants/theme";
 import { hapticSelection } from "@/lib/haptics";
+import { isMacLocalBuild } from "@/lib/build-platform";
 
 const accent = "#6EA8FF";
 
@@ -93,7 +94,15 @@ export function SettingsHomeScreen({ embedded = false }: { embedded?: boolean })
           <SettingsRow
             icon="refresh"
             title={zh ? "更新" : "Updates"}
-            subtitle={zh ? "检查应用与热更新" : "Check app and hot updates"}
+            subtitle={
+              isMacLocalBuild
+                ? zh
+                  ? "查看本机 Mac 版本"
+                  : "View local Mac version"
+                : zh
+                  ? "检查应用与热更新"
+                  : "Check app and hot updates"
+            }
             onPress={openDetailedSettings}
           />
           <Divider />

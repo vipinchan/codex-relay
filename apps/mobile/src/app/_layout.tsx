@@ -19,6 +19,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { useComputerConnection } from "@/hooks/use-computer-connection";
+import { isMacLocalBuild } from "@/lib/build-platform";
 import {
   initializeComputerSessionState,
   saveCurrentComputerState,
@@ -190,6 +191,7 @@ function TabLayout() {
   }, [fontsLoaded]);
 
   useEffect(() => {
+    if (isMacLocalBuild) return;
     const unsubscribeProgress = HotUpdater.addListener("onProgress", (event) => {
       addHotUpdaterLog("info", "OTA download progress", formatHotUpdaterProgress(event));
     });
@@ -351,7 +353,7 @@ const hotUpdaterApiKey =
     ? Constants.expoConfig.extra.hotUpdaterApiKey.trim()
     : undefined);
 
-if (hotUpdaterBaseUrl) {
+if (!isMacLocalBuild && hotUpdaterBaseUrl) {
   HotUpdater.init({
     insights: true,
     baseURL: hotUpdaterBaseUrl,

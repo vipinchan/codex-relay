@@ -1,0 +1,118 @@
+--- a/ios/Current/BarcodeScannerUtils.swift
++++ b/ios/Current/BarcodeScannerUtils.swift
+@@ -60,6 +60,7 @@
+     return result
+   }
+ 
++  #if !targetEnvironment(macCatalyst)
+   @available(iOS 16.0, *)
+   static func visionDataScannerObjectToDictionary(item: RecognizedItem.Barcode) -> [String: Any] {
+     var result = [String: Any]()
+@@ -83,6 +84,8 @@
+     return result
+   }
+ 
++  #endif
++
+   static func addEmptyCornerPoints(to result: inout [String: Any]) {
+     result["cornerPoints"] = []
+     result["bounds"] = [
+--- a/ios/Current/VisionScannerDelegate.swift
++++ b/ios/Current/VisionScannerDelegate.swift
+@@ -6,6 +6,7 @@
+   @MainActor func onScannerDismissed()
+ }
+ 
++#if !targetEnvironment(macCatalyst)
+ @available(iOS 16.0, *)
+ class VisionScannerDelegate: NSObject, DataScannerViewControllerDelegate, UIAdaptivePresentationControllerDelegate {
+   private let handler: ScannerResultHandler
+@@ -32,3 +33,4 @@
+     handler.onScannerDismissed()
+   }
+ }
++#endif
+--- a/ios/Current/CameraSessionManager.swift
++++ b/ios/Current/CameraSessionManager.swift
+@@ -380,7 +380,9 @@
+     if photoOutput.isFastCapturePrioritizationSupported {
+       photoOutput.isFastCapturePrioritizationEnabled = true
+     }
++    #if !targetEnvironment(macCatalyst)
+     photoOutput.isAutoDeferredPhotoDeliveryEnabled = false
++    #endif
+   }
+ 
+   private func startSession() {
+--- a/ios/CameraViewModule.swift
++++ b/ios/CameraViewModule.swift
+@@ -31,7 +31,11 @@
+     }
+ 
+     Property("isModernBarcodeScannerAvailable") {
++      #if targetEnvironment(macCatalyst)
++      false
++      #else
+       if #available(iOS 16.0, *) { true } else { false }
++      #endif
+     }
+ 
+     Property("toggleRecordingAsyncAvailable") {
+@@ -332,6 +336,9 @@
+     }
+ 
+     AsyncFunction("launchScanner") { (options: VisionScannerOptions?) in
++      #if targetEnvironment(macCatalyst)
++      throw CameraScannerUnavailableException()
++      #else
+       if #available(iOS 16.0, *) {
+         try await MainActor.run {
+           guard DataScannerViewController.isSupported, DataScannerViewController.isAvailable else {
+@@ -342,14 +349,17 @@
+           launchScanner(with: options)
+         }
+       }
++      #endif
+     }
+ 
+     AsyncFunction("dismissScanner") {
++      #if !targetEnvironment(macCatalyst)
+       if #available(iOS 16.0, *) {
+         await MainActor.run {
+           dismissScanner()
+         }
+       }
++      #endif
+     }
+ 
+     AsyncFunction("getCameraPermissionsAsync") { (promise: Promise) in
+@@ -393,6 +403,7 @@
+     }
+   }
+ 
++  #if !targetEnvironment(macCatalyst)
+   @available(iOS 16.0, *)
+   @MainActor
+   private func launchScanner(with options: VisionScannerOptions?) {
+@@ -428,17 +439,21 @@
+     }
+   }
+ 
++  #endif
++
+   func onItemScanned(result: [String: Any]) {
+     sendEvent("onModernBarcodeScanned", result)
+   }
+ 
+   @MainActor
+   func onScannerDismissed() {
++    #if !targetEnvironment(macCatalyst)
+     if #available(iOS 16.0, *) {
+       if let controller = scannerContext?.controller as? DataScannerViewController {
+         controller.stopScanning()
+       }
+     }
++    #endif
+     scannerContext = nil
+   }
+ 
