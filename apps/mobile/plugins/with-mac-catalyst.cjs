@@ -38,6 +38,13 @@ module.exports = function withMacCatalyst(config) {
   });
   config = withInfoPlist(config, (mod) => {
     mod.modResults.CFBundleDisplayName = "Codex Relay Mac";
+    const transport = (mod.modResults.NSAppTransportSecurity ??= {});
+    transport.NSAllowsArbitraryLoads = true;
+    // These narrower keys make ATS ignore NSAllowsArbitraryLoads, blocking
+    // public HTTP relays even when localhost remains reachable.
+    delete transport.NSAllowsLocalNetworking;
+    delete transport.NSAllowsArbitraryLoadsForMedia;
+    delete transport.NSAllowsArbitraryLoadsInWebContent;
     return mod;
   });
   config = withPodfile(config, (mod) => {
