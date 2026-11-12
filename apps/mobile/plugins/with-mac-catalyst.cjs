@@ -37,7 +37,6 @@ module.exports = function withMacCatalyst(config) {
     return mod;
   });
   config = withInfoPlist(config, (mod) => {
-    mod.modResults.CFBundleDisplayName = "Codex Relay Mac";
     const transport = (mod.modResults.NSAppTransportSecurity ??= {});
     transport.NSAllowsArbitraryLoads = true;
     // These narrower keys make ATS ignore NSAllowsArbitraryLoads, blocking

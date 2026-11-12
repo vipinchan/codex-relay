@@ -9,6 +9,7 @@ test("allows user-configured HTTP relays without ATS keys that override arbitrar
     ...config,
     modRequest: { platform: "ios" },
     modResults: {
+      CFBundleDisplayName: "Codex Relay",
       NSAppTransportSecurity: {
         NSAllowsArbitraryLoads: true,
         NSAllowsLocalNetworking: true,
@@ -19,6 +20,7 @@ test("allows user-configured HTTP relays without ATS keys that override arbitrar
     },
   });
 
+  assert.equal(result.modResults.CFBundleDisplayName, "Codex Relay");
   assert.deepEqual(result.modResults.NSAppTransportSecurity, {
     NSAllowsArbitraryLoads: true,
     NSExceptionDomains: exceptionDomains,
