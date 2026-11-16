@@ -69,7 +69,10 @@ vi.mock("react-native", () => ({
   Alert: { alert: ui.alert },
   Keyboard: { dismiss: ui.dismissKeyboard },
   KeyboardAvoidingView: ({ children }: { children: React.ReactNode }) => children,
-  Platform: { OS: "ios" },
+  Platform: {
+    OS: "ios",
+    select: (values: Record<string, unknown>) => values.ios ?? values.default,
+  },
   View: ({ children }: { children: React.ReactNode }) => children,
   Pressable: ({
     children,
@@ -99,7 +102,19 @@ vi.mock("react-native", () => ({
 vi.mock("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock("react-native-unistyles", () => ({ StyleSheet: { create: (styles: unknown) => styles } }));
+vi.mock("react-native-unistyles", async () => {
+  const { appearanceDark } = await import("@/constants/appearance");
+  return {
+    StyleSheet: {
+      create: (styles: unknown) => (typeof styles === "function" ? styles(appearanceDark) : styles),
+    },
+    UnistylesRuntime: { getTheme: () => appearanceDark },
+  };
+});
+vi.mock("@/hooks/use-theme", async () => {
+  const { appearanceDark } = await import("@/constants/appearance");
+  return { useTheme: () => appearanceDark };
+});
 vi.mock("expo-router", () => ({ router: { back: vi.fn<() => void>() } }));
 vi.mock("@/components/themed-text", () => ({
   ThemedText: ({ children }: { children: React.ReactNode }) => children,

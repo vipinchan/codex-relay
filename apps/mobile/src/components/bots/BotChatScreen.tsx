@@ -37,7 +37,6 @@ import { BotDirectComposer } from "./BotDirectComposer";
 import { BotDirectMessageRow } from "./BotDirectMessageRow";
 import { useBotMessageHistory } from "./use-bot-message-history";
 
-const accent = "#6EA8FF";
 const zh = (Intl.DateTimeFormat().resolvedOptions().locale || "en").toLowerCase().startsWith("zh");
 const tr = (cn: string, en: string) => (zh ? cn : en);
 const errorText = (error: unknown) =>
@@ -78,6 +77,7 @@ export function BotChatScreen({
 
   const queryClient = useQueryClient();
   const theme = useTheme();
+  const accent = theme.accent;
   const insets = useSafeAreaInsets();
   const serverUrl = getCodexRelayCacheIdentity();
   const [sheet, setSheet] = useState<"group" | undefined>();
@@ -138,21 +138,14 @@ export function BotChatScreen({
   )?.id;
   const markdownStyle = useMemo(
     () =>
-      createAssistantMarkdownStyle(
-        {
-          backgroundSelected: theme.backgroundSelected,
-          text: theme.text,
-          textSecondary: theme.textSecondary,
-        },
-        {
-          mono: Fonts.mono,
-          monoMedium: Fonts.monoMedium,
-          sans: Fonts.sans,
-          sansMedium: Fonts.sansMedium,
-          sansSemiBold: Fonts.sansSemiBold,
-        },
-      ),
-    [theme.backgroundSelected, theme.text, theme.textSecondary],
+      createAssistantMarkdownStyle(theme, {
+        mono: Fonts.mono,
+        monoMedium: Fonts.monoMedium,
+        sans: Fonts.sans,
+        sansMedium: Fonts.sansMedium,
+        sansSemiBold: Fonts.sansSemiBold,
+      }),
+    [theme],
   );
 
   useFocusEffect(
@@ -446,7 +439,7 @@ export function BotChatScreen({
           value={groupName}
           onChangeText={setGroupName}
           style={styles.sheetInput}
-          placeholderTextColor="#777"
+          placeholderTextColor={theme.textSecondary}
         />
         <Text style={styles.fieldLabel}>{tr("共享工作目录", "Shared working directory")}</Text>
         <AppBottomSheetTextInput
@@ -454,7 +447,7 @@ export function BotChatScreen({
           onChangeText={setWorkspacePath}
           autoCapitalize="none"
           style={styles.sheetInput}
-          placeholderTextColor="#777"
+          placeholderTextColor={theme.textSecondary}
         />
         <Text style={styles.fieldLabel}>{tr("成员", "Members")}</Text>
         {bots.map((bot: Bot) => (
@@ -500,7 +493,7 @@ export function BotChatScreen({
           accessibilityLabel={tr("删除群聊", "Delete group")}
           icon="trash"
           title={tr("删除群聊", "Delete group")}
-          iconTintColor="#FF8DA5"
+          iconTintColor={theme.danger}
           onPress={confirmDeleteGroup}
         />
       </AppBottomSheet>
@@ -508,23 +501,23 @@ export function BotChatScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#000" },
+const styles = StyleSheet.create((theme) => ({
+  screen: { flex: 1, backgroundColor: theme.background },
   content: { flex: 1 },
   header: {
     alignItems: "center",
     flexDirection: "row",
     minHeight: 62,
-    borderBottomColor: "#242426",
+    borderBottomColor: theme.backgroundElement,
     borderBottomWidth: 1,
     paddingHorizontal: 8,
   },
   headerButton: { alignItems: "center", justifyContent: "center", width: 44, height: 44 },
   headerCopy: { flex: 1, minWidth: 0, alignItems: "center" },
-  headerTitle: { color: "#fff", fontWeight: "700", fontSize: 17 },
-  headerSubtitle: { color: "#8E8E93", fontSize: 11, marginTop: 3 },
+  headerTitle: { color: theme.text, fontWeight: "700", fontSize: 17 },
+  headerSubtitle: { color: theme.textSecondary, fontSize: 11, marginTop: 3 },
   timeline: { paddingHorizontal: 15, paddingTop: 12, paddingBottom: 16, flexGrow: 1 },
-  sourceNotice: { color: "#9ABBF2", fontSize: 12, textAlign: "center", paddingVertical: 6 },
+  sourceNotice: { color: theme.accent, fontSize: 12, textAlign: "center", paddingVertical: 6 },
   progressRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -532,16 +525,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 5,
   },
-  progressHint: { color: "#85858B", fontSize: 11 },
-  stopText: { color: "#FF8DA5", fontSize: 12, fontWeight: "700" },
+  progressHint: { color: theme.textSecondary, fontSize: 11 },
+  stopText: { color: theme.danger, fontSize: 12, fontWeight: "700" },
   disabled: { opacity: 0.45 },
   loadMore: { alignItems: "center", paddingVertical: 8 },
-  error: { color: "#FF8DA5", fontSize: 13, textAlign: "center", padding: 10 },
-  empty: { color: "#77777C", fontSize: 13, textAlign: "center", marginTop: 30 },
-  fieldLabel: { color: "#AEAEB2", fontSize: 13, fontWeight: "600", marginTop: 12, marginBottom: 4 },
+  error: { color: theme.danger, fontSize: 13, textAlign: "center", padding: 10 },
+  empty: { color: theme.textSecondary, fontSize: 13, textAlign: "center", marginTop: 30 },
+  fieldLabel: {
+    color: theme.textSecondaryStrong,
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 12,
+    marginBottom: 4,
+  },
   sheetInput: {
-    color: "#fff",
-    backgroundColor: "#29292C",
+    color: theme.text,
+    backgroundColor: theme.backgroundElement,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -550,12 +549,12 @@ const styles = StyleSheet.create({
   },
   primaryAction: {
     alignItems: "center",
-    backgroundColor: "#4169D8",
+    backgroundColor: theme.botPrimaryBackground,
     borderRadius: 11,
     minHeight: 46,
     justifyContent: "center",
     marginTop: 14,
     marginBottom: 8,
   },
-  primaryText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-});
+  primaryText: { color: theme.botActionForeground, fontWeight: "700", fontSize: 15 },
+}));

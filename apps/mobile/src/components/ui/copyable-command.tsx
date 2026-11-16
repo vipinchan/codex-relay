@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -28,6 +29,7 @@ export function CopyableCommand({
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
 }) {
+  const theme = useTheme();
   const [isCopied, setCopied] = useState(false);
   const handleCopyPress = useCallback(() => {
     hapticSelection();
@@ -64,7 +66,12 @@ export function CopyableCommand({
           pressed && styles.pressed,
         ]}
       >
-        <Icon name={isCopied ? "check" : "copy"} size={12} strokeWidth={2.2} tintColor="#F2F2F2" />
+        <Icon
+          name={isCopied ? "check" : "copy"}
+          size={12}
+          strokeWidth={2.2}
+          tintColor={theme.text}
+        />
         <ThemedText type="smallBold" style={styles.copyButtonText}>
           {isCopied ? "Copied" : "Copy"}
         </ThemedText>
@@ -77,11 +84,11 @@ function copyFailureMessage(error: unknown) {
   return error instanceof Error ? error.message : "The command could not be copied.";
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   container: {
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.24)",
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.overlay,
+    borderColor: theme.borderSubtle,
     borderRadius: 7,
     borderWidth: 1,
     flexDirection: "row",
@@ -102,8 +109,8 @@ const styles = StyleSheet.create({
   copyButton: {
     alignItems: "center",
     alignSelf: "stretch",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.borderSubtle,
     borderRadius: 6,
     borderWidth: 1,
     flexDirection: "row",
@@ -115,15 +122,15 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   copyButtonCopied: {
-    backgroundColor: "rgba(86, 196, 134, 0.16)",
-    borderColor: "rgba(86, 196, 134, 0.3)",
+    backgroundColor: theme.successSoft,
+    borderColor: theme.successBorder,
   },
   copyButtonText: {
-    color: "#F2F2F2",
+    color: theme.text,
     fontSize: 11,
     lineHeight: 14,
   },
   pressed: {
     opacity: 0.7,
   },
-});
+}));

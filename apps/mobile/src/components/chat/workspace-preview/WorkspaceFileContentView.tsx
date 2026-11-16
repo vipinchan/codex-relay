@@ -6,7 +6,8 @@ import { WebView, type WebViewProps } from "react-native-webview";
 import { Image } from "expo-image";
 
 import { ThemedText } from "@/components/themed-text";
-import { Colors, Spacing } from "@/constants/theme";
+import { Spacing } from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
 
 export const WorkspaceFileContentView = memo(function WorkspaceFileContentView({
   base64Content,
@@ -21,6 +22,7 @@ export const WorkspaceFileContentView = memo(function WorkspaceFileContentView({
   mimeType: string | null;
   viewMode: "render" | "source";
 }) {
+  const theme = useTheme();
   const [webViewError, setWebViewError] = useState<string | null>(null);
 
   const imageSource = useMemo(
@@ -61,7 +63,7 @@ export const WorkspaceFileContentView = memo(function WorkspaceFileContentView({
           setSupportMultipleWindows={false}
           source={{ baseUrl: "about:blank", html: content }}
           startInLoadingState
-          style={styles.renderWebView}
+          style={[styles.renderWebView, { backgroundColor: theme.background }]}
           {...htmlWebViewSecurityProps}
         />
         {webViewError ? (
@@ -87,11 +89,11 @@ const htmlWebViewSecurityProps: Pick<
   domStorageEnabled: false,
 };
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   imageFrame: {
     alignItems: "center",
-    backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 8,
     borderWidth: 1,
@@ -110,8 +112,8 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   renderFrame: {
-    backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 8,
     borderWidth: 1,
@@ -119,22 +121,22 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   renderWebView: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.background,
     flex: 1,
   },
   renderError: {
     alignItems: "center",
-    backgroundColor: Colors.dark.backgroundElement,
+    backgroundColor: theme.backgroundElement,
     flex: 1,
     gap: Spacing.one,
     justifyContent: "center",
     padding: Spacing.three,
   },
   renderErrorBar: {
-    backgroundColor: "rgba(248, 113, 113, 0.12)",
-    borderColor: "rgba(248, 113, 113, 0.3)",
+    backgroundColor: theme.dangerSoft,
+    borderColor: theme.dangerBorder,
     borderTopWidth: 1,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.one,
   },
-});
+}));

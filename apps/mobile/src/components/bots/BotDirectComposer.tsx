@@ -215,7 +215,7 @@ export function BotDirectComposer({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   scope: { paddingHorizontal: 18, paddingTop: 5, paddingBottom: 3 },
-  hint: { color: "#929AA8", fontSize: 11 },
-});
+  hint: { color: theme.textSecondary, fontSize: 11 },
+}));

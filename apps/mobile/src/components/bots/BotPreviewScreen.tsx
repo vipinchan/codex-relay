@@ -535,7 +535,7 @@ function TabButton({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   tabs: {
     flexDirection: "row",
     gap: 4,
@@ -560,5 +560,5 @@ const styles = StyleSheet.create({
   notice: { fontFamily: Fonts.sansMedium, fontSize: 13 },
   resetButton: { alignSelf: "flex-start", paddingVertical: 8 },
   hint: { padding: 18, fontSize: 13, opacity: 0.7 },
-  error: { color: "#FF8DA5", fontSize: 13, lineHeight: 19, padding: 16 },
-});
+  error: { color: theme.danger, fontSize: 13, lineHeight: 19, padding: 16 },
+}));

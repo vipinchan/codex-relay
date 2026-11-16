@@ -1,11 +1,13 @@
 import { bridge, createWebView } from "@webview-bridge/react-native";
 
 import type { WorkspaceTerminalOutputResponse } from "codex-relay/api-schema";
+import type { WorkspaceWebTheme } from "../../../../web/workspace-code-editor/src/theme";
 
 export type WorkspaceSshTerminalState = {
   fontSize?: number;
   reconnectRequestId?: number;
   terminalId: string;
+  theme?: WorkspaceWebTheme;
   workspacePath?: string;
 };
 

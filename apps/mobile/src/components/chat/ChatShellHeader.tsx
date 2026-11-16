@@ -1,10 +1,10 @@
+import { useTheme } from "@/hooks/use-theme";
 import { router } from "expo-router";
 import { Pressable, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 import { ThemedText } from "@/components/themed-text";
 import { Icon, type AppIconName } from "@/components/ui/icon";
-import { Colors } from "@/constants/theme";
 import { hapticSelection } from "@/lib/haptics";
 
 export type ChatShellAction = {
@@ -51,6 +51,7 @@ export function ChatShellHeader({
 }
 
 function HeaderButton({ action }: { action: ChatShellAction }) {
+  const theme = useTheme();
   const returnsToHistory = action.label === "Open threads";
   const icon = returnsToHistory ? "back" : action.icon;
 
@@ -77,12 +78,12 @@ function HeaderButton({ action }: { action: ChatShellAction }) {
         pressed && styles.pressed,
       ]}
     >
-      <Icon name={icon} size={18} tintColor={Colors.dark.text} />
+      <Icon name={icon} size={18} tintColor={theme.text} />
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   header: {
     alignItems: "center",
     elevation: 4,
@@ -115,7 +116,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   pressed: {
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: theme.tintSoft,
     opacity: 0.72,
   },
   subtitle: {
@@ -136,4 +137,4 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
-});
+}));

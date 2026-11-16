@@ -82,7 +82,7 @@ function threadKeyExtractor(thread: ThreadSummary) {
   return thread.id;
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   container: {
     minHeight: 70,
   },
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
   },
   item: {
-    borderColor: "rgba(132, 145, 165, 0.18)",
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     gap: Spacing.one,
@@ -100,10 +100,10 @@ const styles = StyleSheet.create({
     width: THREAD_ITEM_WIDTH,
   },
   itemSelected: {
-    backgroundColor: "rgba(95, 167, 255, 0.16)",
-    borderColor: "rgba(95, 167, 255, 0.42)",
+    backgroundColor: theme.accentMuted,
+    borderColor: theme.accentBorder,
   },
   pressed: {
     opacity: 0.72,
   },
-});
+}));

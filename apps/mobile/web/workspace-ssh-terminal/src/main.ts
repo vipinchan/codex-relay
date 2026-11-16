@@ -2,6 +2,14 @@ import { linkBridge } from "@webview-bridge/web";
 import { FitAddon, Ghostty, Terminal } from "ghostty-web";
 import ghosttyWasmUrl from "ghostty-web/ghostty-vt.wasm?url";
 
+import { appearanceDark, appearanceLight } from "../../../src/constants/appearance";
+import {
+  applyWorkspaceWebTheme,
+  createWorkspaceWebTheme,
+  type WorkspaceWebTheme,
+} from "../../workspace-code-editor/src/theme";
+import { installTerminalTheme, terminalTheme } from "./theme";
+
 import type {
   WorkspaceSshTerminalBridge,
   WorkspaceSshTerminalPostMessageSchema,
@@ -14,6 +22,7 @@ import "./style.css";
 declare global {
   interface Window {
     __workspaceSshTerminalId?: string;
+    __workspaceSshTerminalTheme?: WorkspaceWebTheme;
   }
 }
 
@@ -22,6 +31,9 @@ const defaultFontSize = 13;
 const defaultTerminalState: WorkspaceSshTerminalState = {
   fontSize: defaultFontSize,
   terminalId,
+  theme:
+    window.__workspaceSshTerminalTheme ??
+    createWorkspaceWebTheme(appearanceLight, "light", "terminal"),
 };
 const bridge = linkBridge<WorkspaceSshTerminalBridge, WorkspaceSshTerminalPostMessageSchema>({
   debug: false,
@@ -53,6 +65,7 @@ let reconnectAttempt = 0;
 let lastReportedStatus: WorkspaceSshTerminalSessionStatus | undefined;
 let lastReportedMessage: string | undefined;
 let scrollTouchLastY: number | undefined;
+let updateTerminalTheme: ((theme: WorkspaceWebTheme) => void) | undefined;
 
 bridge.addEventListener("terminalState", (state) => {
   if (state.terminalId === terminalId) {
@@ -75,27 +88,26 @@ bridge.addEventListener("terminalOutput", (event) => {
   handleOutputResponse(event.response);
 });
 
+applyWorkspaceWebTheme(defaultTerminalState.theme!);
 void initializeTerminal();
 
 async function initializeTerminal() {
   try {
     const ghostty = await Ghostty.load(ghosttyWasmUrl);
+    const parserTheme = createWorkspaceWebTheme(appearanceDark, "dark", "terminal");
     terminal = new Terminal({
       cursorBlink: true,
       fontFamily: "SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       fontSize: currentState.fontSize ?? defaultFontSize,
       ghostty,
       scrollback: 10000,
-      theme: {
-        background: "#1F1F1F",
-        cursor: "#F2F2F2",
-        foreground: "#F2F2F2",
-        selectionBackground: "#383838",
-      },
+      theme: terminalTheme(parserTheme),
     });
     fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(containerElement());
+    updateTerminalTheme = installTerminalTheme(terminal, parserTheme);
+    applyTerminalState(currentState);
     setupTouchScroll();
     fitAddon.fit();
     fitAddon.observeResize();
@@ -182,6 +194,10 @@ function setupTouchScroll() {
 }
 
 function applyTerminalState(state: WorkspaceSshTerminalState) {
+  if (state.theme) {
+    applyWorkspaceWebTheme(state.theme);
+    updateTerminalTheme?.(state.theme);
+  }
   if (!terminal || typeof state.fontSize !== "number") {
     return;
   }

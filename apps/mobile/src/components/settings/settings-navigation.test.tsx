@@ -14,7 +14,15 @@ vi.mock("react-native", () => ({
 vi.mock("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
 }));
-vi.mock("react-native-unistyles", () => ({ StyleSheet: { create: (styles: unknown) => styles } }));
+vi.mock("react-native-unistyles", async () => {
+  const { appearanceDark } = await import("@/constants/appearance");
+  return {
+    StyleSheet: {
+      create: (styles: unknown) => (typeof styles === "function" ? styles(appearanceDark) : styles),
+    },
+    UnistylesRuntime: { getTheme: () => appearanceDark },
+  };
+});
 vi.mock("@/components/themed-text", () => ({
   ThemedText: ({ children }: React.PropsWithChildren) => <span>{children}</span>,
 }));

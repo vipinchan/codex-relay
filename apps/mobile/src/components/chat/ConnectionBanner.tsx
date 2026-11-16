@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import { Linking, Pressable, View } from "react-native";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
@@ -29,6 +30,7 @@ export function ConnectionBanner({
   serverUrl: string;
   workspacePath?: string;
 }) {
+  const theme = useTheme();
   const isConnected = connection === "connected";
   const statusText = isConnected
     ? `Connected · ${workspaceName(workspacePath) ?? compactServer(serverUrl)}`
@@ -143,7 +145,7 @@ export function ConnectionBanner({
               className="h-11 rounded-lg"
               style={styles.pairButton}
             >
-              <Icon name="workspace" size={16} tintColor="#141414" />
+              <Icon name="workspace" size={16} tintColor={theme.backgroundElement} />
               <ThemedText type="smallBold" style={styles.primaryActionText}>
                 Scan QR
               </ThemedText>
@@ -188,10 +190,11 @@ function PairingStep({
   onAction?: () => void;
   title: string;
 }) {
+  const theme = useTheme();
   return (
     <View style={styles.stepRow}>
       <View style={styles.stepMarker}>
-        <Icon name={icon} size={15} tintColor="#F2F2F2" />
+        <Icon name={icon} size={15} tintColor={theme.text} />
       </View>
       <View style={styles.stepCopy}>
         <View style={styles.stepTitleRow}>
@@ -218,7 +221,7 @@ function PairingStep({
             <ThemedText type="smallBold" style={styles.stepActionText}>
               {actionLabel}
             </ThemedText>
-            <Icon name="externalLink" size={13} tintColor="#F2F2F2" />
+            <Icon name="externalLink" size={13} tintColor={theme.text} />
           </Pressable>
         ) : null}
       </View>
@@ -234,7 +237,7 @@ const connectionBannerLayoutTransition = LinearTransition.duration(180);
 const connectionBannerEnterTransition = FadeIn.duration(150);
 const connectionBannerExitTransition = FadeOut.duration(120);
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   container: {
     paddingHorizontal: 18,
     paddingVertical: 2,
@@ -242,8 +245,8 @@ const styles = StyleSheet.create({
   statusLine: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: "rgba(42, 42, 42, 0.78)",
-    borderColor: "rgba(255, 255, 255, 0.09)",
+    backgroundColor: theme.overlay,
+    borderColor: theme.borderSubtle,
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
@@ -259,16 +262,16 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   dot: {
-    backgroundColor: "#f2b84b",
+    backgroundColor: theme.warning,
     borderRadius: 4,
     height: 8,
     width: 8,
   },
   connected: {
-    backgroundColor: "#2ca36f",
+    backgroundColor: theme.successStrong,
   },
   offline: {
-    backgroundColor: "#d84f4f",
+    backgroundColor: theme.danger,
   },
   text: {
     flex: 1,
@@ -276,8 +279,8 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   pairPanel: {
-    backgroundColor: "rgba(42, 42, 42, 0.92)",
-    borderColor: "rgba(255, 255, 255, 0.11)",
+    backgroundColor: theme.overlay,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     gap: 12,
@@ -289,7 +292,7 @@ const styles = StyleSheet.create({
     paddingLeft: 17,
   },
   pairStatusDot: {
-    backgroundColor: "#d84f4f",
+    backgroundColor: theme.danger,
     borderRadius: 4,
     height: 8,
     left: 0,
@@ -298,7 +301,7 @@ const styles = StyleSheet.create({
     width: 8,
   },
   pairStatusDotChecking: {
-    backgroundColor: "#f2b84b",
+    backgroundColor: theme.warning,
   },
   pairCopy: {
     gap: 2,
@@ -327,8 +330,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   stepRow: {
-    backgroundColor: "rgba(255, 255, 255, 0.055)",
-    borderColor: "rgba(255, 255, 255, 0.09)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
@@ -337,7 +340,7 @@ const styles = StyleSheet.create({
   },
   stepMarker: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.tintStrong,
     borderRadius: 15,
     height: 30,
     justifyContent: "center",
@@ -354,7 +357,7 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   stepNumber: {
-    color: "#B8C7FF",
+    color: theme.accent,
     fontSize: 11,
     lineHeight: 14,
   },
@@ -369,8 +372,8 @@ const styles = StyleSheet.create({
   stepAction: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.tintMedium,
+    borderColor: theme.borderSubtle,
     borderRadius: 7,
     borderWidth: 1,
     flexDirection: "row",
@@ -380,7 +383,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   stepActionText: {
-    color: "#F2F2F2",
+    color: theme.text,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -393,7 +396,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   primaryActionText: {
-    color: "#141414",
+    color: theme.backgroundElement,
     fontSize: 13,
     lineHeight: 17,
   },
@@ -409,4 +412,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-});
+}));

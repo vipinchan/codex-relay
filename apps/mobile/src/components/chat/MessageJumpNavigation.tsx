@@ -67,7 +67,7 @@ export function MessageJumpNavigation({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   position: {
     bottom: 0,
     justifyContent: "center",
@@ -78,11 +78,11 @@ const styles = StyleSheet.create({
   },
   surface: {
     alignItems: "center",
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: theme.borderSubtle,
     borderRadius: 21,
     borderWidth: StyleSheet.hairlineWidth,
     elevation: 1,
-    shadowColor: "#000",
+    shadowColor: theme.shadow,
     shadowOffset: { height: 2, width: 0 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -95,8 +95,8 @@ const styles = StyleSheet.create({
     width: 40,
   },
   divider: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: theme.tintMuted,
     height: StyleSheet.hairlineWidth,
     marginHorizontal: 10,
   },
-});
+}));

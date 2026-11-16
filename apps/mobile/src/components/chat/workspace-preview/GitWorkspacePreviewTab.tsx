@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import type { WorkspaceChangesResponse } from "codex-relay/api-schema";
 import { memo, useMemo, useState } from "react";
 import {
@@ -22,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import type { AppIconName } from "@/components/ui/icon";
 import { Icon } from "@/components/ui/icon";
 import { Text as UiText } from "@/components/ui/text";
-import { Colors, Fonts, Spacing } from "@/constants/theme";
+import { Fonts, Spacing } from "@/constants/theme";
 import { hapticSelection } from "@/lib/haptics";
 import { workspaceName } from "@/lib/workspace-name";
 
@@ -54,6 +55,7 @@ export const GitWorkspacePreviewTab = memo(function GitWorkspacePreviewTab({
   onCreatePullRequest: () => Promise<void> | void;
   onRefreshChanges: () => Promise<void> | void;
 }) {
+  const theme = useTheme();
   const [isPullRefreshing, setPullRefreshing] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [publishConfirmation, setPublishConfirmation] = useState<PublishConfirmation>(null);
@@ -103,10 +105,10 @@ export const GitWorkspacePreviewTab = memo(function GitWorkspacePreviewTab({
         contentContainerStyle={[styles.diffContent, isInitialLoading && styles.loadingGitContent]}
         refreshControl={
           <RefreshControl
-            colors={[Colors.dark.text]}
-            progressBackgroundColor={Colors.dark.backgroundElement}
+            colors={[theme.text]}
+            progressBackgroundColor={theme.backgroundElement}
             refreshing={isPullRefreshing}
-            tintColor={Colors.dark.text}
+            tintColor={theme.text}
             onRefresh={() => void refreshFromPull()}
           />
         }
@@ -239,6 +241,7 @@ function EmptyChangesCard() {
 }
 
 function LoadingGitIndicator() {
+  const theme = useTheme();
   return (
     <Animated.View
       entering={gitPreviewEnterTransition}
@@ -246,7 +249,7 @@ function LoadingGitIndicator() {
       layout={gitPreviewLayoutTransition}
       style={styles.loadingGit}
     >
-      <ActivityIndicator color={Colors.dark.textSecondary} size="small" />
+      <ActivityIndicator color={theme.textSecondary} size="small" />
       <ThemedText type="smallBold" style={styles.loadingGitText}>
         Loading Git
       </ThemedText>
@@ -347,6 +350,7 @@ function BranchSwitcher({
   workspaceName: string;
   onCheckoutBranch: (branch: string) => void;
 }) {
+  const theme = useTheme();
   const [isSheetOpen, setSheetOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<BranchEntry | undefined>(
     () => branches.find((branch) => branch.current) ?? branches[0],
@@ -415,7 +419,7 @@ function BranchSwitcher({
       >
         <View pointerEvents="none" style={styles.branchSwitchContent}>
           <View style={styles.branchSwitchIcon}>
-            <Icon name="branch" size={16} tintColor={Colors.dark.text} />
+            <Icon name="branch" size={16} tintColor={theme.text} />
           </View>
           <View style={styles.branchSwitchCopy}>
             <ThemedText type="smallBold" style={styles.branchSwitchTitle} numberOfLines={1}>
@@ -430,7 +434,7 @@ function BranchSwitcher({
               Switch workspace branch
             </ThemedText>
           </View>
-          <Icon name="chevronRight" size={16} tintColor={Colors.dark.textSecondary} />
+          <Icon name="chevronRight" size={16} tintColor={theme.textSecondary} />
         </View>
       </Pressable>
       <AppBottomSheet
@@ -451,10 +455,10 @@ function BranchSwitcher({
                 onChangeText={updateBranchDraft}
                 onSubmitEditing={confirmCheckout}
                 placeholder="feature/mobile-polish"
-                placeholderTextColor={Colors.dark.textSecondary}
+                placeholderTextColor={theme.textSecondary}
                 returnKeyType="go"
                 selectTextOnFocus
-                selectionColor={Colors.dark.text}
+                selectionColor={theme.text}
                 style={styles.branchCreateInput}
                 value={branchDraft}
               />
@@ -731,6 +735,7 @@ function PreviewControlButton({
   onPress: () => void;
   selected?: boolean;
 }) {
+  const theme = useTheme();
   return (
     <View style={styles.controlButtonSlot}>
       <Button
@@ -749,11 +754,7 @@ function PreviewControlButton({
           pressed && styles.pressed,
         ]}
       >
-        <Icon
-          name={iconName}
-          size={14}
-          tintColor={active ? Colors.dark.text : Colors.dark.textSecondary}
-        />
+        <Icon name={iconName} size={14} tintColor={active ? theme.text : theme.textSecondary} />
         <UiText
           className="text-foreground"
           numberOfLines={1}
@@ -779,7 +780,7 @@ const gitPreviewFastLayoutTransition = LinearTransition.duration(120);
 const gitPreviewEnterTransition = FadeIn.duration(120);
 const gitPreviewExitTransition = FadeOut.duration(90);
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   contentPane: {
     flex: 1,
     marginHorizontal: Spacing.three,
@@ -796,8 +797,8 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   actionsPanel: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(132, 145, 165, 0.22)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     gap: Spacing.two,
@@ -843,11 +844,11 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   controlButtonActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.16)",
-    borderColor: "rgba(255, 255, 255, 0.24)",
+    backgroundColor: theme.tintProminent,
+    borderColor: theme.border,
   },
   controlButtonText: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     flexShrink: 1,
     fontFamily: Fonts.sansBold,
     fontSize: 13,
@@ -855,13 +856,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   controlButtonTextActive: {
-    color: Colors.dark.text,
+    color: theme.text,
   },
   branchSwitchButton: {
     alignItems: "center",
     alignSelf: "stretch",
-    backgroundColor: "rgba(255, 255, 255, 0.07)",
-    borderColor: "rgba(132, 145, 165, 0.22)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     height: 58,
@@ -878,8 +879,8 @@ const styles = StyleSheet.create({
   },
   branchSwitchIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderColor: "rgba(132, 145, 165, 0.22)",
+    backgroundColor: theme.tintMedium,
+    borderColor: theme.border,
     borderRadius: 16,
     borderWidth: 1,
     height: 32,
@@ -892,7 +893,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   branchSwitchTitle: {
-    color: Colors.dark.text,
+    color: theme.text,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -904,25 +905,25 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   branchCreateCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     gap: Spacing.one,
     padding: Spacing.two,
   },
   branchCreateHint: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     fontFamily: Fonts.sansMedium,
     fontSize: 12,
     lineHeight: 16,
   },
   branchCreateInput: {
-    backgroundColor: "rgba(0, 0, 0, 0.22)",
-    borderColor: "rgba(255, 255, 255, 0.16)",
+    backgroundColor: theme.overlay,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
-    color: Colors.dark.text,
+    color: theme.text,
     flex: 1,
     fontFamily: Fonts.mono,
     fontSize: 15,
@@ -933,7 +934,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   branchCreateLabel: {
-    color: Colors.dark.text,
+    color: theme.text,
     fontFamily: Fonts.sansBold,
     fontSize: 12,
     lineHeight: 16,
@@ -958,7 +959,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
   },
   branchInlineButtonText: {
-    color: Colors.dark.text,
+    color: theme.text,
     fontFamily: Fonts.sansBold,
     fontSize: 14,
     lineHeight: 19,
@@ -975,8 +976,8 @@ const styles = StyleSheet.create({
   },
   summaryBar: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
@@ -995,24 +996,24 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   additions: {
-    color: "#72E09F",
+    color: theme.success,
     fontSize: 12,
     lineHeight: 16,
   },
   deletions: {
-    color: "#FF8F8F",
+    color: theme.danger,
     fontSize: 12,
     lineHeight: 16,
   },
   fileCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.055)",
-    borderColor: "rgba(132, 145, 165, 0.22)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     overflow: "hidden",
   },
   fileHeader: {
-    borderBottomColor: "rgba(132, 145, 165, 0.18)",
+    borderBottomColor: theme.border,
     borderBottomWidth: 1,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
@@ -1028,8 +1029,8 @@ const styles = StyleSheet.create({
   },
   statusBadge: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderColor: "rgba(132, 145, 165, 0.24)",
+    backgroundColor: theme.tintMedium,
+    borderColor: theme.border,
     borderRadius: 5,
     borderWidth: 1,
     height: 22,
@@ -1037,7 +1038,7 @@ const styles = StyleSheet.create({
     width: 24,
   },
   statusBadgeText: {
-    color: Colors.dark.text,
+    color: theme.text,
     fontSize: 11,
     lineHeight: 14,
   },
@@ -1046,7 +1047,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   filePath: {
-    color: Colors.dark.text,
+    color: theme.text,
     flexShrink: 1,
     fontSize: 12,
     lineHeight: 17,
@@ -1055,7 +1056,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   patchScroller: {
-    backgroundColor: "rgba(5, 8, 13, 0.72)",
+    backgroundColor: theme.overlay,
   },
   patchLines: {
     paddingVertical: Spacing.two,
@@ -1068,22 +1069,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
   },
   patchLineAdded: {
-    backgroundColor: "rgba(46, 160, 67, 0.16)",
-    color: "#A7F3C1",
+    backgroundColor: theme.successSoft,
+    color: theme.success,
   },
   patchLineDeleted: {
-    backgroundColor: "rgba(248, 81, 73, 0.14)",
-    color: "#FFB3B3",
+    backgroundColor: theme.dangerSoft,
+    color: theme.danger,
   },
   patchLineHunk: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    color: Colors.dark.text,
+    backgroundColor: theme.tintSoft,
+    color: theme.text,
   },
   patchLineMeta: {
-    color: "#8B98AA",
+    color: theme.textSecondary,
   },
   patchLineContext: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
   },
   noPatch: {
     paddingHorizontal: Spacing.two,
@@ -1094,8 +1095,8 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   emptyState: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     gap: Spacing.one,
@@ -1108,7 +1109,7 @@ const styles = StyleSheet.create({
     minHeight: 180,
   },
   loadingGitText: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -1118,4 +1119,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-});
+}));

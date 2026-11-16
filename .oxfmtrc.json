@@ -4,6 +4,8 @@
     "dogfood-output/**",
     "node_modules/**",
     "packages/codex-relay/src/collaboration-mode-templates/**",
+    "apps/mobile/src/components/chat/workspace-preview/workspace-code-editor-html.ts",
+    "apps/mobile/src/components/chat/workspace-preview/workspace-ssh-terminal-html.ts",
     "apps/mobile/src/uniwind-types.d.ts",
     "apps/mobile/ios/**",
     "apps/mobile/android/**",

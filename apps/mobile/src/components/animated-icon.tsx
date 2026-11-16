@@ -104,7 +104,7 @@ export function AnimatedIcon() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   imageContainer: {
     justifyContent: "center",
     alignItems: "center",
@@ -128,14 +128,14 @@ const styles = StyleSheet.create({
   },
   background: {
     borderRadius: 40,
-    backgroundColor: "#191919",
+    backgroundColor: theme.backgroundElevated,
     width: 128,
     height: 128,
     position: "absolute",
   },
   backgroundSolidColor: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#191919",
+    backgroundColor: theme.backgroundElevated,
     zIndex: 40,
   },
-});
+}));

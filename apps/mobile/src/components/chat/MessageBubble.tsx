@@ -26,7 +26,7 @@ import type { HighlighterCore, ThemedToken } from "shiki/types";
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
 import { Fonts, Spacing } from "@/constants/theme";
-import { useTheme } from "@/hooks/use-theme";
+import { useTheme, useThemeScheme } from "@/hooks/use-theme";
 import { codexRelayImageRequestHeaders, resolveCodexRelayImageUrl } from "@/lib/codex-relay-api";
 import { hapticSelection } from "@/lib/haptics";
 
@@ -45,7 +45,6 @@ const MAX_LINE_LENGTH = 220;
 const SHIKI_CODE_BLOCK_FONT_SIZE = 11;
 const SHIKI_CODE_BLOCK_LINE_HEIGHT = 16;
 const SHIKI_MAX_HIGHLIGHT_LENGTH = 8000;
-const SHIKI_THEME = "github-dark-default";
 const SHIKI_FALLBACK_LANGUAGE = "text";
 const MARKDOWN_ATTACHMENT_EXTENSIONS = new Set(["markdown", "md", "mdx"]);
 const IMAGE_ATTACHMENT_EXTENSIONS = new Set(["gif", "heic", "heif", "jpg", "jpeg", "png", "webp"]);
@@ -89,23 +88,14 @@ const messageTimeFormatter = new Intl.DateTimeFormat(undefined, {
   hour: "2-digit",
   minute: "2-digit",
 });
-let shikiHighlighterPromise: Promise<HighlighterCore> | null = null;
+const shikiThemes = {
+  dark: "github-dark-default",
+  light: "github-light-default",
+} as const;
+const shikiHighlighterPromises: Partial<
+  Record<keyof typeof shikiThemes, Promise<HighlighterCore>>
+> = {};
 const imageDownloadPromises = new Map<string, Promise<void>>();
-
-const userPromptMarkdownStyle = {
-  link: {
-    color: "#7CC7FF",
-    fontFamily: Fonts.sansSemiBold,
-    underline: false,
-  },
-  paragraph: {
-    fontFamily: Fonts.sans,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 0,
-    marginTop: 0,
-  },
-} satisfies MarkdownStyle;
 
 export const MessageBubble = memo(function MessageBubble({
   assistantBlock,
@@ -125,6 +115,23 @@ export const MessageBubble = memo(function MessageBubble({
   onOpenMarkdownAttachment?: (target: WorkspaceMarkdownPreviewTarget) => void;
 }) {
   const theme = useTheme();
+  const userPromptMarkdownStyle = useMemo<MarkdownStyle>(
+    () => ({
+      link: {
+        color: theme.accentBright,
+        fontFamily: Fonts.sansSemiBold,
+        underline: false,
+      },
+      paragraph: {
+        fontFamily: Fonts.sans,
+        fontSize: 14,
+        lineHeight: 20,
+        marginBottom: 0,
+        marginTop: 0,
+      },
+    }),
+    [theme.accentBright],
+  );
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
   const isError = message.role === "error";
@@ -215,21 +222,14 @@ export const MessageBubble = memo(function MessageBubble({
 
   const assistantMarkdownStyle = useMemo<MarkdownStyle>(
     () =>
-      createAssistantMarkdownStyle(
-        {
-          backgroundSelected: theme.backgroundSelected,
-          text: theme.text,
-          textSecondary: theme.textSecondary,
-        },
-        {
-          mono: Fonts.mono,
-          monoMedium: Fonts.monoMedium,
-          sans: Fonts.sans,
-          sansMedium: Fonts.sansMedium,
-          sansSemiBold: Fonts.sansSemiBold,
-        },
-      ),
-    [theme.backgroundSelected, theme.text, theme.textSecondary],
+      createAssistantMarkdownStyle(theme, {
+        mono: Fonts.mono,
+        monoMedium: Fonts.monoMedium,
+        sans: Fonts.sans,
+        sansMedium: Fonts.sansMedium,
+        sansSemiBold: Fonts.sansSemiBold,
+      }),
+    [theme],
   );
 
   if (isProtocolActivity(message)) {
@@ -255,14 +255,14 @@ export const MessageBubble = memo(function MessageBubble({
       <View style={[styles.row, styles.userRow]}>
         <View style={styles.goalPromptStack}>
           <View style={styles.goalLabelPill}>
-            <Icon name="goal" size={12} tintColor="rgba(255, 255, 255, 0.66)" strokeWidth={2} />
+            <Icon name="goal" size={12} tintColor={theme.textSecondary} strokeWidth={2} />
             <NativeText allowFontScaling={false} maxFontSizeMultiplier={1} style={styles.goalLabel}>
               Goal
             </NativeText>
           </View>
           <View style={styles.goalValueBubble}>
             <PromptMarkdownText
-              color="#F2F2F2"
+              color={theme.text}
               fontSize={14}
               lineHeight={20}
               markdownStyle={userPromptMarkdownStyle}
@@ -346,7 +346,7 @@ export const MessageBubble = memo(function MessageBubble({
           <View style={styles.userContent}>
             {displayContent ? (
               <PromptMarkdownText
-                color="#F2F2F2"
+                color={theme.text}
                 fontSize={14}
                 lineHeight={20}
                 markdownStyle={userPromptMarkdownStyle}
@@ -399,7 +399,8 @@ function MessageFooter({
   variant: "assistant" | "user";
 }) {
   const isUser = variant === "user";
-  const iconTint = isUser ? "rgba(255, 255, 255, 0.72)" : "rgba(214, 222, 232, 0.62)";
+  const theme = useTheme();
+  const iconTint = theme.textSecondary;
 
   return (
     <View style={[styles.messageFooter, isUser && styles.userMessageFooter]}>
@@ -770,6 +771,7 @@ function MarkdownAttachmentCard({
   attachment: WorkspaceMarkdownPreviewTarget;
   onOpen?: (target: WorkspaceMarkdownPreviewTarget) => void;
 }) {
+  const theme = useTheme();
   const extension = fileExtension(attachment.name ?? attachment.path)?.toUpperCase() ?? "MD";
 
   return (
@@ -791,7 +793,7 @@ function MarkdownAttachmentCard({
       ]}
     >
       <View style={styles.messageDocumentIcon}>
-        <Icon name="file" size={18} tintColor="#F2F2F2" />
+        <Icon name="file" size={18} tintColor={theme.text} />
       </View>
       <View style={styles.messageDocumentTextGroup}>
         <ThemedText type="smallBold" style={styles.messageDocumentName} numberOfLines={1}>
@@ -805,7 +807,7 @@ function MarkdownAttachmentCard({
         <ThemedText type="smallBold" style={styles.messageDocumentOpenLabel}>
           Open
         </ThemedText>
-        <Icon name="expand" size={13} tintColor="rgba(255, 255, 255, 0.76)" />
+        <Icon name="expand" size={13} tintColor={theme.text} />
       </View>
     </Pressable>
   );
@@ -940,7 +942,7 @@ export const HighlightedCodeBlock = memo(function HighlightedCodeBlock({
         styles.codeBlockFrame,
         {
           backgroundColor: theme.backgroundSelected,
-          borderColor: "rgba(132, 145, 165, 0.25)",
+          borderColor: theme.borderStrong,
         },
       ]}
     >
@@ -979,6 +981,7 @@ export const HighlightedCodeText = memo(function HighlightedCodeText({
   style?: StyleProp<TextStyle>;
 }) {
   const theme = useTheme();
+  const themeScheme = useThemeScheme();
   const [tokens, setTokens] = useState<ThemedToken[][] | null>(null);
   const shikiLanguage = getShikiLanguage(language);
   const plainLines = useMemo(() => code.split("\n"), [code]);
@@ -996,7 +999,7 @@ export const HighlightedCodeText = memo(function HighlightedCodeText({
     let isMounted = true;
     setTokens(null);
 
-    getHighlightedCodeTokens(code, shikiLanguage)
+    getHighlightedCodeTokens(code, shikiLanguage, themeScheme)
       .then((nextTokens) => {
         if (isMounted) {
           setTokens(nextTokens);
@@ -1011,7 +1014,7 @@ export const HighlightedCodeText = memo(function HighlightedCodeText({
     return () => {
       isMounted = false;
     };
-  }, [code, deferHighlight, shikiLanguage]);
+  }, [code, deferHighlight, shikiLanguage, themeScheme]);
 
   return (
     <NativeText
@@ -1048,26 +1051,30 @@ function getShikiLanguage(language: string): string {
   return SHIKI_LANGUAGE_BY_ALIAS[language] ?? SHIKI_FALLBACK_LANGUAGE;
 }
 
-async function getHighlightedCodeTokens(code: string, language: string) {
+async function getHighlightedCodeTokens(
+  code: string,
+  language: string,
+  themeScheme: keyof typeof shikiThemes,
+) {
   if (language === SHIKI_FALLBACK_LANGUAGE || code.length > SHIKI_MAX_HIGHLIGHT_LENGTH) {
     return null;
   }
 
-  const highlighter = await getShikiHighlighter();
+  const highlighter = await getShikiHighlighter(themeScheme);
   return highlighter.codeToTokens(code, {
     lang: language,
-    theme: SHIKI_THEME,
+    theme: shikiThemes[themeScheme],
   }).tokens;
 }
 
-function getShikiHighlighter() {
-  shikiHighlighterPromise ??= createHighlighterCore({
+function getShikiHighlighter(themeScheme: keyof typeof shikiThemes) {
+  shikiHighlighterPromises[themeScheme] ??= createHighlighterCore({
     engine: createJavaScriptRegexEngine(),
     langs: SHIKI_LANGUAGE_LOADERS,
-    themes: [bundledThemes[SHIKI_THEME]],
+    themes: [bundledThemes[shikiThemes[themeScheme]]],
   });
 
-  return shikiHighlighterPromise;
+  return shikiHighlighterPromises[themeScheme]!;
 }
 
 function formatMessageTime(value: string) {
@@ -1078,7 +1085,7 @@ function formatMessageTime(value: string) {
   return messageTimeFormatter.format(date);
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   row: {
     marginVertical: 5,
   },
@@ -1105,7 +1112,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   userBubble: {
-    backgroundColor: "rgba(103, 123, 147, 0.2)",
+    backgroundColor: theme.userBubbleBackground,
     borderWidth: 0,
     maxWidth: "80%",
     paddingHorizontal: 12,
@@ -1122,8 +1129,8 @@ const styles = StyleSheet.create({
     paddingRight: Spacing.two,
   },
   errorBubble: {
-    backgroundColor: "rgba(216, 79, 79, 0.16)",
-    borderColor: "rgba(216, 79, 79, 0.38)",
+    backgroundColor: theme.dangerSoft,
+    borderColor: theme.dangerBorder,
     borderWidth: 1,
   },
   userContent: {
@@ -1136,8 +1143,8 @@ const styles = StyleSheet.create({
   },
   goalLabelPill: {
     alignItems: "center",
-    backgroundColor: "rgba(42, 42, 42, 0.92)",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.backgroundOverlayStrong,
+    borderColor: theme.borderSubtle,
     borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
@@ -1147,14 +1154,14 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   goalLabel: {
-    color: "rgba(255, 255, 255, 0.9)",
+    color: theme.text,
     fontFamily: Fonts.sansMedium,
     fontSize: 12,
     includeFontPadding: false,
     lineHeight: 16,
   },
   goalValueBubble: {
-    backgroundColor: "rgba(118, 118, 128, 0.24)",
+    backgroundColor: theme.goalBubbleBackground,
     borderRadius: 16,
     borderWidth: 0,
     paddingHorizontal: 13,
@@ -1166,7 +1173,7 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   messageImage: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.tintSoft,
     borderRadius: 12,
     height: 156,
     overflow: "hidden",
@@ -1182,8 +1189,8 @@ const styles = StyleSheet.create({
   },
   messageDocumentCard: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
@@ -1196,7 +1203,7 @@ const styles = StyleSheet.create({
   },
   messageDocumentIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.28)",
+    backgroundColor: theme.overlay,
     borderRadius: 8,
     height: 36,
     justifyContent: "center",
@@ -1207,18 +1214,18 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   messageDocumentName: {
-    color: "#F2F2F2",
+    color: theme.text,
     fontSize: 13,
     lineHeight: 18,
   },
   messageDocumentMeta: {
-    color: "rgba(255, 255, 255, 0.62)",
+    color: theme.textSecondary,
     fontSize: 11,
     lineHeight: 15,
   },
   messageDocumentOpenButton: {
     alignItems: "center",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
@@ -1227,7 +1234,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   messageDocumentOpenLabel: {
-    color: "#F2F2F2",
+    color: theme.text,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -1244,7 +1251,7 @@ const styles = StyleSheet.create({
     display: "none",
   },
   userTimestamp: {
-    color: "rgba(255, 255, 255, 0.68)",
+    color: theme.textSecondary,
     fontSize: 10,
   },
   copyButton: {
@@ -1260,7 +1267,7 @@ const styles = StyleSheet.create({
     marginRight: -4,
   },
   copyButtonCopied: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.tintSoft,
   },
   copyButtonDisabled: {
     opacity: 0.36,
@@ -1289,7 +1296,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   codeBlockLanguage: {
-    borderBottomColor: "rgba(132, 145, 165, 0.18)",
+    borderBottomColor: theme.border,
     borderBottomWidth: 1,
     fontFamily: Fonts.mono,
     fontSize: 11,
@@ -1312,7 +1319,7 @@ const styles = StyleSheet.create({
     fontSize: SHIKI_CODE_BLOCK_FONT_SIZE,
     lineHeight: SHIKI_CODE_BLOCK_LINE_HEIGHT,
   },
-});
+}));
 
 function isProtocolActivity(message: ChatMessage) {
   return (

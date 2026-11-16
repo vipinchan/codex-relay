@@ -17,7 +17,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { ThemedText } from "@/components/themed-text";
-import { Colors } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { hasCodexRelaySession } from "@/lib/codex-relay-api";
 import { hapticLightImpact, hapticSelection, hapticSuccess } from "@/lib/haptics";
@@ -46,15 +45,6 @@ type Period = "pinned" | "today" | "yesterday" | "week" | "month" | "earlier";
 type GroupingMode = ConversationsGroupingMode;
 type ThreadSection = { key: string; title: string; data: ThreadSummary[] };
 type ThreadGlyph = "agentAtom" | "branch" | "file" | "folder" | "terminal";
-
-const accent = "#6EA8FF";
-const iconPalettes = [
-  { background: "#18393A", foreground: "#72DDD5" },
-  { background: "#282642", foreground: "#A49CFF" },
-  { background: "#18324A", foreground: "#79B8FF" },
-  { background: "#3D2630", foreground: "#FF8DA5" },
-  { background: "#20382E", foreground: "#78D9A5" },
-] as const;
 
 export function ConversationsHome() {
   const { archiveThreadServerState, regenerateThreadTitleServerState, renameThreadServerState } =
@@ -259,7 +249,10 @@ export function ConversationsHome() {
   }
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
+    <SafeAreaView
+      edges={["top", "left", "right"]}
+      style={[styles.screen, { backgroundColor: theme.background }]}
+    >
       <View style={styles.topBar}>
         <View style={styles.topBarSide}>
           <RoundTopButton
@@ -284,20 +277,20 @@ export function ConversationsHome() {
 
       {searchOpen ? (
         <View style={styles.searchWrap}>
-          <Icon name="search" size={18} tintColor={Colors.dark.textSecondary} />
+          <Icon name="search" size={18} tintColor={theme.textSecondary} />
           <TextInput
             autoFocus
             autoCapitalize="none"
             autoCorrect={false}
             placeholder={zh ? "搜索会话" : "Search conversations"}
-            placeholderTextColor={Colors.dark.textSecondary}
+            placeholderTextColor={theme.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
             style={styles.searchInput}
           />
           {searchQuery ? (
             <Pressable hitSlop={8} onPress={() => setSearchQuery("")}>
-              <Icon name="x" size={17} tintColor={Colors.dark.textSecondary} />
+              <Icon name="x" size={17} tintColor={theme.textSecondary} />
             </Pressable>
           ) : null}
         </View>
@@ -330,7 +323,7 @@ export function ConversationsHome() {
               <Icon
                 name={collapsed ? "chevronRight" : "expand"}
                 size={15}
-                tintColor="#77777D"
+                tintColor={theme.textMuted}
                 strokeWidth={2.2}
               />
               <ThemedText style={styles.sectionTitle}>{section.title}</ThemedText>
@@ -352,7 +345,7 @@ export function ConversationsHome() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
-              <Icon name="newChat" size={22} tintColor={Colors.dark.textSecondary} />
+              <Icon name="newChat" size={22} tintColor={theme.textSecondary} />
             </View>
             <ThemedText style={styles.emptyTitle}>
               {searchQuery
@@ -374,7 +367,7 @@ export function ConversationsHome() {
           onPress={createNewChat}
           style={({ pressed }) => [styles.newFab, pressed && styles.pressed]}
         >
-          <Icon name="newChat" size={26} tintColor="#FFFFFF" />
+          <Icon name="newChat" size={26} tintColor={theme.onAccent} />
         </Pressable>
       </View>
       <AppBottomSheet
@@ -405,11 +398,8 @@ export function ConversationsHome() {
               placeholder={zh ? "会话标题" : "Chat title"}
               placeholderTextColor={theme.textSecondary}
               returnKeyType="done"
-              selectionColor="rgba(124, 199, 255, 0.28)"
-              style={[
-                styles.renameSheetInput,
-                { borderColor: "rgba(255, 255, 255, 0.14)", color: theme.text },
-              ]}
+              selectionColor={theme.accentMuted}
+              style={[styles.renameSheetInput, { borderColor: theme.border, color: theme.text }]}
               value={renameDraft}
             />
             <View style={styles.renameSheetActions}>
@@ -484,7 +474,7 @@ export function ConversationsHome() {
                   accessibilityLabel={zh ? "移除会话" : "Remove chat"}
                   disabled={archiveThreadMutation.isPending}
                   icon="archive"
-                  iconTintColor="#FF8DA5"
+                  iconTintColor={theme.danger}
                   onPress={confirmRemoveThread}
                   subtitle={zh ? "保留历史记录" : "Keeps chat history"}
                   title={
@@ -519,9 +509,10 @@ function ThreadRow({
   onPress: () => void;
   onLongPress: () => void;
 }) {
+  const theme = useTheme();
   const preview =
     thread.lastMessagePreview || thread.lastResult || thread.lastPrompt || thread.cwd || "";
-  const visual = threadVisual(thread);
+  const visual = threadVisual(thread, theme);
 
   return (
     <Pressable
@@ -545,7 +536,7 @@ function ThreadRow({
         <ThemedText numberOfLines={1} style={styles.threadDate}>
           {relativeDate(activityTime(thread), zh)}
         </ThemedText>
-        {pinned ? <Icon name="pin" size={12} tintColor="#77777D" /> : null}
+        {pinned ? <Icon name="pin" size={12} tintColor={theme.textMuted} /> : null}
       </View>
     </Pressable>
   );
@@ -560,6 +551,7 @@ function RoundTopButton({
   label: string;
   onPress: () => void;
 }) {
+  const theme = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -568,7 +560,7 @@ function RoundTopButton({
       onPress={onPress}
       style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}
     >
-      <Icon name={icon} size={27} tintColor={accent} strokeWidth={1.8} />
+      <Icon name={icon} size={27} tintColor={theme.accent} strokeWidth={1.8} />
     </Pressable>
   );
 }
@@ -582,6 +574,7 @@ function GroupingButton({
   zh: boolean;
   onPress: () => void;
 }) {
+  const theme = useTheme();
   const isProject = mode === "project";
   const currentLabel = isProject ? (zh ? "项目" : "Project") : zh ? "时间" : "Time";
   const nextLabel = isProject ? (zh ? "时间" : "time") : zh ? "项目" : "project";
@@ -597,13 +590,21 @@ function GroupingButton({
       onPress={onPress}
       style={({ pressed }) => [styles.groupingButton, pressed && styles.pressed]}
     >
-      <Icon name={isProject ? "folder" : "clock"} size={16} tintColor={accent} strokeWidth={2} />
+      <Icon
+        name={isProject ? "folder" : "clock"}
+        size={16}
+        tintColor={theme.accent}
+        strokeWidth={2}
+      />
       <ThemedText style={styles.groupingButtonLabel}>{currentLabel}</ThemedText>
     </Pressable>
   );
 }
 
-function threadVisual(thread: ThreadSummary): {
+function threadVisual(
+  thread: ThreadSummary,
+  theme: ReturnType<typeof useTheme>,
+): {
   icon: ThreadGlyph;
   background: string;
   foreground: string;
@@ -625,6 +626,13 @@ function threadVisual(thread: ThreadSummary): {
   for (let index = 0; index < thread.id.length; index += 1) {
     hash = (hash * 31 + thread.id.charCodeAt(index)) >>> 0;
   }
+  const iconPalettes = [
+    { background: theme.successSoft, foreground: theme.agentTeal },
+    { background: theme.tintSoft, foreground: theme.agentViolet },
+    { background: theme.accentSoft, foreground: theme.accent },
+    { background: theme.dangerSoft, foreground: theme.danger },
+    { background: theme.successSoft, foreground: theme.success },
+  ] as const;
   const palette = iconPalettes[hash % iconPalettes.length];
   return { icon, ...palette };
 }
@@ -723,8 +731,8 @@ function relativeDate(date: Date, zh: boolean) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#000000" },
+const styles = StyleSheet.create((theme) => ({
+  screen: { flex: 1, backgroundColor: theme.background },
   renameSheet: { gap: 14 },
   renameSheetInput: {
     borderRadius: 12,
@@ -749,7 +757,7 @@ const styles = StyleSheet.create({
   },
   topBarSide: { width: 90, alignItems: "flex-start" },
   topBarSideEnd: { alignItems: "flex-end" },
-  appTitle: { fontSize: 22, lineHeight: 27, fontWeight: "700", color: "#FFFFFF" },
+  appTitle: { fontSize: 22, lineHeight: 27, fontWeight: "700", color: theme.text },
   topButton: {
     width: 40,
     height: 40,
@@ -766,12 +774,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: theme.backgroundElement,
     borderWidth: 1,
-    borderColor: "#263A5B",
+    borderColor: theme.accent,
   },
   groupingButtonLabel: {
-    color: accent,
+    color: theme.accent,
     fontSize: 13,
     lineHeight: 16,
     fontWeight: "600",
@@ -785,30 +793,30 @@ const styles = StyleSheet.create({
     gap: 9,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: theme.backgroundElement,
   },
-  searchInput: { flex: 1, color: "#FFFFFF", fontSize: 16, paddingVertical: 9 },
+  searchInput: { flex: 1, color: theme.text, fontSize: 16, paddingVertical: 9 },
   listContent: { paddingBottom: 92 },
   sectionHeader: {
     alignItems: "center",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: theme.backgroundElement,
     flexDirection: "row",
     gap: 8,
     height: 38,
     paddingHorizontal: 22,
   },
   sectionHeaderPressed: {
-    backgroundColor: "#242426",
+    backgroundColor: theme.backgroundElement,
   },
   sectionTitle: {
-    color: "#8E8E93",
+    color: theme.textSecondary,
     flex: 1,
     fontSize: 15.5,
     fontWeight: "600",
     lineHeight: 19,
   },
   sectionCount: {
-    color: "#636366",
+    color: theme.textSecondary,
     fontSize: 12,
     fontWeight: "600",
     lineHeight: 16,
@@ -821,9 +829,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 10,
     borderBottomWidth: 0.5,
-    borderBottomColor: "#1C1C1E",
+    borderBottomColor: theme.backgroundElement,
   },
-  rowPressed: { backgroundColor: "#111113" },
+  rowPressed: { backgroundColor: theme.backgroundElement },
   threadIcon: {
     width: 40,
     height: 40,
@@ -832,8 +840,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   threadCopy: { flex: 1, minWidth: 0 },
-  threadTitle: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
-  threadPreview: { color: "#8E8E93", fontSize: 13.5, marginTop: 1 },
+  threadTitle: { color: theme.text, fontSize: 16, fontWeight: "700" },
+  threadPreview: { color: theme.textSecondary, fontSize: 13.5, marginTop: 1 },
   threadMeta: {
     minWidth: 58,
     flexDirection: "column",
@@ -841,17 +849,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 3,
   },
-  threadDate: { color: "#77777D", fontSize: 12.5, flexShrink: 0 },
+  threadDate: { color: theme.textMuted, fontSize: 12.5, flexShrink: 0 },
   emptyState: { alignItems: "center", justifyContent: "center", paddingTop: 110, gap: 12 },
   emptyIcon: {
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: theme.backgroundElement,
     alignItems: "center",
     justifyContent: "center",
   },
-  emptyTitle: { color: "#8E8E93", fontSize: 16 },
+  emptyTitle: { color: theme.textSecondary, fontSize: 16 },
   fabDock: {
     position: "absolute",
     left: 22,
@@ -867,11 +875,11 @@ const styles = StyleSheet.create({
     borderRadius: 29,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#4054C8",
-    shadowColor: "#000",
+    backgroundColor: theme.accent,
+    shadowColor: theme.shadow,
     shadowOpacity: 0.4,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
   },
   pressed: { opacity: 0.64, transform: [{ scale: 0.96 }] },
-});
+}));

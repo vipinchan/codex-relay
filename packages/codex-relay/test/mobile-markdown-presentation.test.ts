@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import { appearanceDark, appearanceLight } from "../../../apps/mobile/src/constants/appearance.js";
 import {
   ASSISTANT_MARKDOWN_FLAVOR,
   createAssistantMarkdownStyle,
 } from "../../../apps/mobile/src/components/chat/assistant-markdown-presentation.js";
 
 const theme = {
+  ...appearanceDark,
   backgroundSelected: "#171A1F",
   text: "#F3F5F7",
   textSecondary: "#A8B0BA",
@@ -91,6 +93,19 @@ describe("assistant markdown presentation", () => {
     });
     expect(fixture).toContain("> ```ts");
     expect(fixture).toContain("   ```bash");
+  });
+
+  it("updates Markdown surfaces and syntax colors for light appearance", () => {
+    const dark = createAssistantMarkdownStyle(appearanceDark, fonts);
+    const light = createAssistantMarkdownStyle(appearanceLight, fonts);
+
+    expect(light.paragraph?.color).toBe(appearanceLight.text);
+    expect(light.code?.color).toBe(appearanceLight.inlineCodeText);
+    expect(light.codeBlock?.syntaxColors?.keyword).toBe(appearanceLight.syntaxKeyword);
+    expect(light.codeBlock?.syntaxColors?.keyword).not.toBe(dark.codeBlock?.syntaxColors?.keyword);
+    expect(light.table?.headerBackgroundColor).toBe(appearanceLight.tableHeader);
+    expect(light.table?.rowEvenBackgroundColor).not.toBe(light.table?.rowOddBackgroundColor);
+    expect(light.blockquote?.borderColor).toBe(appearanceLight.accentStrong);
   });
 
   it("renders lists, quotes, and tables as separated blocks", () => {

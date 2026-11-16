@@ -57,7 +57,15 @@ vi.mock("react-native", () => ({
 vi.mock("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock("react-native-unistyles", () => ({ StyleSheet: { create: (styles: unknown) => styles } }));
+vi.mock("react-native-unistyles", async () => {
+  const { appearanceDark } = await import("@/constants/appearance");
+  return {
+    StyleSheet: {
+      create: (styles: unknown) => (typeof styles === "function" ? styles(appearanceDark) : styles),
+    },
+    UnistylesRuntime: { getTheme: () => appearanceDark },
+  };
+});
 vi.mock("expo-router", () => ({ router: {} }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
 vi.mock("@/components/ui/button", () => ({ Button: "button" }));

@@ -423,7 +423,7 @@ function PowerSparkle({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   gestureSurface: {
     height: 44,
     justifyContent: "center",
@@ -470,28 +470,28 @@ const styles = StyleSheet.create({
     top: 0,
   },
   stop: {
-    backgroundColor: "rgba(255, 255, 255, 0.58)",
+    backgroundColor: theme.textInverse,
     borderRadius: 999,
     height: 4,
     width: 4,
   },
   sparkle: {
-    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    backgroundColor: theme.textInverse,
     borderRadius: 999,
     position: "absolute",
   },
   thumb: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.textInverse,
     borderRadius: POWER_THUMB_SIZE / 2,
     elevation: 3,
     height: POWER_THUMB_SIZE,
     left: 0,
     position: "absolute",
-    shadowColor: "#000000",
+    shadowColor: theme.shadow,
     shadowOffset: { height: 1, width: 0 },
     shadowOpacity: 0.22,
     shadowRadius: 2,
     top: 7,
     width: POWER_THUMB_SIZE,
   },
-});
+}));

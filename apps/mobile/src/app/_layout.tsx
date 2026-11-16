@@ -1,3 +1,4 @@
+import "@/lib/unistyles";
 import "@/global.css";
 import "expo-dev-client";
 import "react-native-gesture-handler";
@@ -11,14 +12,18 @@ import Constants from "expo-constants";
 import { useFonts } from "expo-font";
 import * as Notifications from "expo-notifications";
 import { router, Stack, usePathname } from "expo-router";
-import { DarkTheme, ThemeProvider } from "expo-router/react-navigation";
+import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
 import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useSyncExternalStore } from "react";
-import { AppState, Text, TextInput } from "react-native";
+import { Appearance, AppState, Text, TextInput } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { UnistylesRuntime } from "react-native-unistyles";
+import { Uniwind } from "uniwind";
 
 import { useComputerConnection } from "@/hooks/use-computer-connection";
+import { useTheme, useThemeMode, useThemeScheme } from "@/hooks/use-theme";
 import { computerChangeDestination } from "@/lib/computer-navigation";
 import {
   initializeComputerSessionState,
@@ -50,16 +55,6 @@ import { setActiveThread } from "@/state/chat-store";
 
 void SplashScreen.preventAutoHideAsync();
 configurePushNotificationPresentation();
-
-const appTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    background: "#000000",
-    border: "rgba(255, 255, 255, 0.08)",
-    card: "#0C0C0D",
-  },
-};
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -158,6 +153,22 @@ function ComputerConnectionLifecycle() {
 }
 
 function TabLayout() {
+  const themeMode = useThemeMode();
+  const themeScheme = useThemeScheme();
+  const theme = useTheme();
+  const navigationBase = themeScheme === "dark" ? DarkTheme : DefaultTheme;
+  const appTheme = {
+    ...navigationBase,
+    colors: {
+      ...navigationBase.colors,
+      background: theme.background,
+      border: theme.backgroundSelected,
+      card: theme.backgroundElement,
+      primary: theme.accent,
+      notification: theme.danger,
+      text: theme.text,
+    },
+  };
   const connectionGeneration = useSyncExternalStore(
     onConnectionInvalidated,
     getConnectionGeneration,
@@ -166,6 +177,11 @@ function TabLayout() {
   const pathname = usePathname();
   const activeComputer = getActiveComputer();
   const previousPairing = useRef(activeComputer?.credentialId);
+  useEffect(() => {
+    Appearance.setColorScheme(themeMode === "system" ? "unspecified" : themeMode);
+    Uniwind.setTheme(themeMode);
+    UnistylesRuntime.setTheme(themeScheme);
+  }, [themeMode, themeScheme]);
   useEffect(() => {
     if (previousPairing.current === activeComputer?.credentialId) return;
     previousPairing.current = activeComputer?.credentialId;
@@ -247,6 +263,7 @@ function TabLayout() {
     >
       <ComputerConnectionLifecycle />
       <ThemeProvider value={appTheme}>
+        <StatusBar style={themeScheme === "dark" ? "light" : "dark"} />
         <GestureHandlerRootView style={{ flex: 1 }}>
           <KeyboardProvider>
             <BottomSheetModalProvider>
@@ -255,7 +272,7 @@ function TabLayout() {
                 key={connectionGeneration}
                 screenOptions={{
                   contentStyle: {
-                    backgroundColor: "#000000",
+                    backgroundColor: theme.background,
                   },
                   headerShown: false,
                 }}
@@ -306,7 +323,7 @@ function TabLayout() {
                   name="image-viewer"
                   options={{
                     contentStyle: {
-                      backgroundColor: "#050505",
+                      backgroundColor: theme.imageBackground,
                     },
                     gestureEnabled: true,
                     presentation: "modal",

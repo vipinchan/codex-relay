@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +36,7 @@ type WorkspaceRow =
   | { id: string; kind: "directory"; name: string; path: string };
 
 export function NewChatWorkspaceScreen() {
+  const theme = useTheme();
   const queryClient = useQueryClient();
   const [browser, setBrowser] = useState<WorkspaceBrowser | undefined>(undefined);
   const [isLoading, setLoading] = useState(false);
@@ -181,7 +183,10 @@ export function NewChatWorkspaceScreen() {
   }
 
   return (
-    <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.screen}>
+    <SafeAreaView
+      edges={["top", "left", "right", "bottom"]}
+      style={[styles.screen, { backgroundColor: theme.background }]}
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.content}
@@ -217,7 +222,7 @@ export function NewChatWorkspaceScreen() {
               pressed && styles.pressed,
             ]}
           >
-            <Icon name="up" size={18} tintColor="#FFFFFF" />
+            <Icon name="up" size={18} tintColor={theme.text} />
           </Pressable>
           <View style={styles.locationCopy}>
             <ThemedText numberOfLines={1} style={styles.locationName}>
@@ -244,9 +249,9 @@ export function NewChatWorkspaceScreen() {
               }}
               onSubmitEditing={goToEnteredPath}
               placeholder="/Users/..."
-              placeholderTextColor="#636366"
+              placeholderTextColor={theme.textSecondary}
               returnKeyType="go"
-              selectionColor="#6EA8FF"
+              selectionColor={theme.accent}
               spellCheck={false}
               style={styles.pathInput}
               value={pathInput}
@@ -282,7 +287,7 @@ export function NewChatWorkspaceScreen() {
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Icon name="folder" size={24} tintColor="#8E8E93" />
+              <Icon name="folder" size={24} tintColor={theme.textSecondary} />
               <ThemedText style={styles.emptyText}>
                 {isLoading ? "Loading folders…" : "No folders here"}
               </ThemedText>
@@ -305,7 +310,7 @@ export function NewChatWorkspaceScreen() {
                   <Icon
                     name={isParent ? "up" : "folder"}
                     size={18}
-                    tintColor={isParent ? "#8E8E93" : "#6EA8FF"}
+                    tintColor={isParent ? theme.textSecondary : theme.accent}
                   />
                 </View>
                 <View style={styles.folderCopy}>
@@ -316,7 +321,9 @@ export function NewChatWorkspaceScreen() {
                     {item.path}
                   </ThemedText>
                 </View>
-                {!isParent ? <Icon name="chevronRight" size={15} tintColor="#636366" /> : null}
+                {!isParent ? (
+                  <Icon name="chevronRight" size={15} tintColor={theme.textSecondary} />
+                ) : null}
               </Pressable>
             );
           }}
@@ -337,7 +344,7 @@ export function NewChatWorkspaceScreen() {
               pressed && styles.createPressed,
             ]}
           >
-            <Icon name="newChat" size={19} tintColor="#FFFFFF" />
+            <Icon name="newChat" size={19} tintColor={theme.onAccent} />
             <View style={styles.createCopy}>
               <ThemedText style={styles.createTitle}>
                 {createThreadMutation.isPending ? "Creating…" : "New Chat Here"}
@@ -353,9 +360,9 @@ export function NewChatWorkspaceScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   screen: {
-    backgroundColor: "#000000",
+    backgroundColor: theme.background,
     flex: 1,
   },
   content: {
@@ -374,7 +381,7 @@ const styles = StyleSheet.create({
     width: 72,
   },
   cancelText: {
-    color: "#6EA8FF",
+    color: theme.accent,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -384,13 +391,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   title: {
-    color: "#FFFFFF",
+    color: theme.text,
     fontSize: 18,
     fontWeight: "700",
     lineHeight: 23,
   },
   subtitle: {
-    color: "#8E8E93",
+    color: theme.textSecondary,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 1,
@@ -400,7 +407,7 @@ const styles = StyleSheet.create({
   },
   locationCard: {
     alignItems: "center",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: theme.backgroundElement,
     borderRadius: 14,
     flexDirection: "row",
     marginBottom: 10,
@@ -421,13 +428,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   locationName: {
-    color: "#FFFFFF",
+    color: theme.text,
     fontSize: 14,
     fontWeight: "700",
     lineHeight: 18,
   },
   locationPath: {
-    color: "#8E8E93",
+    color: theme.textSecondary,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 2,
@@ -437,7 +444,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   pathLabel: {
-    color: "#8E8E93",
+    color: theme.textSecondary,
     fontSize: 11,
     marginBottom: 6,
   },
@@ -447,9 +454,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pathInput: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: theme.backgroundElement,
     borderRadius: 10,
-    color: "#FFFFFF",
+    color: theme.text,
     flex: 1,
     fontSize: 13,
     minHeight: 44,
@@ -459,7 +466,7 @@ const styles = StyleSheet.create({
   },
   goButton: {
     alignItems: "center",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: theme.backgroundElement,
     borderRadius: 10,
     justifyContent: "center",
     minHeight: 44,
@@ -467,12 +474,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   goText: {
-    color: "#6EA8FF",
+    color: theme.accent,
     fontSize: 13,
     fontWeight: "600",
   },
   pathError: {
-    color: "#FF6961",
+    color: theme.danger,
     fontSize: 12,
     marginTop: 6,
   },
@@ -482,14 +489,14 @@ const styles = StyleSheet.create({
   },
   folderRow: {
     alignItems: "center",
-    borderBottomColor: "rgba(255, 255, 255, 0.07)",
+    borderBottomColor: theme.borderSubtle,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     minHeight: 62,
     paddingHorizontal: 8,
   },
   rowPressed: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: theme.backgroundElement,
     borderRadius: 12,
   },
   folderIcon: {
@@ -504,13 +511,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   folderName: {
-    color: "#FFFFFF",
+    color: theme.text,
     fontSize: 15,
     fontWeight: "600",
     lineHeight: 20,
   },
   folderPath: {
-    color: "#636366",
+    color: theme.textSecondary,
     fontSize: 10.5,
     lineHeight: 14,
     marginTop: 2,
@@ -522,18 +529,18 @@ const styles = StyleSheet.create({
     minHeight: 180,
   },
   emptyText: {
-    color: "#8E8E93",
+    color: theme.textSecondary,
     fontSize: 13,
   },
   footer: {
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    borderTopColor: theme.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 16,
     paddingTop: 10,
   },
   createButton: {
     alignItems: "center",
-    backgroundColor: "#0A84FF",
+    backgroundColor: theme.accent,
     borderRadius: 16,
     flexDirection: "row",
     minHeight: 58,
@@ -548,13 +555,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   createTitle: {
-    color: "#FFFFFF",
+    color: theme.onAccent,
     fontSize: 15,
     fontWeight: "700",
     lineHeight: 19,
   },
   createSubtitle: {
-    color: "rgba(255, 255, 255, 0.72)",
+    color: theme.onAccent,
+    opacity: 0.72,
     fontSize: 10.5,
     lineHeight: 14,
     marginTop: 2,
@@ -565,4 +573,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.68,
   },
-});
+}));

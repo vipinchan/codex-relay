@@ -270,20 +270,20 @@ export function BotDefinitionEditorScreen({ botId }: { botId: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   action: { fontFamily: Fonts.sansSemiBold, fontSize: 15 },
   content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 50, gap: 12 },
   path: { fontFamily: Fonts.mono, fontSize: 11, lineHeight: 17 },
   editorWrap: { borderRadius: 12, padding: 12 },
   editor: { fontFamily: Fonts.mono, fontSize: 12, lineHeight: 20, minHeight: 420 },
   note: { fontSize: 12, lineHeight: 18 },
-  error: { color: "#FF8DA5", fontSize: 13, lineHeight: 19, padding: 16 },
+  error: { color: theme.danger, fontSize: 13, lineHeight: 19, padding: 16 },
   conflict: { borderRadius: 12, padding: 14, gap: 10 },
   conflictTitle: { fontFamily: Fonts.sansSemiBold, fontSize: 16 },
   conflictLabel: { fontFamily: Fonts.sansSemiBold, fontSize: 13 },
   conflictSource: { fontFamily: Fonts.mono, fontSize: 11, lineHeight: 17 },
   link: { fontFamily: Fonts.sansMedium, fontSize: 13 },
-});
+}));
 
 function isRevisionConflict(error: unknown) {
   return !!error && typeof error === "object" && "status" in error && error.status === 409;

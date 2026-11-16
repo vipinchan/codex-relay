@@ -17,7 +17,8 @@ import { StyleSheet } from "react-native-unistyles";
 
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
-import { Colors, Fonts, Spacing } from "@/constants/theme";
+import { Fonts, Spacing } from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
 import {
   getWorkspaceFileContent as rawGetWorkspaceFileContent,
   listWorkspaceFiles as rawListWorkspaceFiles,
@@ -48,9 +49,6 @@ const FILE_LIST_VIEWPORT_HEIGHT =
   Spacing.one;
 const FILE_SEARCH_BAR_HEIGHT = 34;
 const FILE_EXPLORER_BODY_HEIGHT = FILE_SEARCH_BAR_HEIGHT + Spacing.one + FILE_LIST_VIEWPORT_HEIGHT;
-const folderAccentColor = "#7AB7FF";
-const fileAccentColor = "#A9B4C2";
-
 export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
   workspacePath,
 }: {
@@ -60,6 +58,7 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
     getWorkspaceFileContent: rawGetWorkspaceFileContent,
     listWorkspaceFiles: rawListWorkspaceFiles,
   });
+  const theme = useTheme();
 
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 180);
@@ -215,10 +214,10 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
       keyboardShouldPersistTaps="always"
       refreshControl={
         <RefreshControl
-          colors={[Colors.dark.text]}
-          progressBackgroundColor={Colors.dark.backgroundElement}
+          colors={[theme.text]}
+          progressBackgroundColor={theme.backgroundElement}
           refreshing={isPullRefreshing}
-          tintColor={Colors.dark.text}
+          tintColor={theme.text}
           onRefresh={() => void refreshPreview()}
         />
       }
@@ -252,20 +251,20 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
             <Icon
               name={isExplorerExpanded ? "expand" : "chevronRight"}
               size={15}
-              tintColor={Colors.dark.textSecondary}
+              tintColor={theme.textSecondary}
             />
           </View>
         </Pressable>
         {isExplorerExpanded ? (
           <View style={styles.explorerBody}>
             <View style={styles.searchBar}>
-              <Icon name="search" size={15} tintColor={Colors.dark.textSecondary} />
+              <Icon name="search" size={15} tintColor={theme.textSecondary} />
               <TextInput
                 autoCapitalize="none"
                 autoCorrect={false}
                 onChangeText={setQuery}
                 placeholder="Filter current folder"
-                placeholderTextColor="#7A8493"
+                placeholderTextColor={theme.textSecondary}
                 returnKeyType="search"
                 style={styles.searchInput}
                 value={query}
@@ -278,14 +277,14 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
                   onPress={clearQuery}
                   style={({ pressed }) => [styles.searchClearButton, pressed && styles.pressed]}
                 >
-                  <Icon name="x" size={14} tintColor={Colors.dark.textSecondary} />
+                  <Icon name="x" size={14} tintColor={theme.textSecondary} />
                 </Pressable>
               ) : null}
             </View>
             {isInitialLoading ? (
               <View style={styles.fileListViewportFrame}>
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator color={Colors.dark.textSecondary} size="small" />
+                  <ActivityIndicator color={theme.textSecondary} size="small" />
                   <ThemedText type="small" themeColor="textSecondary">
                     Loading files
                   </ThemedText>
@@ -362,7 +361,7 @@ export const FileWorkspacePreviewTab = memo(function FileWorkspacePreviewTab({
         <View style={styles.editorPreviewContent}>
           {fileContentQuery.isLoading && selectedPath ? (
             <View style={styles.editorLoading}>
-              <ActivityIndicator color={Colors.dark.textSecondary} size="small" />
+              <ActivityIndicator color={theme.textSecondary} size="small" />
               <ThemedText type="small" themeColor="textSecondary">
                 Loading file
               </ThemedText>
@@ -436,11 +435,12 @@ const FileEntryRow = memo(function FileEntryRow({
   selected: boolean;
   onSelect: (file: ExplorerEntry) => void;
 }) {
+  const theme = useTheme();
   const handlePress = useCallback(() => onSelect(file), [file, onSelect]);
   const isParentEntry = file.kind === "parent";
   const isDirectory = file.kind === "directory";
   const iconName = isDirectory ? "folder" : "file";
-  const accentColor = isParentEntry || isDirectory ? folderAccentColor : fileAccentColor;
+  const accentColor = isParentEntry || isDirectory ? theme.accent : theme.textSecondary;
 
   return (
     <Pressable
@@ -456,7 +456,7 @@ const FileEntryRow = memo(function FileEntryRow({
     >
       <View style={styles.fileIconSlot}>
         {isParentEntry ? null : (
-          <Icon name={iconName} size={15} tintColor={selected ? Colors.dark.text : accentColor} />
+          <Icon name={iconName} size={15} tintColor={selected ? theme.text : accentColor} />
         )}
       </View>
       <View style={styles.fileRowTextGroup}>
@@ -476,7 +476,7 @@ const FileEntryRow = memo(function FileEntryRow({
         </ThemedText>
       </View>
       <View style={styles.fileChevronSlot}>
-        {isDirectory ? <Icon name="chevronRight" size={13} tintColor={folderAccentColor} /> : null}
+        {isDirectory ? <Icon name="chevronRight" size={13} tintColor={theme.accent} /> : null}
       </View>
     </Pressable>
   );
@@ -562,7 +562,7 @@ function fileEntryKeyExtractor(file: ExplorerEntry) {
   return `${file.kind}:${file.path}`;
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   contentPane: {
     flex: 1,
   },
@@ -573,8 +573,8 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.07)",
-    borderColor: "rgba(132, 145, 165, 0.22)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 8,
     borderWidth: 1,
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
   },
   searchInput: {
-    color: Colors.dark.text,
+    color: theme.text,
     flex: 1,
     fontFamily: Fonts.sansMedium,
     fontSize: 13,
@@ -600,8 +600,8 @@ const styles = StyleSheet.create({
     width: 24,
   },
   fileListFrame: {
-    backgroundColor: "rgba(255, 255, 255, 0.055)",
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 8,
     borderWidth: 1,
@@ -634,8 +634,8 @@ const styles = StyleSheet.create({
   },
   fileCountBadge: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.065)",
-    borderColor: "rgba(132, 145, 165, 0.18)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 12,
     borderWidth: 1,
@@ -670,8 +670,8 @@ const styles = StyleSheet.create({
   },
   filePill: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.045)",
-    borderColor: "rgba(132, 145, 165, 0.18)",
+    backgroundColor: theme.tintSubtle,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 6,
     borderWidth: 1,
@@ -681,11 +681,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
   },
   filePillSelected: {
-    backgroundColor: "rgba(95, 167, 255, 0.14)",
-    borderColor: "rgba(95, 167, 255, 0.45)",
+    backgroundColor: theme.accentMuted,
+    borderColor: theme.accentBorder,
   },
   parentFilePill: {
-    backgroundColor: "rgba(122, 183, 255, 0.075)",
+    backgroundColor: theme.accentSoft,
   },
   fileRowTextGroup: {
     flex: 1,
@@ -703,8 +703,8 @@ const styles = StyleSheet.create({
   },
   fileKindBadge: {
     alignItems: "center",
-    backgroundColor: "rgba(169, 180, 194, 0.08)",
-    borderColor: "rgba(169, 180, 194, 0.16)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 5,
     borderWidth: 1,
@@ -720,20 +720,20 @@ const styles = StyleSheet.create({
     width: 13,
   },
   folderKindBadge: {
-    backgroundColor: "rgba(122, 183, 255, 0.1)",
-    borderColor: "rgba(122, 183, 255, 0.24)",
+    backgroundColor: theme.accentSoft,
+    borderColor: theme.accentBorder,
   },
   fileKindText: {
-    color: fileAccentColor,
+    color: theme.textSecondary,
     fontSize: 10,
     lineHeight: 12,
   },
   folderKindText: {
-    color: folderAccentColor,
+    color: theme.accent,
   },
   editorFrame: {
-    backgroundColor: "rgba(255, 255, 255, 0.045)",
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.tintSubtle,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 8,
     borderWidth: 1,
@@ -760,8 +760,8 @@ const styles = StyleSheet.create({
   },
   headerActionButton: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.07)",
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 7,
     borderWidth: 1,
@@ -771,19 +771,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
   },
   headerActionButtonSelected: {
-    backgroundColor: "rgba(95, 167, 255, 0.18)",
-    borderColor: "rgba(95, 167, 255, 0.45)",
+    backgroundColor: theme.accentMuted,
+    borderColor: theme.accentBorder,
   },
   headerActionText: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     fontSize: 12,
     lineHeight: 16,
   },
   headerActionTextSelected: {
-    color: Colors.dark.text,
+    color: theme.text,
   },
   editorMetaRow: {
-    borderBottomColor: "rgba(132, 145, 165, 0.16)",
+    borderBottomColor: theme.border,
     borderBottomWidth: 1,
     paddingBottom: Spacing.two,
   },
@@ -805,8 +805,8 @@ const styles = StyleSheet.create({
     minHeight: 160,
   },
   emptyState: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 8,
     borderWidth: 1,
@@ -814,8 +814,8 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
   },
   notice: {
-    backgroundColor: "rgba(95, 167, 255, 0.08)",
-    borderColor: "rgba(95, 167, 255, 0.22)",
+    backgroundColor: theme.accentSoft,
+    borderColor: theme.accentBorder,
     borderCurve: "continuous",
     borderRadius: 7,
     borderWidth: 1,
@@ -828,4 +828,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-});
+}));

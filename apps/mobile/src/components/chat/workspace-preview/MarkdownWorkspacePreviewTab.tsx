@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useState } from "react";
@@ -6,7 +7,7 @@ import { StyleSheet } from "react-native-unistyles";
 
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
-import { Colors, Spacing } from "@/constants/theme";
+import { Spacing } from "@/constants/theme";
 import {
   getCodexRelayCacheIdentity,
   getWorkspaceFileContent as rawGetWorkspaceFileContent,
@@ -23,6 +24,7 @@ export const MarkdownWorkspacePreviewTab = memo(function MarkdownWorkspacePrevie
   target?: WorkspaceMarkdownPreviewTarget;
   workspacePath?: string;
 }) {
+  const theme = useTheme();
   const { getWorkspaceFileContent } = useComputerOperations({
     getWorkspaceFileContent: rawGetWorkspaceFileContent,
   });
@@ -63,11 +65,11 @@ export const MarkdownWorkspacePreviewTab = memo(function MarkdownWorkspacePrevie
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
-            colors={[Colors.dark.text]}
+            colors={[theme.text]}
             enabled={Boolean(target?.path)}
-            progressBackgroundColor={Colors.dark.backgroundElement}
+            progressBackgroundColor={theme.backgroundElement}
             refreshing={isPullRefreshing}
-            tintColor={Colors.dark.text}
+            tintColor={theme.text}
             onRefresh={() => void refreshFromPull()}
           />
         }
@@ -75,7 +77,7 @@ export const MarkdownWorkspacePreviewTab = memo(function MarkdownWorkspacePrevie
       >
         <View style={styles.documentHeader}>
           <View style={styles.documentIcon}>
-            <Icon name="file" size={18} tintColor={Colors.dark.text} />
+            <Icon name="file" size={18} tintColor={theme.text} />
           </View>
           <View style={styles.documentTitleGroup}>
             <ThemedText type="smallBold" style={styles.documentTitle} numberOfLines={1}>
@@ -96,7 +98,7 @@ export const MarkdownWorkspacePreviewTab = memo(function MarkdownWorkspacePrevie
           </View>
         ) : fileContentQuery.isLoading ? (
           <View style={styles.loadingRow}>
-            <ActivityIndicator color={Colors.dark.textSecondary} size="small" />
+            <ActivityIndicator color={theme.textSecondary} size="small" />
             <ThemedText type="small" themeColor="textSecondary">
               Loading Markdown
             </ThemedText>
@@ -169,7 +171,7 @@ function languageFromPath(path: string) {
   return extension || "text";
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   contentPane: {
     flex: 1,
     marginHorizontal: Spacing.three,
@@ -181,8 +183,8 @@ const styles = StyleSheet.create({
   },
   documentHeader: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.055)",
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
@@ -191,7 +193,7 @@ const styles = StyleSheet.create({
   },
   documentIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.tintSoft,
     borderRadius: 8,
     height: 38,
     justifyContent: "center",
@@ -208,8 +210,8 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderColor: "rgba(132, 145, 165, 0.18)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     gap: Spacing.one,
@@ -223,23 +225,23 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
   },
   metaRow: {
-    borderBottomColor: "rgba(132, 145, 165, 0.18)",
+    borderBottomColor: theme.border,
     borderBottomWidth: 1,
     paddingBottom: Spacing.two,
   },
   notice: {
-    backgroundColor: "rgba(95, 167, 255, 0.08)",
-    borderColor: "rgba(95, 167, 255, 0.18)",
+    backgroundColor: theme.accentSoft,
+    borderColor: theme.accentBorder,
     borderRadius: 8,
     borderWidth: 1,
     padding: Spacing.two,
   },
   previewFrame: {
-    backgroundColor: "rgba(255, 255, 255, 0.055)",
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     gap: Spacing.two,
     padding: Spacing.two,
   },
-});
+}));

@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import { promptSkillDisplayName, type PromptSkill } from "codex-relay/api-schema";
 import { memo } from "react";
 import { Text as NativeText, View } from "react-native";
@@ -15,9 +16,10 @@ export const SkillMentionToken = memo(function SkillMentionToken({
   lineHeight: number;
   skill: PromptSkill;
 }) {
+  const theme = useTheme();
   return (
     <View style={styles.container}>
-      <Icon name="model" size={Math.max(11, fontSize)} tintColor="#8FD3FF" />
+      <Icon name="model" size={Math.max(11, fontSize)} tintColor={theme.accent} />
       <NativeText
         allowFontScaling={false}
         maxFontSizeMultiplier={1}
@@ -30,7 +32,7 @@ export const SkillMentionToken = memo(function SkillMentionToken({
   );
 });
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   container: {
     alignItems: "center",
     flexDirection: "row",
@@ -38,7 +40,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   label: {
-    color: "#9DD5FF",
+    color: theme.accent,
     fontFamily: Fonts.sansSemiBold,
   },
-});
+}));

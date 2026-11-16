@@ -33,7 +33,15 @@ vi.mock("react-native", () => ({
 vi.mock("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
 }));
-vi.mock("react-native-unistyles", () => ({ StyleSheet: { create: (styles: unknown) => styles } }));
+vi.mock("react-native-unistyles", async () => {
+  const { appearanceDark } = await import("@/constants/appearance");
+  return {
+    StyleSheet: {
+      create: (styles: unknown) => (typeof styles === "function" ? styles(appearanceDark) : styles),
+    },
+    UnistylesRuntime: { getTheme: () => appearanceDark },
+  };
+});
 vi.mock("react-native-reanimated", () => ({
   default: { View: ({ children }: React.PropsWithChildren) => <div>{children}</div> },
   FadeIn: { duration: () => undefined },
@@ -45,6 +53,17 @@ vi.mock("@/components/themed-text", () => ({
   ThemedText: ({ children }: React.PropsWithChildren) => <span>{children}</span>,
 }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
+vi.mock("@/components/ui/bottom-sheet", () => ({
+  AppBottomSheet: ({ children, visible }: React.PropsWithChildren<{ visible: boolean }>) =>
+    visible ? <div>{children}</div> : null,
+  SheetActionRow: ({ title }: { title: string }) => <button>{title}</button>,
+  SheetSelectedDot: () => null,
+}));
+vi.mock("@/hooks/use-theme", () => ({
+  useTheme: () => ({ backgroundElement: "#eee", text: "#111", textSecondary: "#666" }),
+  useThemeMode: () => "system",
+}));
+vi.mock("@/lib/theme-preference", () => ({ setThemeMode: vi.fn<(mode: string) => void>() }));
 vi.mock("@/components/settings/ComputerSettings", () => ({
   ComputerSettings: () => <section>Saved computers</section>,
 }));
@@ -87,6 +106,15 @@ vi.mock("@/state/chat-store", () => ({
 }));
 
 describe("full settings screen", () => {
+  it("shows the current appearance selection", async () => {
+    const { default: SettingsScreen } = await import("@/app/settings");
+    const markup = renderToStaticMarkup(<SettingsScreen embedded />);
+
+    expect(markup).toContain("Appearance");
+    expect(markup).toContain('aria-label="Change theme"');
+    expect(markup).toContain("System");
+  });
+
   it("shows existing settings without a back-to-threads button inside the tab", async () => {
     const { default: SettingsScreen } = await import("@/app/settings");
     const markup = renderToStaticMarkup(<SettingsScreen embedded />);

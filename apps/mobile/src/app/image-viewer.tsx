@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -17,13 +18,14 @@ import { StyleSheet } from "react-native-unistyles";
 
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
-import { Colors, Fonts, Spacing } from "@/constants/theme";
+import { Fonts, Spacing } from "@/constants/theme";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const RESET_DURATION_MS = 180;
 
 export default function ImageViewerScreen() {
+  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const params = useLocalSearchParams<{ title?: string; uri?: string }>();
@@ -116,7 +118,7 @@ export default function ImageViewerScreen() {
           onPress={() => router.back()}
           style={styles.headerButton}
         >
-          <Icon name="x" size={21} tintColor={Colors.dark.text} />
+          <Icon name="x" size={21} tintColor={theme.imageForeground} />
         </Pressable>
         <ThemedText numberOfLines={1} style={styles.title}>
           {title}
@@ -127,7 +129,7 @@ export default function ImageViewerScreen() {
           onPress={resetZoom}
           style={styles.headerButton}
         >
-          <RotateCcw color={Colors.dark.text} size={19} strokeWidth={2} />
+          <RotateCcw color={theme.imageForeground} size={19} strokeWidth={2} />
         </Pressable>
       </View>
       <GestureDetector gesture={imageGesture}>
@@ -144,7 +146,7 @@ export default function ImageViewerScreen() {
           ) : (
             <View style={styles.empty}>
               <ThemedText style={styles.emptyTitle}>Image unavailable</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+              <ThemedText type="small" style={styles.emptyText}>
                 This attachment could not be opened.
               </ThemedText>
             </View>
@@ -175,14 +177,14 @@ function resetTiming() {
   };
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   screen: {
-    backgroundColor: "#050505",
+    backgroundColor: theme.imageBackground,
     flex: 1,
   },
   header: {
     alignItems: "center",
-    backgroundColor: "rgba(5, 5, 5, 0.72)",
+    backgroundColor: theme.dimmer,
     flexDirection: "row",
     gap: Spacing.two,
     left: 0,
@@ -195,8 +197,8 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.tintMedium,
+    borderColor: theme.borderSubtle,
     borderRadius: 20,
     borderWidth: 1,
     height: 40,
@@ -204,7 +206,7 @@ const styles = StyleSheet.create({
     width: 40,
   },
   title: {
-    color: Colors.dark.text,
+    color: theme.imageForeground,
     flex: 1,
     fontFamily: Fonts.sansSemiBold,
     fontSize: 13,
@@ -222,7 +224,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   image: {
-    backgroundColor: "#050505",
+    backgroundColor: theme.imageBackground,
   },
   empty: {
     alignItems: "center",
@@ -230,13 +232,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
   },
   emptyTitle: {
-    color: Colors.dark.text,
+    color: theme.imageForeground,
     fontFamily: Fonts.sansSemiBold,
     fontSize: 16,
     lineHeight: 22,
   },
   emptyText: {
+    color: theme.imageForeground,
+    opacity: 0.65,
     maxWidth: 280,
     textAlign: "center",
   },
-});
+}));

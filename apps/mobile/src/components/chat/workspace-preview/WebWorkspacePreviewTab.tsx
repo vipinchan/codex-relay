@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import { useComputerOperations } from "@/hooks/use-computer-operations";
 import type { WebPreviewTarget } from "codex-relay/api-schema";
 import { useSelector } from "@legendapp/state/react";
@@ -11,7 +12,7 @@ import { ThemedText } from "@/components/themed-text";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text as UiText } from "@/components/ui/text";
-import { Colors, Fonts, Spacing } from "@/constants/theme";
+import { Fonts, Spacing } from "@/constants/theme";
 import {
   getCodexRelayServerUrl,
   startWorkspaceTailscaleServe as rawStartWorkspaceTailscaleServe,
@@ -32,6 +33,7 @@ export const WebWorkspacePreviewTab = memo(function WebWorkspacePreviewTab({
   workspacePath?: string;
   webPreviewTarget?: WebPreviewTarget;
 }) {
+  const theme = useTheme();
   const { startWorkspaceTailscaleServe } = useComputerOperations({
     startWorkspaceTailscaleServe: rawStartWorkspaceTailscaleServe,
   });
@@ -182,7 +184,7 @@ export const WebWorkspacePreviewTab = memo(function WebWorkspacePreviewTab({
           }}
           onSubmitEditing={commitWebUrl}
           placeholder="http://localhost:3000"
-          placeholderTextColor="#7A8493"
+          placeholderTextColor={theme.textSecondary}
           returnKeyType="go"
           style={styles.urlInput}
           value={webUrlDraft}
@@ -224,7 +226,7 @@ export const WebWorkspacePreviewTab = memo(function WebWorkspacePreviewTab({
         {webError ? (
           <View style={styles.webErrorOverlay}>
             <View style={styles.webErrorIcon}>
-              <Icon name="web" size={18} tintColor={Colors.dark.textSecondary} />
+              <Icon name="web" size={18} tintColor={theme.textSecondary} />
             </View>
             <ThemedText type="smallBold" style={styles.webErrorTitle}>
               Unable to load preview
@@ -261,9 +263,9 @@ export const WebWorkspacePreviewTab = memo(function WebWorkspacePreviewTab({
                 </View>
                 <View style={styles.tailscaleRetryRun}>
                   {tailscaleServeStatus.kind === "loading" ? (
-                    <ActivityIndicator color={Colors.dark.text} size="small" />
+                    <ActivityIndicator color={theme.text} size="small" />
                   ) : (
-                    <Icon name="terminal" size={14} tintColor={Colors.dark.text} />
+                    <Icon name="terminal" size={14} tintColor={theme.text} />
                   )}
                   <UiText className="text-foreground" style={styles.tailscaleServeButtonText}>
                     Run
@@ -283,7 +285,7 @@ export const WebWorkspacePreviewTab = memo(function WebWorkspacePreviewTab({
                 className="rounded-md border border-border bg-secondary/80"
                 style={({ pressed }) => [styles.webErrorRetry, pressed && styles.pressed]}
               >
-                <Icon name="refresh" size={14} tintColor={Colors.dark.text} />
+                <Icon name="refresh" size={14} tintColor={theme.text} />
                 <UiText
                   className="text-foreground"
                   numberOfLines={1}
@@ -355,6 +357,7 @@ function WebControlButton({
   icon: "back" | "forward" | "refresh";
   onPress: () => void;
 }) {
+  const theme = useTheme();
   return (
     <Button
       accessibilityRole="button"
@@ -366,11 +369,7 @@ function WebControlButton({
       className="rounded-md border border-border bg-secondary/80"
       style={({ pressed }) => [styles.webControlButton, pressed && !disabled && styles.pressed]}
     >
-      <Icon
-        name={icon}
-        size={15}
-        tintColor={disabled ? Colors.dark.textSecondary : Colors.dark.text}
-      />
+      <Icon name={icon} size={15} tintColor={disabled ? theme.textSecondary : theme.text} />
     </Button>
   );
 }
@@ -453,7 +452,7 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   contentPane: {
     flex: 1,
     marginHorizontal: Spacing.three,
@@ -467,11 +466,11 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   urlInput: {
-    backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
-    color: Colors.dark.text,
+    color: theme.text,
     flex: 1,
     fontFamily: Fonts.mono,
     fontSize: 12,
@@ -486,15 +485,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
   },
   goButtonText: {
-    color: Colors.dark.text,
+    color: theme.text,
     fontFamily: Fonts.sansBold,
     fontSize: 14,
     lineHeight: 18,
   },
   tailscaleRetryAction: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.07)",
-    borderColor: "rgba(132, 145, 165, 0.22)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
@@ -515,13 +514,13 @@ const styles = StyleSheet.create({
     paddingRight: Spacing.two,
   },
   tailscaleCommandPrompt: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     fontFamily: Fonts.monoMedium,
     fontSize: 13,
     lineHeight: 18,
   },
   tailscaleCommandText: {
-    color: Colors.dark.text,
+    color: theme.text,
     flex: 1,
     fontFamily: Fonts.mono,
     fontSize: 13,
@@ -529,7 +528,7 @@ const styles = StyleSheet.create({
   },
   tailscaleRetryRun: {
     alignItems: "center",
-    borderColor: "rgba(132, 145, 165, 0.22)",
+    borderColor: theme.border,
     borderLeftWidth: 1,
     flexDirection: "row",
     gap: Spacing.one,
@@ -539,7 +538,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
   },
   tailscaleServeButtonText: {
-    color: Colors.dark.text,
+    color: theme.text,
     flexShrink: 1,
     fontFamily: Fonts.sansBold,
     fontSize: 13,
@@ -549,8 +548,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
   },
   webViewFrame: {
-    backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(132, 145, 165, 0.22)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     flex: 1,
@@ -558,8 +557,8 @@ const styles = StyleSheet.create({
   },
   webControlsBar: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.055)",
-    borderColor: "rgba(132, 145, 165, 0.22)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
@@ -579,16 +578,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
   },
   webView: {
-    backgroundColor: Colors.dark.backgroundElement,
+    backgroundColor: theme.backgroundElement,
     flex: 1,
   },
   webViewErrorBlank: {
-    backgroundColor: Colors.dark.backgroundElement,
+    backgroundColor: theme.backgroundElement,
     flex: 1,
   },
   webErrorOverlay: {
     alignItems: "center",
-    backgroundColor: Colors.dark.backgroundElement,
+    backgroundColor: theme.backgroundElement,
     bottom: 0,
     gap: Spacing.two,
     justifyContent: "center",
@@ -600,8 +599,8 @@ const styles = StyleSheet.create({
   },
   webErrorIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "rgba(132, 145, 165, 0.24)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.border,
     borderRadius: 22,
     borderWidth: 1,
     height: 44,
@@ -627,7 +626,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
   },
   webErrorRetryText: {
-    color: Colors.dark.text,
+    color: theme.text,
     flexShrink: 1,
     fontFamily: Fonts.sansBold,
     fontSize: 13,
@@ -636,4 +635,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-});
+}));

@@ -227,7 +227,7 @@ function Info({ label, value, last }: { label: string; value: string; last?: boo
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   scroll: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40, gap: 10 },
   hero: {
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 13 },
   infoValue: { fontFamily: Fonts.sansMedium, fontSize: 13, textAlign: "right", flex: 1 },
-  delete: { color: "#FF8DA5", fontSize: 14, alignSelf: "center", marginTop: 30, padding: 12 },
-  error: { color: "#FF8DA5", padding: 20 },
+  delete: { color: theme.danger, fontSize: 14, alignSelf: "center", marginTop: 30, padding: 12 },
+  error: { color: theme.danger, padding: 20 },
   empty: { padding: 20 },
-});
+}));
