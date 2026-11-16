@@ -64,17 +64,17 @@ jobs:
 
       - name: Build beta IPA
         env:
-          IOS_IPA_NAME: CodexRelay-1.5.0-beta.34.ipa
-          MOBILE_RELEASE_VERSION: 1.5.0-beta.34
+          IOS_IPA_NAME: CodexRelay-1.5.0-beta.35.ipa
+          MOBILE_RELEASE_VERSION: 1.5.0-beta.35
         run: bash scripts/build-ios-ipa.sh
 
       - name: Upload beta artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodexRelay-1.5.0-beta.34-${{ github.sha }}
+          name: CodexRelay-1.5.0-beta.35-${{ github.sha }}
           path: |
-            dist/ios/CodexRelay-1.5.0-beta.34.ipa
-            dist/ios/CodexRelay-1.5.0-beta.34.ipa.sha256
+            dist/ios/CodexRelay-1.5.0-beta.35.ipa
+            dist/ios/CodexRelay-1.5.0-beta.35.ipa.sha256
             dist/ios/build-info.txt
           if-no-files-found: error
           retention-days: 30
@@ -87,15 +87,15 @@ jobs:
           app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
           min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
           cat > /tmp/beta-release-notes.md <<EOF
-          ## Codex Relay iOS 1.5.0 Beta 34
+          ## Codex Relay iOS 1.5.0 Beta 35
 
-          Moves conversation search to the top-left corner of the Sessions screen.
+          Opens the full settings screen directly from the Settings tab.
 
           ### Included
 
-          - Replaces the top-left Settings shortcut with conversation search
-          - Removes the bottom-left floating search button while keeping New chat at the bottom right
-          - Preserves search filtering, closing and clearing, and the Settings tab
+          - Removes the extra settings landing page and shows all existing settings directly
+          - Keeps the Settings tab visible after switching computers
+          - Preserves access to computer management, usage limits, notifications, and updates
 
           ### Relay compatibility
 
@@ -104,13 +104,13 @@ jobs:
           ### Build
 
           - App version: \`${app_version}\`
-          - Mobile beta: \`1.5.0-beta.34\`
+          - Mobile beta: \`1.5.0-beta.35\`
           - Minimum iOS: \`${min_ios}\`
           - Commit: \`${commit}\`
 
           ### Installation
 
-          Download **CodexRelay-1.5.0-beta.34.ipa** and install it with TrollStore on a compatible device.
+          Download **CodexRelay-1.5.0-beta.35.ipa** and install it with TrollStore on a compatible device.
           This is an ad-hoc signed sideload build, not an Apple distribution-signed or notarized release.
           Automated checks and IPA build run in CI; physical-device validation remains pending.
           EOF
@@ -121,8 +121,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.34'
-          ipa='dist/ios/CodexRelay-1.5.0-beta.34.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.35'
+          ipa='dist/ios/CodexRelay-1.5.0-beta.35.ipa'
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" \
@@ -132,7 +132,7 @@ jobs:
               --clobber
             gh release edit "$tag" \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 34' \
+              --title 'Codex Relay iOS 1.5.0 Beta 35' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           else
@@ -141,7 +141,7 @@ jobs:
               "$ipa.sha256" \
               dist/ios/build-info.txt \
               --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 34' \
+              --title 'Codex Relay iOS 1.5.0 Beta 35' \
               --notes-file /tmp/beta-release-notes.md \
               --prerelease
           fi
@@ -152,8 +152,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.34'
-          ipa='CodexRelay-1.5.0-beta.34.ipa'
+          tag='@codex-relay/mobile@1.5.0-beta.35'
+          ipa='CodexRelay-1.5.0-beta.35.ipa'
           rm -rf /tmp/codex-relay-beta-check
           mkdir -p /tmp/codex-relay-beta-check
           gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check

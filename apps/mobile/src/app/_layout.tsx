@@ -19,6 +19,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { useComputerConnection } from "@/hooks/use-computer-connection";
+import { computerChangeDestination } from "@/lib/computer-navigation";
 import {
   initializeComputerSessionState,
   saveCurrentComputerState,
@@ -169,7 +170,7 @@ function TabLayout() {
     if (previousPairing.current === activeComputer?.credentialId) return;
     previousPairing.current = activeComputer?.credentialId;
     // Routes with thread or bot IDs belong to the previous computer.
-    router.replace(pathname.startsWith("/settings") ? "/settings" : activeComputer ? "/chat" : "/");
+    router.replace(computerChangeDestination(pathname, Boolean(activeComputer)));
   }, [activeComputer?.credentialId, pathname, activeComputer]);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {

@@ -59,7 +59,7 @@ const pushNotificationTrackColor = {
 
 type PushNotificationPreference = keyof typeof defaultPushNotificationPreferences;
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ embedded = false }: { embedded?: boolean }) {
   const { getPushNotificationSettings, registerPushNotifications, unregisterPushNotifications } =
     useComputerOperations({
       getPushNotificationSettings: rawGetPushNotificationSettings,
@@ -292,14 +292,18 @@ export default function SettingsScreen() {
     <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back to threads"
-            onPress={closeSettings}
-            style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
-          >
-            <Icon name="back" size={19} tintColor={Colors.dark.text} />
-          </Pressable>
+          {embedded ? (
+            <View style={styles.headerButtonPlaceholder} />
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to threads"
+              onPress={closeSettings}
+              style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
+            >
+              <Icon name="back" size={19} tintColor={Colors.dark.text} />
+            </Pressable>
+          )}
           <View style={styles.titleGroup}>
             <ThemedText type="smallBold" style={styles.title}>
               Settings
