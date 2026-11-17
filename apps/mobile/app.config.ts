@@ -103,7 +103,7 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
         : [
             "@hot-updater/expo",
             {
-              channel: "production",
+              channel: process.env.CODEX_RELAY_RELEASE_CHANNEL === "beta" ? "beta" : "production",
               publicKeyPath: "./keys/public-key.pem",
             },
           ],

@@ -76,7 +76,7 @@ test("keeps the npm release when preparing a mixed mobile changeset", () => {
   ]);
 });
 
-test("defines independent npm and mobile version commands", () => {
+test("keeps version commands but only automates the npm release branch", () => {
   const releaseConfig = JSON.parse(
     readFileSync(new URL("../.changeset/config.json", import.meta.url), "utf8"),
   );
@@ -98,24 +98,18 @@ test("defines independent npm and mobile version commands", () => {
     "node scripts/version-packages.mjs mobile",
   );
   assert.match(releaseWorkflow, /changeset-release\/npm-main/);
-  assert.match(releaseWorkflow, /changeset-release\/mobile-main/);
+  assert.doesNotMatch(releaseWorkflow, /changeset-release\/mobile-main/);
   assert.doesNotMatch(releaseWorkflow, /changesets\/action/);
 });
 
-test("waits for the relay package release before preparing the mobile OTA", () => {
+test("main package releases cannot automatically deploy mobile OTA", () => {
   const releaseWorkflow = readFileSync(
     new URL("../.github/workflows/release.yml", import.meta.url),
     "utf8",
   );
 
-  assert.match(
-    releaseWorkflow,
-    /if: steps\.mobile-release-plan\.outputs\.deploy == 'true' && steps\.mobile-release-plan\.outputs\.relay-package-version == ''/,
-  );
-  assert.match(
-    releaseWorkflow,
-    /if \(process\.env\.MOBILE_RELEASE_VERSION && !process\.env\.RELAY_RELEASE_VERSION\)/,
-  );
+  assert.doesNotMatch(releaseWorkflow, /hot-updater deploy|HOT_UPDATER_PRIVATE_KEY/);
+  assert.doesNotMatch(releaseWorkflow, /detect-mobile-patch-release/);
 });
 
 test("prepares the production iOS App Store configuration", () => {
@@ -129,13 +123,12 @@ test("prepares the production iOS App Store configuration", () => {
   assert.equal(easConfig.submit.production.ios.ascAppId, "6764463488");
 });
 
-test("checks v1 infrastructure and Bundle state around an OTA deploy", () => {
+test("native package publication does not also deploy an OTA bundle", () => {
   const releaseWorkflow = readFileSync(
-    new URL("../.github/workflows/release.yml", import.meta.url),
+    new URL("../.github/workflows/ios-package.yml", import.meta.url),
     "utf8",
   );
 
-  assert.match(releaseWorkflow, /hot-updater doctor --server-base-url/);
-  assert.match(releaseWorkflow, /hot-updater bundle list -p ios --limit 5 --json/);
-  assert.doesNotMatch(releaseWorkflow, /hot-updater release list -p ios/);
+  assert.match(releaseWorkflow, /gh release create/);
+  assert.doesNotMatch(releaseWorkflow, /hot-updater deploy|HOT_UPDATER_PRIVATE_KEY/);
 });

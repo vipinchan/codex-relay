@@ -1,163 +1,37 @@
-name: iOS 1.5.0 UI Beta
+name: iOS Beta
 
 on:
   push:
     branches:
-      - feat/mobile-history-navigation-beta
-      - feat/bot-groups-beta
-      - feat/bot-ui-refactor
+      - main
+    paths:
+      - "apps/mobile/**"
+      - "packages/**"
+      - "scripts/build-ios-ipa.sh"
+      - "scripts/ios-release-metadata*"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/ios-*.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: ios-1.5.0-ui-beta-${{ github.ref }}
+  group: ios-beta-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  beta-ipa:
-    name: Build and publish 1.5.0 beta IPA
-    runs-on: macos-26-intel
-    timeout-minutes: 60
+  checks:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
 
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm exec oxlint apps packages --import-plugin --react-plugin --jsx-a11y-plugin --vitest-plugin
-
-      - name: Check Markdown change formatting
-        run: >-
-          pnpm exec oxfmt --check package.json pnpm-workspace.yaml
-          scripts/markdown-strong.test.mjs .github/workflows/ci.yml
-          .github/workflows/ios-beta.yml .changeset/fix-cjk-markdown-bold.md
-
-      - name: Test Markdown parsing
-        run: pnpm test:markdown
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Build relay test exports
-        run: pnpm --filter codex-relay build
-
-      - name: Test
-        run: |
-          pnpm test
-          pnpm --filter @codex-relay/mobile exec vitest run
-
-      - name: Build beta IPA
-        env:
-          IOS_IPA_NAME: CodexRelay-1.5.0-beta.36.ipa
-          MOBILE_RELEASE_VERSION: 1.5.0-beta.36
-        run: bash scripts/build-ios-ipa.sh
-
-      - name: Upload beta artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: CodexRelay-1.5.0-beta.36-${{ github.sha }}
-          path: |
-            dist/ios/CodexRelay-1.5.0-beta.36.ipa
-            dist/ios/CodexRelay-1.5.0-beta.36.ipa.sha256
-            dist/ios/build-info.txt
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Prepare beta release notes
-        shell: bash
-        run: |
-          set -euo pipefail
-          commit="${GITHUB_SHA:0:7}"
-          app_version="$(awk -F= '$1 == "app_version" { print $2 }' dist/ios/build-info.txt)"
-          min_ios="$(awk -F= '$1 == "minimum_ios" { print $2 }' dist/ios/build-info.txt)"
-          cat > /tmp/beta-release-notes.md <<EOF
-          ## Codex Relay iOS 1.5.0 Beta 36
-
-          Adds light and dark appearance settings across the mobile app.
-
-          ### Included
-
-          - Choose System, Light, or Dark in settings, with System as the default
-          - Apply the selected appearance across chats, bots, settings, and workspace previews
-          - Update Markdown, code editor, and SSH terminal colors when the theme changes
-
-          ### Relay compatibility
-
-          Compatible with current Codex Relay server versions.
-
-          ### Build
-
-          - App version: \`${app_version}\`
-          - Mobile beta: \`1.5.0-beta.36\`
-          - Minimum iOS: \`${min_ios}\`
-          - Commit: \`${commit}\`
-
-          ### Installation
-
-          Download **CodexRelay-1.5.0-beta.36.ipa** and install it with TrollStore on a compatible device.
-          This is an ad-hoc signed sideload build, not an Apple distribution-signed or notarized release.
-          Automated checks and IPA build run in CI; physical-device validation remains pending.
-          EOF
-
-      - name: Publish beta prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.36'
-          ipa='dist/ios/CodexRelay-1.5.0-beta.36.ipa'
-
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" \
-              "$ipa" \
-              "$ipa.sha256" \
-              dist/ios/build-info.txt \
-              --clobber
-            gh release edit "$tag" \
-              --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 36' \
-              --notes-file /tmp/beta-release-notes.md \
-              --prerelease
-          else
-            gh release create "$tag" \
-              "$ipa" \
-              "$ipa.sha256" \
-              dist/ios/build-info.txt \
-              --target "$GITHUB_SHA" \
-              --title 'Codex Relay iOS 1.5.0 Beta 36' \
-              --notes-file /tmp/beta-release-notes.md \
-              --prerelease
-          fi
-
-      - name: Verify published IPA
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag='@codex-relay/mobile@1.5.0-beta.36'
-          ipa='CodexRelay-1.5.0-beta.36.ipa'
-          rm -rf /tmp/codex-relay-beta-check
-          mkdir -p /tmp/codex-relay-beta-check
-          gh release download "$tag" --pattern "$ipa" --dir /tmp/codex-relay-beta-check
-          expected="$(awk '{print $1}' "dist/ios/$ipa.sha256")"
-          actual="$(shasum -a 256 "/tmp/codex-relay-beta-check/$ipa" | awk '{print $1}')"
-          test "$expected" = "$actual"
-          echo "Verified beta IPA SHA-256: $actual"
+  beta:
+    needs: checks
+    permissions:
+      contents: write
+    uses: ./.github/workflows/ios-package.yml
+    with:
+      channel: beta

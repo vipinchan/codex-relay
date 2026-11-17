@@ -5,6 +5,7 @@ on:
     branches:
       - main
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -44,3 +45,12 @@ jobs:
 
       - name: Test Markdown parsing
         run: pnpm test:markdown
+
+      - name: Build relay test exports
+        run: pnpm --filter codex-relay build
+
+      - name: Test server
+        run: pnpm test
+
+      - name: Test mobile
+        run: pnpm --filter @codex-relay/mobile exec vitest run

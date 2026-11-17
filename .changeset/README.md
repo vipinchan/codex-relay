@@ -21,3 +21,8 @@ The workflow uses npm Trusted Publishing when it is configured for
 `gronxb/codex-relay` and `.github/workflows/release.yml`. A repository
 `NPM_TOKEN` secret remains supported as a fallback. GitHub Actions must also
 be allowed to create pull requests in the repository workflow settings.
+
+This automation only releases the npm package. Mobile native releases use
+`main` Beta builds and explicit stable version tags; see
+[Mobile releases](../docs/mobile-releases.md). Mobile changesets no longer
+trigger automatic release PRs or production OTA deployments.

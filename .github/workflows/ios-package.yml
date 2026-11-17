@@ -1,0 +1,129 @@
+name: Package iOS Release
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      RELEASE_CHANNEL: ${{ inputs.channel }}
+      CODEX_RELAY_RELEASE_CHANNEL: ${{ inputs.channel == 'beta' && 'beta' || 'production' }}
+    steps:
+      - name: Check out exact source commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify source belongs to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor HEAD origin/main
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve and validate release metadata
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @codex-relay/mobile exec expo config --json > /tmp/expo-release-config.json
+          node scripts/ios-release-metadata.mjs /tmp/expo-release-config.json
+
+      - name: Build IPA
+        env:
+          IOS_IPA_NAME: ${{ steps.release.outputs.ipa }}
+          MOBILE_RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: bash scripts/build-ios-ipa.sh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexRelay-${{ steps.release.outputs.version }}
+          path: dist/ios/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Prepare release notes
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "# Codex Relay iOS ${RELEASE_VERSION}"
+            echo
+            echo "- Channel: ${RELEASE_CHANNEL}"
+            echo "- Commit: $(git rev-parse HEAD)"
+            echo "- Native app version: $(node -p 'require("/tmp/expo-release-config.json").version')"
+            echo "- Build: ${GITHUB_RUN_NUMBER}, attempt ${GITHUB_RUN_ATTEMPT}"
+            echo
+            awk -v version="$RELEASE_VERSION" '
+              $0 == "## " version { capture=1; next }
+              capture && /^## / { exit }
+              capture { print }
+            ' apps/mobile/CHANGELOG.md
+            echo
+            echo "Install the ad-hoc signed IPA using a compatible sideloading installer."
+            echo "This workflow does not submit to the App Store or deploy OTA updates."
+          } > /tmp/ios-release-notes.md
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          IPA_NAME: ${{ steps.release.outputs.ipa }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Release $RELEASE_TAG already exists; published packages cannot be overwritten."
+            exit 1
+          fi
+          options=()
+          if [[ "$RELEASE_CHANNEL" == "beta" ]]; then
+            options+=(--prerelease --latest=false)
+          else
+            options+=(--verify-tag)
+          fi
+          gh release create "$RELEASE_TAG" \
+            "dist/ios/$IPA_NAME" "dist/ios/$IPA_NAME.sha256" dist/ios/build-info.txt \
+            --target "$(git rev-parse HEAD)" \
+            --title "Codex Relay iOS $RELEASE_TAG" \
+            --notes-file /tmp/ios-release-notes.md \
+            "${options[@]}"
+
+      - name: Verify published IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          IPA_NAME: ${{ steps.release.outputs.ipa }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          download_dir="$(mktemp -d)"
+          gh release download "$RELEASE_TAG" --dir "$download_dir"
+          cmp "dist/ios/$IPA_NAME.sha256" "$download_dir/$IPA_NAME.sha256"
+          cmp dist/ios/build-info.txt "$download_dir/build-info.txt"
+          expected="$(awk '{print $1}' "dist/ios/$IPA_NAME.sha256")"
+          actual="$(shasum -a 256 "$download_dir/$IPA_NAME" | awk '{print $1}')"
+          test "$expected" = "$actual"

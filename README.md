@@ -184,6 +184,10 @@ Commit the generated file with the change. The release workflow maintains a
 release pull request and publishes it after that pull request is merged. See
 [the Changesets guide](./.changeset/README.md) for the release process.
 
+iOS Beta packages are built from `main` after checks pass. Stable iOS packages
+are published from explicit `vX.Y.Z` tags. See [the mobile release guide](./docs/mobile-releases.md)
+for versioning, tag commands, and OTA boundaries.
+
 ## Common Commands
 
 | Command                                      | What it does                                        |

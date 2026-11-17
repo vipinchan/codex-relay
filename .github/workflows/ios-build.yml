@@ -1,17 +1,6 @@
 name: iOS Build
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "apps/mobile/**"
-      - "packages/**"
-      - "scripts/build-ios-ipa.sh"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - ".github/workflows/ios-build.yml"
   pull_request:
     branches:
       - main
@@ -23,7 +12,6 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/ios-build.yml"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,6 +25,8 @@ jobs:
     name: Build iOS IPA
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      CODEX_RELAY_RELEASE_CHANNEL: beta
 
     steps:
       - name: Check out repository
@@ -74,10 +64,6 @@ jobs:
           short_sha="${GITHUB_SHA:0:7}"
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             echo "name=CodexRelay-pr-${{ github.event.pull_request.number }}-${short_sha}" >> "$GITHUB_OUTPUT"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            echo "name=CodexRelay-main-${short_sha}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=CodexRelay-manual-${short_sha}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload IPA artifact
