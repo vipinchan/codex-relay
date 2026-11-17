@@ -198,13 +198,16 @@ export function BotsHome() {
                   <View
                     style={[
                       styles.statusBadge,
-                      { backgroundColor: bot.runtimeState === "running" ? "#1D3A31" : "#3A301D" },
+                      {
+                        backgroundColor:
+                          bot.runtimeState === "running" ? theme.successSoft : theme.warningSoft,
+                      },
                     ]}
                   >
                     <Text
                       style={[
                         styles.statusText,
-                        { color: bot.runtimeState === "running" ? "#78D9A5" : "#F3BF72" },
+                        { color: bot.runtimeState === "running" ? theme.success : theme.warning },
                       ]}
                     >
                       {bot.runtimeState === "running"
@@ -366,7 +369,7 @@ function GroupField({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   screen: { flex: 1 },
   header: {
     flexDirection: "row",
@@ -413,17 +416,17 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 15,
-    backgroundColor: "#292642",
+    backgroundColor: theme.backgroundAlt,
     alignItems: "center",
     justifyContent: "center",
   },
-  groupAvatarText: { color: "#A49CFF", fontFamily: Fonts.sansBold, fontSize: 22 },
+  groupAvatarText: { color: theme.accent, fontFamily: Fonts.sansBold, fontSize: 22 },
   statusTrailing: { flexDirection: "row", alignItems: "center", gap: 7 },
   statusBadge: { borderRadius: 7, paddingHorizontal: 7, paddingVertical: 4 },
   statusText: { fontFamily: Fonts.sansMedium, fontSize: 10 },
   empty: { fontSize: 13, paddingVertical: 16 },
-  error: { color: "#FF8DA5", fontSize: 13, paddingVertical: 12 },
+  error: { color: theme.danger, fontSize: 13, paddingVertical: 12 },
   field: { gap: 6, marginBottom: 10 },
   sheetLabel: { fontFamily: Fonts.sansSemiBold, fontSize: 13, marginTop: 10, marginBottom: 4 },
   sheetInput: { minHeight: 44, borderRadius: 11, paddingHorizontal: 12, fontSize: 15 },
-});
+}));

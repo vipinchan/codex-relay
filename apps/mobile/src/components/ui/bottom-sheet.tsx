@@ -192,7 +192,7 @@ export function AppBottomSheet({
       enableDismissOnClose
       enableDynamicSizing={enableDynamicSizing}
       enablePanDownToClose
-      handleIndicatorStyle={styles.handleIndicator}
+      handleIndicatorStyle={[styles.handleIndicator, { backgroundColor: theme.tintHeavy }]}
       handleStyle={styles.handle}
       index={clampedInitialSnapIndex}
       keyboardBehavior={keyboardBehavior}
@@ -262,7 +262,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   handleIndicator: {
-    backgroundColor: "rgba(255, 255, 255, 0.22)",
     height: 4,
     width: 38,
   },

@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import type { ChatMessage } from "codex-relay/api-schema";
 import { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -11,6 +12,7 @@ import { hapticSelection } from "@/lib/haptics";
 import { ProtocolActivityCard } from "./ProtocolActivityCard";
 
 export function ActivityGroupCard({ messages }: { messages: ChatMessage[] }) {
+  const theme = useTheme();
   const [isExpanded, setExpanded] = useState(false);
   const summary = useMemo(() => activitySummary(messages), [messages]);
   const isActive = messages.some((message) => message.state === "streaming");
@@ -37,7 +39,7 @@ export function ActivityGroupCard({ messages }: { messages: ChatMessage[] }) {
         <Icon
           name={isExpanded ? "expand" : "chevronRight"}
           size={13}
-          tintColor="rgba(176, 180, 186, 0.72)"
+          tintColor={theme.textSecondary}
           strokeWidth={2.2}
         />
       </Pressable>
@@ -74,9 +76,9 @@ function countLabel(count: number, label: string) {
   return count > 0 ? `${count} ${label}${count === 1 ? "" : "s"}` : undefined;
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   activityList: {
-    borderLeftColor: "rgba(255, 255, 255, 0.1)",
+    borderLeftColor: theme.borderSubtle,
     borderLeftWidth: StyleSheet.hairlineWidth,
     gap: 2,
     marginLeft: 8,
@@ -95,8 +97,8 @@ const styles = StyleSheet.create({
   header: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255, 255, 255, 0.035)",
-    borderColor: "rgba(255, 255, 255, 0.07)",
+    backgroundColor: theme.tintSubtle,
+    borderColor: theme.borderSubtle,
     borderRadius: 13,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
@@ -107,23 +109,23 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   label: {
-    color: "#9B8BD4",
+    color: theme.accent,
     fontSize: 11,
     lineHeight: 16,
   },
   labelActive: {
-    color: "#8BC8A0",
+    color: theme.success,
   },
   pressed: {
     opacity: 0.7,
   },
   statusDot: {
-    backgroundColor: "rgba(155, 139, 212, 0.78)",
+    backgroundColor: theme.tintHeavy,
     borderRadius: 3,
     height: 6,
     width: 6,
   },
   statusDotActive: {
-    backgroundColor: "#78B88B",
+    backgroundColor: theme.success,
   },
-});
+}));

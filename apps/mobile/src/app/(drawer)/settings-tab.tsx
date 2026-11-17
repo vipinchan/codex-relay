@@ -1,5 +1,5 @@
-import { SettingsHomeScreen } from "../settings-home";
+import SettingsScreen from "../settings";
 
 export default function SettingsTabRoute() {
-  return <SettingsHomeScreen embedded />;
+  return <SettingsScreen embedded />;
 }

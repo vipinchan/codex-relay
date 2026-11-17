@@ -52,7 +52,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Icon, type AppIconName } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
-import { Fonts } from "@/constants/theme";
+import { Fonts, type ThemeColors } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
   getCodexRelayCacheIdentity,
@@ -88,12 +88,14 @@ const QUEUE_ICON_BUTTON_SIZE = 28;
 const QUEUE_ACTION_GAP = 6;
 const QUEUE_ACTIONS_WIDTH =
   QUEUE_STEER_BUTTON_WIDTH + QUEUE_ICON_BUTTON_SIZE * 2 + QUEUE_ACTION_GAP * 2;
-const MENTION_INPUT_MARKDOWN_STYLE = {
-  link: {
-    color: "#7CC7FF",
-    underline: false,
-  },
-} satisfies MarkdownTextInputStyle;
+function mentionInputMarkdownStyle(theme: ThemeColors): MarkdownTextInputStyle {
+  return {
+    link: {
+      color: theme.accentBright,
+      underline: false,
+    },
+  };
+}
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 type PlanDecision = "context" | "implement";
@@ -400,9 +402,9 @@ export const ChatComposer = memo(function ChatComposer({
       ...(isPlanMode ? styles.inputWithModeChip : undefined),
       color: theme.text,
     }),
-    [isPlanMode, theme.text],
+    [isPlanMode, theme],
   );
-  const inputMarkdownStyle = MENTION_INPUT_MARKDOWN_STYLE;
+  const inputMarkdownStyle = useMemo(() => mentionInputMarkdownStyle(theme), [theme]);
   const shouldShowPlanConfirmation = Boolean(
     planConfirmationId &&
     planConfirmationId !== dismissedPlanConfirmationId &&
@@ -1026,7 +1028,7 @@ export const ChatComposer = memo(function ChatComposer({
           styles.container,
           {
             backgroundColor: theme.backgroundElement,
-            borderColor: "rgba(255, 255, 255, 0.12)",
+            borderColor: theme.controlBorderStrong,
           },
         ]}
       >
@@ -1057,7 +1059,7 @@ export const ChatComposer = memo(function ChatComposer({
             }
             placeholderTextColor={theme.textSecondary}
             scrollEnabled
-            selectionColor="rgba(142, 199, 255, 0.34)"
+            selectionColor={theme.composerSelection}
             style={inputStyle}
           />
           {isPlanMode ? (
@@ -1111,7 +1113,11 @@ export const ChatComposer = memo(function ChatComposer({
                 pressed && styles.pressed,
               ]}
             >
-              <Icon name="send" size={20} tintColor={canSend ? "#0D0F13" : theme.textSecondary} />
+              <Icon
+                name="send"
+                size={20}
+                tintColor={canSend ? theme.composerActionForeground : theme.textSecondary}
+              />
             </Button>
           ) : null}
 
@@ -1125,7 +1131,12 @@ export const ChatComposer = memo(function ChatComposer({
               className="rounded-full size-9"
               style={({ pressed }) => [styles.sendButton, pressed && styles.pressed]}
             >
-              <Icon name="stop" size={14} tintColor="#0D0F13" fill="#0D0F13" />
+              <Icon
+                name="stop"
+                size={14}
+                tintColor={theme.composerActionForeground}
+                fill={theme.composerActionForeground}
+              />
             </Button>
           ) : null}
         </View>
@@ -1217,6 +1228,7 @@ const SkillSuggestionPanel = memo(function SkillSuggestionPanel({
   textColor: string;
   textSecondaryColor: string;
 }) {
+  const theme = useTheme();
   const renderSkill = useCallback(
     ({ item }: LegendListRenderItemProps<AgentSkill>) => (
       <SkillSuggestionRow
@@ -1236,8 +1248,8 @@ const SkillSuggestionPanel = memo(function SkillSuggestionPanel({
       style={[
         styles.skillPanel,
         {
-          backgroundColor: "rgba(28, 28, 30, 0.98)",
-          borderColor: "rgba(255, 255, 255, 0.14)",
+          backgroundColor: theme.backgroundSheet,
+          borderColor: theme.panelBorder,
         },
       ]}
     >
@@ -1324,6 +1336,7 @@ const FileSuggestionPanel = memo(function FileSuggestionPanel({
   textColor: string;
   textSecondaryColor: string;
 }) {
+  const theme = useTheme();
   const renderFile = useCallback(
     ({ item }: LegendListRenderItemProps<WorkspaceFileMention>) => (
       <FileSuggestionRow
@@ -1343,8 +1356,8 @@ const FileSuggestionPanel = memo(function FileSuggestionPanel({
       style={[
         styles.skillPanel,
         {
-          backgroundColor: "rgba(28, 28, 30, 0.98)",
-          borderColor: "rgba(255, 255, 255, 0.14)",
+          backgroundColor: theme.backgroundSheet,
+          borderColor: theme.panelBorder,
         },
       ]}
     >
@@ -1456,6 +1469,8 @@ const ComposerTopAccessoryPanel = memo(function ComposerTopAccessoryPanel({
   textColor: string;
   textSecondaryColor: string;
 }) {
+  const theme = useTheme();
+  const promptMarkdownStyle = useMemo(() => queuePromptMarkdownStyle(theme), [theme]);
   const [isEditingGoal, setEditingGoal] = useState(false);
   const [goalDraft, setGoalDraft] = useState(goal?.objective ?? "");
   const trimmedGoalDraft = goalDraft.trim();
@@ -1511,8 +1526,8 @@ const ComposerTopAccessoryPanel = memo(function ComposerTopAccessoryPanel({
         style={[
           styles.queuePanel,
           {
-            backgroundColor: "rgba(28, 28, 30, 0.98)",
-            borderColor: "rgba(255, 255, 255, 0.14)",
+            backgroundColor: theme.backgroundSheet,
+            borderColor: theme.panelBorder,
           },
         ]}
       >
@@ -1530,7 +1545,7 @@ const ComposerTopAccessoryPanel = memo(function ComposerTopAccessoryPanel({
                       color={textColor}
                       fontSize={12}
                       lineHeight={16}
-                      markdownStyle={queuePromptMarkdownStyle}
+                      markdownStyle={promptMarkdownStyle}
                       prompt={item.prompt}
                       skills={itemSkills}
                     />
@@ -1607,7 +1622,7 @@ const ComposerTopAccessoryPanel = memo(function ComposerTopAccessoryPanel({
                 <Icon
                   name={goalStatusIconName(goal.status)}
                   size={16}
-                  tintColor={goalStatusTintColor(goal.status)}
+                  tintColor={goalStatusTintColor(goal.status, theme)}
                 />
               </View>
               <View style={styles.goalPromptBody}>
@@ -1704,11 +1719,11 @@ const ComposerTopAccessoryPanel = memo(function ComposerTopAccessoryPanel({
             placeholder="Goal objective"
             placeholderTextColor={textSecondaryColor}
             returnKeyType="done"
-            selectionColor="rgba(124, 199, 255, 0.28)"
+            selectionColor={theme.goalSelection}
             style={[
               styles.goalEditSheetInput,
               {
-                borderColor: "rgba(255, 255, 255, 0.14)",
+                borderColor: theme.panelBorder,
                 color: textColor,
               },
             ]}
@@ -1743,20 +1758,22 @@ const ComposerTopAccessoryPanel = memo(function ComposerTopAccessoryPanel({
   );
 });
 
-const queuePromptMarkdownStyle = {
-  link: {
-    color: "#7CC7FF",
-    fontFamily: Fonts.sansSemiBold,
-    underline: false,
-  },
-  paragraph: {
-    fontFamily: Fonts.sansMedium,
-    fontSize: 12,
-    lineHeight: 16,
-    marginBottom: 0,
-    marginTop: 0,
-  },
-} satisfies MarkdownStyle;
+function queuePromptMarkdownStyle(theme: ThemeColors): MarkdownStyle {
+  return {
+    link: {
+      color: theme.accentBright,
+      fontFamily: Fonts.sansSemiBold,
+      underline: false,
+    },
+    paragraph: {
+      fontFamily: Fonts.sansMedium,
+      fontSize: 12,
+      lineHeight: 16,
+      marginBottom: 0,
+      marginTop: 0,
+    },
+  };
+}
 
 function PlanDecisionPanel({
   contextDraft,
@@ -1813,7 +1830,7 @@ function PlanDecisionPanel({
         styles.planDecisionPanel,
         {
           backgroundColor: theme.backgroundElement,
-          borderColor: "rgba(255, 255, 255, 0.14)",
+          borderColor: theme.panelBorder,
         },
       ]}
     >
@@ -1913,7 +1930,7 @@ function InputRequestPanel({
         styles.planDecisionPanel,
         {
           backgroundColor: theme.backgroundElement,
-          borderColor: "rgba(255, 255, 255, 0.14)",
+          borderColor: theme.panelBorder,
         },
       ]}
     >
@@ -2206,7 +2223,12 @@ function ContextUsageRing({
   const theme = useTheme();
   const percent = usage ? Math.round((usage.tokensUsed / usage.tokenLimit) * 100) : undefined;
   const clamped = Math.max(0, Math.min(100, percent ?? 0));
-  const ringColor = clamped >= 85 ? "#F87171" : clamped >= 65 ? "#FBBF24" : "#A7F3D0";
+  const ringColor =
+    clamped >= 85
+      ? theme.dangerStrong
+      : clamped >= 65
+        ? theme.contextWarning
+        : theme.contextHealthy;
   const size = 22;
   const strokeWidth = 2.4;
   const radius = (size - strokeWidth) / 2;
@@ -2888,17 +2910,17 @@ function goalStatusIconName(status: ThreadGoal["status"]): AppIconName {
   }
 }
 
-function goalStatusTintColor(status: ThreadGoal["status"]) {
+function goalStatusTintColor(status: ThreadGoal["status"], theme: ThemeColors) {
   switch (status) {
     case "active":
     case "complete":
-      return "#8EE6B1";
+      return theme.goalActive;
     case "paused":
-      return "#F8C66A";
+      return theme.goalPaused;
     case "blocked":
     case "usageLimited":
     case "budgetLimited":
-      return "#FFB36B";
+      return theme.goalLimited;
     default:
       return assertNever(status);
   }
@@ -2918,12 +2940,12 @@ function sameSkillSelection(left: AgentSkill[], right: AgentSkill[]) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   composerStack: {
     position: "relative",
   },
   container: {
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    borderColor: theme.inputBorder,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 19,
     gap: 2,
@@ -2935,7 +2957,7 @@ const styles = StyleSheet.create({
     paddingTop: 7,
   },
   planDecisionPanel: {
-    borderColor: "rgba(255, 255, 255, 0.14)",
+    borderColor: theme.panelBorder,
     borderRadius: 18,
     borderWidth: 1,
     gap: 8,
@@ -2981,7 +3003,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   planDecisionRowSelected: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    backgroundColor: theme.tintMuted,
   },
   planContextInputRow: {
     alignItems: "center",
@@ -3050,13 +3072,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   planSubmitText: {
-    color: "#0D0F13",
+    color: theme.composerActionForeground,
     fontFamily: Fonts.sansSemiBold,
     fontSize: 12,
     lineHeight: 16,
   },
   queuePanel: {
-    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+    borderBottomColor: theme.borderSubtle,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     borderWidth: 1,
@@ -3211,8 +3233,8 @@ const styles = StyleSheet.create({
   },
   queueSteerPill: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "rgba(255, 255, 255, 0.22)",
+    backgroundColor: theme.tintStrong,
+    borderColor: theme.controlBorderEmphasis,
     borderRadius: 10,
     borderWidth: 1,
     flexDirection: "row",
@@ -3222,8 +3244,8 @@ const styles = StyleSheet.create({
     width: QUEUE_STEER_BUTTON_WIDTH,
   },
   queueSteerPillPressed: {
-    backgroundColor: "rgba(255, 255, 255, 0.22)",
-    borderColor: "rgba(255, 255, 255, 0.34)",
+    backgroundColor: theme.tintHeavy,
+    borderColor: theme.controlBorderPressed,
     opacity: 1,
     transform: [{ scale: 0.94 }],
   },
@@ -3243,8 +3265,8 @@ const styles = StyleSheet.create({
   },
   queueIconCircle: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: theme.tintMedium,
+    borderColor: theme.controlBorderMedium,
     borderRadius: 10,
     borderWidth: 1,
     height: QUEUE_ICON_BUTTON_SIZE,
@@ -3252,8 +3274,8 @@ const styles = StyleSheet.create({
     width: QUEUE_ICON_BUTTON_SIZE,
   },
   queueIconCirclePressed: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    borderColor: "rgba(255, 255, 255, 0.32)",
+    backgroundColor: theme.controlBackgroundPressed,
+    borderColor: theme.controlBorderActive,
     opacity: 1,
     transform: [{ scale: 0.94 }],
   },
@@ -3289,7 +3311,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   skillRowPressed: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.borderSubtle,
   },
   skillIcon: {
     alignItems: "center",
@@ -3340,7 +3362,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   input: {
-    backgroundColor: "transparent",
+    backgroundColor: theme.transparent,
     fontFamily: Fonts.sans,
     fontSize: 15,
     lineHeight: 21,
@@ -3360,8 +3382,8 @@ const styles = StyleSheet.create({
   },
   planModeChip: {
     alignItems: "center",
-    backgroundColor: "rgba(118, 118, 128, 0.18)",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.actionControlBackground,
+    borderColor: theme.controlBorderStrong,
     borderRadius: 12,
     borderWidth: 1,
     height: 24,
@@ -3373,7 +3395,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   planModeChipText: {
-    color: "#F2F2F2",
+    color: theme.actionControlForeground,
     fontFamily: Fonts.sansSemiBold,
     fontSize: 11,
     includeFontPadding: false,
@@ -3381,7 +3403,7 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     alignItems: "center",
-    borderTopColor: "rgba(255, 255, 255, 0.07)",
+    borderTopColor: theme.dividerSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 7,
@@ -3399,8 +3421,8 @@ const styles = StyleSheet.create({
   },
   attachmentChip: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: "rgba(255, 255, 255, 0.16)",
+    backgroundColor: theme.tintSubtle,
+    borderColor: theme.attachmentBorder,
     borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
@@ -3411,7 +3433,7 @@ const styles = StyleSheet.create({
   },
   attachmentChipIcon: {
     alignItems: "center",
-    borderColor: "rgba(255, 255, 255, 0.22)",
+    borderColor: theme.controlBorderEmphasis,
     borderRadius: 9,
     borderWidth: 1,
     height: 18,
@@ -3425,7 +3447,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   attachmentChipLabel: {
-    backgroundColor: "transparent",
+    backgroundColor: theme.transparent,
     fontFamily: Fonts.sansSemiBold,
     fontSize: 12,
     height: 18,
@@ -3482,8 +3504,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   iconButton: {
-    backgroundColor: "rgba(118, 118, 128, 0.18)",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.actionControlBackground,
+    borderColor: theme.controlBorderStrong,
     borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
     height: 36,
@@ -3491,18 +3513,18 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     alignItems: "center",
-    backgroundColor: "#F5F5F7",
+    backgroundColor: theme.text,
     borderRadius: 18,
     height: 36,
     justifyContent: "center",
     width: 36,
   },
   sendButtonDisabled: {
-    backgroundColor: "rgba(245, 245, 247, 0.16)",
+    backgroundColor: theme.disabledActionBackground,
     opacity: 0.72,
   },
   sheetSection: {
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    borderTopColor: theme.borderSubtle,
     borderTopWidth: 1,
     marginTop: 8,
     paddingTop: 10,
@@ -3548,4 +3570,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.75,
   },
-});
+}));

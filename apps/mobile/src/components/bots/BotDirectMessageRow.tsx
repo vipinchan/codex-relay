@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import type { BotMessage, ChatMessage } from "codex-relay/api-schema";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -19,6 +20,7 @@ export function BotDirectMessageRow({
   isActiveReply: boolean;
   onOpenMarkdownAttachment: (target: WorkspaceMarkdownPreviewTarget) => void;
 }) {
+  const theme = useTheme();
   const chatMessage: ChatMessage = message.activity ?? {
     id: message.id,
     threadId: message.conversationId,
@@ -38,7 +40,7 @@ export function BotDirectMessageRow({
     <View style={isSource ? styles.source : undefined}>
       {message.status === "running" ? (
         <View style={styles.progress}>
-          {isActiveReply ? <ActivityIndicator size="small" color="#6EA8FF" /> : null}
+          {isActiveReply ? <ActivityIndicator size="small" color={theme.accent} /> : null}
           <Text style={styles.hint}>
             {isActiveReply ? botText("正在回复…", "Responding…") : botText("等待回复…", "Queued…")}
           </Text>
@@ -54,8 +56,8 @@ export function BotDirectMessageRow({
   );
 }
 
-const styles = StyleSheet.create({
-  source: { backgroundColor: "rgba(110, 168, 255, 0.17)", borderRadius: 12 },
+const styles = StyleSheet.create((theme) => ({
+  source: { backgroundColor: theme.accentBorder, borderRadius: 12 },
   progress: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12 },
-  hint: { color: "#929AA8", fontSize: 12 },
-});
+  hint: { color: theme.textSecondary, fontSize: 12 },
+}));

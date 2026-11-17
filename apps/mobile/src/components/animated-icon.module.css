@@ -1,5 +1,5 @@
 .relayLogoBackground {
-  background-color: #191919;
+  background-color: var(--color-card);
   border-radius: 40px;
   width: 128px;
   height: 128px;

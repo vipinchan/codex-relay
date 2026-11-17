@@ -10,7 +10,9 @@ import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
-export const botPalette = ["#6EA8FF", "#72DDD5", "#A49CFF", "#FF8DA5", "#78D9A5", "#F3BF72"];
+import { botColorPalette } from "@/constants/appearance";
+
+export const botPalette = botColorPalette;
 const zh = (Intl.DateTimeFormat().resolvedOptions().locale || "en").toLowerCase().startsWith("zh");
 export const botText = (cn: string, en: string) => (zh ? cn : en);
 export const botError = (error: unknown) =>
@@ -149,7 +151,7 @@ export function BotPrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   page: { flex: 1 },
   header: {
     height: 57,
@@ -189,5 +191,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 18,
   },
-  primaryText: { color: "#fff", fontFamily: Fonts.sansSemiBold, fontSize: 15 },
-});
+  primaryText: { color: theme.onAccent, fontFamily: Fonts.sansSemiBold, fontSize: 15 },
+}));

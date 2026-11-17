@@ -1,6 +1,8 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 import { config } from "dotenv";
 
+import appearanceConfig from "./src/constants/appearance-config.json";
+
 config({ path: ".env.hotupdater", quiet: true });
 
 const hotUpdaterApiKey =
@@ -14,7 +16,7 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "codex-relay",
-    userInterfaceStyle: "dark",
+    userInterfaceStyle: "automatic",
     ios: {
       icon: "./assets/images/icon.png",
       bundleIdentifier: "com.gronstudio.codexrelay",
@@ -38,7 +40,7 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
     },
     android: {
       adaptiveIcon: {
-        backgroundColor: "#000000",
+        backgroundColor: appearanceConfig.imageBackground,
         foregroundImage: "./assets/images/android-icon-foreground.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
@@ -61,7 +63,10 @@ export default function appConfig(_context: ConfigContext): ExpoConfig {
       [
         "expo-splash-screen",
         {
-          backgroundColor: "#000000",
+          backgroundColor: appearanceConfig.splashLightBackground,
+          dark: {
+            backgroundColor: appearanceConfig.splashDarkBackground,
+          },
           image: "./assets/images/splash-icon.png",
           imageWidth: 112,
           android: {

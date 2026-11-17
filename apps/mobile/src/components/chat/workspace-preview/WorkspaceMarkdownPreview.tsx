@@ -31,8 +31,8 @@ export function WorkspaceMarkdownPreview({ markdown }: { markdown: string }) {
       md4cFlags={{ latexMath: true, underline: false }}
       onLinkPress={handleMarkdownLinkPress}
       selectable
-      selectionColor="rgba(95, 167, 255, 0.32)"
-      selectionHandleColor="#5fa7ff"
+      selectionColor={theme.accentBorder}
+      selectionHandleColor={theme.accentStrong}
       selectionMenuConfig={MARKDOWN_SELECTION_MENU_CONFIG}
       spoilerOverlay="solid"
     />
@@ -57,8 +57,8 @@ function handleMarkdownLinkPress(event: LinkPressEvent) {
 function workspaceMarkdownStyle(theme: ReturnType<typeof useTheme>): MarkdownStyle {
   return {
     blockquote: {
-      backgroundColor: "rgba(95, 167, 255, 0.08)",
-      borderColor: "#5fa7ff",
+      backgroundColor: theme.accentSoft,
+      borderColor: theme.accentStrong,
       borderWidth: 2,
       color: theme.text,
       fontFamily: Fonts.sans,
@@ -69,15 +69,15 @@ function workspaceMarkdownStyle(theme: ReturnType<typeof useTheme>): MarkdownSty
       marginTop: 0,
     },
     code: {
-      backgroundColor: "rgba(255, 255, 255, 0.08)",
-      borderColor: "rgba(255, 255, 255, 0.12)",
-      color: "#D7E0EA",
+      backgroundColor: theme.inlineCodeBackground,
+      borderColor: theme.inlineCodeBorder,
+      color: theme.inlineCodeText,
       fontFamily: Fonts.monoMedium,
       fontSize: 13,
     },
     codeBlock: {
       backgroundColor: theme.backgroundSelected,
-      borderColor: "rgba(132, 145, 165, 0.25)",
+      borderColor: theme.borderStrong,
       borderRadius: 8,
       borderWidth: 1,
       color: theme.text,
@@ -150,10 +150,10 @@ function workspaceMarkdownStyle(theme: ReturnType<typeof useTheme>): MarkdownSty
       size: 18,
     },
     inlineMath: {
-      color: "#D7E0EA",
+      color: theme.inlineCodeText,
     },
     link: {
-      color: "#5fa7ff",
+      color: theme.accentStrong,
       fontFamily: Fonts.sans,
       underline: false,
     },
@@ -170,7 +170,7 @@ function workspaceMarkdownStyle(theme: ReturnType<typeof useTheme>): MarkdownSty
       marginTop: 0,
     },
     math: {
-      backgroundColor: "rgba(255, 255, 255, 0.06)",
+      backgroundColor: theme.tintMuted,
       color: theme.text,
       fontSize: 14,
       marginBottom: 10,
@@ -195,7 +195,7 @@ function workspaceMarkdownStyle(theme: ReturnType<typeof useTheme>): MarkdownSty
       color: theme.textSecondary,
     },
     table: {
-      borderColor: "rgba(132, 145, 165, 0.3)",
+      borderColor: theme.borderStrong,
       borderRadius: 8,
       borderWidth: 1,
       cellPaddingHorizontal: 10,
@@ -203,26 +203,26 @@ function workspaceMarkdownStyle(theme: ReturnType<typeof useTheme>): MarkdownSty
       color: theme.text,
       fontFamily: Fonts.sans,
       fontSize: 13,
-      headerBackgroundColor: "rgba(255, 255, 255, 0.1)",
+      headerBackgroundColor: theme.tintMedium,
       headerFontFamily: Fonts.sansSemiBold,
       headerTextColor: theme.text,
       lineHeight: 19,
       marginBottom: 10,
       marginTop: 2,
-      rowEvenBackgroundColor: "rgba(255, 255, 255, 0.03)",
-      rowOddBackgroundColor: "rgba(255, 255, 255, 0.055)",
+      rowEvenBackgroundColor: theme.tintSubtle,
+      rowOddBackgroundColor: theme.tintMuted,
     },
     taskList: {
-      borderColor: "rgba(132, 145, 165, 0.55)",
+      borderColor: theme.borderEmphasis,
       checkboxBorderRadius: 4,
       checkboxSize: 18,
-      checkedColor: "#5fa7ff",
+      checkedColor: theme.accentStrong,
       checkedStrikethrough: true,
       checkedTextColor: theme.textSecondary,
       checkmarkColor: theme.background,
     },
     thematicBreak: {
-      color: "rgba(132, 145, 165, 0.24)",
+      color: theme.tintHeavy,
       height: 1,
       marginBottom: 12,
       marginTop: 8,

@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import { Tabs } from "expo-router";
 import { Bot, MessageSquare, Settings } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -6,14 +7,19 @@ const locale = Intl.DateTimeFormat().resolvedOptions().locale || "en";
 const zh = locale.toLowerCase().startsWith("zh");
 
 export default function MainTabsLayout() {
+  const theme = useTheme();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#6EA8FF",
-        tabBarInactiveTintColor: "#8E8E93",
+        tabBarActiveTintColor: theme.accent,
+        tabBarInactiveTintColor: theme.textSecondary,
         tabBarHideOnKeyboard: true,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: {
+          ...styles.tabBar,
+          backgroundColor: theme.backgroundAlt,
+          borderTopColor: theme.borderSubtle,
+        },
         tabBarLabelStyle: styles.tabBarLabel,
       }}
     >
@@ -44,8 +50,6 @@ export default function MainTabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: "#0C0C0D",
-    borderTopColor: "rgba(255,255,255,0.1)",
     paddingTop: 6,
   },
   tabBarLabel: {

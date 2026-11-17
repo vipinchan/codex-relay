@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import { HotUpdater } from "@hot-updater/react-native";
 import { isMacLocalBuild } from "@/lib/build-platform";
 import { useSelector } from "@legendapp/state/react";
@@ -15,6 +16,7 @@ import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { getActiveComputer, removeComputer } from "@/lib/computer-profiles";
 
 import { ComputerSettings } from "@/components/settings/ComputerSettings";
+import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 
 import { FaGithub } from "@/assets/icons/fa";
 import { ThemedText } from "@/components/themed-text";
@@ -25,7 +27,7 @@ import {
   codexRelaySponsorLabel,
   codexRelaySponsorUrl,
 } from "@/constants/links";
-import { Colors, Fonts, MaxContentWidth, Spacing } from "@/constants/theme";
+import { Fonts, MaxContentWidth, Spacing } from "@/constants/theme";
 import {
   getPushNotificationSettings as rawGetPushNotificationSettings,
   registerPushNotifications as rawRegisterPushNotifications,
@@ -53,14 +55,11 @@ import mobilePackage from "../../package.json";
 
 const hotUpdaterBaseUrl = process.env.EXPO_PUBLIC_HOT_UPDATER_BASE_URL?.trim();
 const hotUpdaterBaseUrlStatus = hotUpdaterBaseUrl ? "configured" : "missing";
-const pushNotificationTrackColor = {
-  false: "rgba(255, 255, 255, 0.16)",
-  true: "#2CA36F",
-};
 
 type PushNotificationPreference = keyof typeof defaultPushNotificationPreferences;
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ embedded = false }: { embedded?: boolean }) {
+  const theme = useTheme();
   const { getPushNotificationSettings, registerPushNotifications, unregisterPushNotifications } =
     useComputerOperations({
       getPushNotificationSettings: rawGetPushNotificationSettings,
@@ -291,17 +290,24 @@ export default function SettingsScreen() {
   }
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
+    <SafeAreaView
+      edges={["top", "left", "right"]}
+      style={[styles.screen, { backgroundColor: theme.background }]}
+    >
       <View style={styles.container}>
         <View style={styles.header}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back to threads"
-            onPress={closeSettings}
-            style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
-          >
-            <Icon name="back" size={19} tintColor={Colors.dark.text} />
-          </Pressable>
+          {embedded ? (
+            <View style={styles.headerButtonPlaceholder} />
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to threads"
+              onPress={closeSettings}
+              style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
+            >
+              <Icon name="back" size={19} tintColor={theme.text} />
+            </Pressable>
+          )}
           <View style={styles.titleGroup}>
             <ThemedText type="smallBold" style={styles.title}>
               Settings
@@ -318,6 +324,7 @@ export default function SettingsScreen() {
           showsVerticalScrollIndicator={false}
           style={styles.scroll}
         >
+          <AppearanceSettings />
           <Animated.View layout={settingsLayoutTransition} style={styles.section}>
             <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
               Project
@@ -330,7 +337,7 @@ export default function SettingsScreen() {
                 style={({ pressed }) => [styles.projectLinkRow, pressed && styles.pressed]}
               >
                 <View style={styles.projectLinkIcon}>
-                  <FaGithub size={17} color={Colors.dark.text} />
+                  <FaGithub size={17} color={theme.text} />
                 </View>
                 <View style={styles.projectLinkCopy}>
                   <ThemedText type="smallBold" style={styles.projectLinkTitle}>
@@ -345,7 +352,7 @@ export default function SettingsScreen() {
                     {codexRelayRepositoryLabel}
                   </ThemedText>
                 </View>
-                <Icon name="externalLink" size={15} tintColor={Colors.dark.textSecondary} />
+                <Icon name="externalLink" size={15} tintColor={theme.textSecondary} />
               </Pressable>
               <Pressable
                 accessibilityRole="link"
@@ -354,7 +361,7 @@ export default function SettingsScreen() {
                 style={({ pressed }) => [styles.projectLinkRow, pressed && styles.pressed]}
               >
                 <View style={[styles.projectLinkIcon, styles.projectLinkIconSponsor]}>
-                  <Heart size={16} color="#FF9FC0" fill="#FF9FC0" />
+                  <Heart size={16} color={theme.sponsor} fill={theme.sponsor} />
                 </View>
                 <View style={styles.projectLinkCopy}>
                   <ThemedText type="smallBold" style={styles.projectLinkTitle}>
@@ -369,7 +376,7 @@ export default function SettingsScreen() {
                     {codexRelaySponsorLabel}
                   </ThemedText>
                 </View>
-                <Icon name="externalLink" size={15} tintColor={Colors.dark.textSecondary} />
+                <Icon name="externalLink" size={15} tintColor={theme.textSecondary} />
               </Pressable>
             </Animated.View>
           </Animated.View>
@@ -492,7 +499,7 @@ export default function SettingsScreen() {
               >
                 <View style={styles.signOutContent}>
                   <View style={styles.signOutIconSlot}>
-                    <Icon name="signOut" size={17} tintColor="#FFB4A8" />
+                    <Icon name="signOut" size={17} tintColor={theme.danger} />
                   </View>
                   <View style={styles.signOutCopy}>
                     <ThemedText type="smallBold" style={styles.signOutTitle}>
@@ -523,7 +530,7 @@ export default function SettingsScreen() {
                   <Icon
                     name={isAppUpdatePending ? "refresh" : "permissionsAuto"}
                     size={12}
-                    tintColor={isAppUpdatePending ? "#93E1B6" : Colors.dark.textSecondary}
+                    tintColor={isAppUpdatePending ? theme.success : theme.textSecondary}
                   />
                 </View>
                 <ThemedText type="code" themeColor="textSecondary" style={styles.versionText}>
@@ -682,6 +689,7 @@ function PushNotificationToggle({
   title: string;
   value: boolean;
 }) {
+  const theme = useTheme();
   return (
     <Animated.View
       entering={settingsEnterTransition}
@@ -701,8 +709,8 @@ function PushNotificationToggle({
         accessibilityLabel={accessibilityLabel}
         disabled={disabled}
         onValueChange={onValueChange}
-        thumbColor={value ? "#DDF7E7" : "#BEC5C3"}
-        trackColor={pushNotificationTrackColor}
+        thumbColor={value ? theme.switchThumbOn : theme.switchThumbOff}
+        trackColor={{ false: theme.tintProminent, true: theme.successStrong }}
         value={value}
       />
     </Animated.View>
@@ -722,9 +730,10 @@ function RateLimitProgressRow({
   showDivider: boolean;
   usedPercent: number;
 }) {
+  const theme = useTheme();
   const clampedUsedPercent = clampPercent(usedPercent);
   const clampedRemainingPercent = clampPercent(remainingPercent);
-  const progressColor = rateLimitProgressColor(clampedRemainingPercent);
+  const progressColor = rateLimitProgressColor(clampedRemainingPercent, theme);
 
   return (
     <Animated.View
@@ -786,14 +795,14 @@ function clampPercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function rateLimitProgressColor(remainingPercent: number) {
+function rateLimitProgressColor(remainingPercent: number, theme: ReturnType<typeof useTheme>) {
   if (remainingPercent <= 10) {
-    return "#FF9B8D";
+    return theme.danger;
   }
   if (remainingPercent <= 30) {
-    return "#F2B84B";
+    return theme.warning;
   }
-  return "#93E1B6";
+  return theme.success;
 }
 
 function settingsErrorMessage(error: unknown) {
@@ -827,10 +836,10 @@ const settingsLayoutTransition = LinearTransition.duration(180);
 const settingsEnterTransition = FadeIn.duration(120);
 const settingsExitTransition = FadeOut.duration(90);
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   screen: {
     alignItems: "center",
-    backgroundColor: Colors.dark.background,
+    backgroundColor: theme.background,
     flex: 1,
   },
   container: {
@@ -848,8 +857,8 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.borderSubtle,
     borderRadius: 20,
     borderWidth: 1,
     height: 40,
@@ -895,8 +904,8 @@ const styles = StyleSheet.create({
     opacity: 0.68,
   },
   projectLinkList: {
-    backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(255, 255, 255, 0.09)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     gap: 7,
@@ -904,8 +913,8 @@ const styles = StyleSheet.create({
   },
   projectLinkRow: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.tintSubtle,
+    borderColor: theme.borderSubtle,
     borderRadius: 7,
     borderWidth: 1,
     flexDirection: "row",
@@ -916,8 +925,8 @@ const styles = StyleSheet.create({
   },
   projectLinkIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.borderSubtle,
     borderRadius: 15,
     borderWidth: 1,
     flexShrink: 0,
@@ -926,8 +935,8 @@ const styles = StyleSheet.create({
     width: 30,
   },
   projectLinkIconSponsor: {
-    backgroundColor: "rgba(255, 159, 192, 0.12)",
-    borderColor: "rgba(255, 159, 192, 0.22)",
+    backgroundColor: theme.dangerSoft,
+    borderColor: theme.dangerBorder,
   },
   projectLinkCopy: {
     flex: 1,
@@ -974,8 +983,8 @@ const styles = StyleSheet.create({
   },
   versionButton: {
     alignItems: "center",
-    backgroundColor: "rgba(44, 163, 111, 0.13)",
-    borderColor: "rgba(44, 163, 111, 0.28)",
+    backgroundColor: theme.successSoft,
+    borderColor: theme.successBorder,
     borderRadius: 6,
     borderWidth: 1,
     flexShrink: 0,
@@ -987,7 +996,7 @@ const styles = StyleSheet.create({
     opacity: 0.62,
   },
   versionButtonText: {
-    color: "#93E1B6",
+    color: theme.success,
     fontFamily: Fonts.monoMedium,
     fontSize: 10,
     lineHeight: 13,
@@ -997,8 +1006,8 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   hotUpdaterLogPanel: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     gap: Spacing.two,
@@ -1020,21 +1029,21 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   hotUpdaterLogButton: {
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: theme.borderSubtle,
     borderRadius: 6,
     borderWidth: 1,
     paddingHorizontal: 7,
     paddingVertical: 4,
   },
   hotUpdaterLogButtonText: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     fontFamily: Fonts.monoMedium,
     fontSize: 9,
     lineHeight: 12,
   },
   hotUpdaterConfigRow: {
-    backgroundColor: "rgba(140, 199, 255, 0.07)",
-    borderColor: "rgba(140, 199, 255, 0.14)",
+    backgroundColor: theme.accentSoft,
+    borderColor: theme.accentBorder,
     borderRadius: 6,
     borderWidth: 1,
     gap: 3,
@@ -1042,34 +1051,34 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   hotUpdaterConfigLabel: {
-    color: "#8CC7FF",
+    color: theme.info,
     fontFamily: Fonts.monoMedium,
     fontSize: 9,
     lineHeight: 12,
   },
   hotUpdaterConfigValue: {
-    color: Colors.dark.text,
+    color: theme.text,
     fontFamily: Fonts.monoMedium,
     fontSize: 10,
     lineHeight: 14,
   },
   hotUpdaterConfigValueMissing: {
-    color: "#FFB4A8",
+    color: theme.danger,
   },
   hotUpdaterLogRow: {
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    borderTopColor: theme.borderSubtle,
     borderTopWidth: 1,
     gap: 2,
     paddingTop: Spacing.two,
   },
   hotUpdaterLogMeta: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     fontFamily: Fonts.monoMedium,
     fontSize: 9,
     lineHeight: 12,
   },
   hotUpdaterLogMessage: {
-    color: Colors.dark.text,
+    color: theme.text,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -1078,16 +1087,16 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   connectionPanel: {
-    backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(255, 255, 255, 0.09)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     gap: Spacing.two,
     padding: Spacing.three,
   },
   notificationPanel: {
-    backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(255, 255, 255, 0.09)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     overflow: "hidden",
@@ -1107,7 +1116,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   notificationRowDivider: {
-    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+    borderBottomColor: theme.borderSubtle,
     borderBottomWidth: 1,
   },
   notificationCopy: {
@@ -1124,8 +1133,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   usageCard: {
-    backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(255, 255, 255, 0.09)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     overflow: "hidden",
@@ -1137,7 +1146,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   usageRowDivider: {
-    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+    borderBottomColor: theme.borderSubtle,
     borderBottomWidth: 1,
   },
   usageHeader: {
@@ -1160,7 +1169,7 @@ const styles = StyleSheet.create({
   },
   usagePercentBadge: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: theme.tintMuted,
     borderRadius: 6,
     borderWidth: 1,
     flexShrink: 0,
@@ -1175,7 +1184,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   usageProgressTrack: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.tintSoft,
     borderRadius: 999,
     height: 8,
     overflow: "hidden",
@@ -1203,16 +1212,16 @@ const styles = StyleSheet.create({
     minHeight: 24,
   },
   connectionDot: {
-    backgroundColor: "#f2b84b",
+    backgroundColor: theme.warning,
     borderRadius: 4,
     height: 8,
     width: 8,
   },
   connectionDotConnected: {
-    backgroundColor: "#2ca36f",
+    backgroundColor: theme.successStrong,
   },
   connectionDotOffline: {
-    backgroundColor: "#d84f4f",
+    backgroundColor: theme.danger,
   },
   connectionTitle: {
     flex: 1,
@@ -1225,8 +1234,8 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   connectionBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.borderSubtle,
     borderRadius: 6,
     borderWidth: 1,
     flexShrink: 0,
@@ -1234,7 +1243,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   connectionBadgeText: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     fontFamily: Fonts.monoMedium,
     fontSize: 9,
     lineHeight: 12,
@@ -1248,7 +1257,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   infoLineValue: {
-    color: Colors.dark.text,
+    color: theme.text,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -1258,8 +1267,8 @@ const styles = StyleSheet.create({
   },
   serverAddressRow: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.tintSubtle,
+    borderColor: theme.borderSubtle,
     borderRadius: 7,
     borderWidth: 1,
     flexDirection: "row",
@@ -1269,8 +1278,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   serverAddressRowSelected: {
-    backgroundColor: "rgba(44, 163, 111, 0.12)",
-    borderColor: "rgba(147, 225, 182, 0.24)",
+    backgroundColor: theme.successSoft,
+    borderColor: theme.successBorder,
   },
   serverAddressCopy: {
     flex: 1,
@@ -1287,8 +1296,8 @@ const styles = StyleSheet.create({
   },
   serverAddressStatus: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.borderSubtle,
     borderRadius: 6,
     borderWidth: 1,
     flexShrink: 0,
@@ -1298,21 +1307,21 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   serverAddressStatusSelected: {
-    backgroundColor: "rgba(44, 163, 111, 0.16)",
-    borderColor: "rgba(147, 225, 182, 0.28)",
+    backgroundColor: theme.successSoft,
+    borderColor: theme.successBorder,
   },
   serverAddressStatusText: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     fontFamily: Fonts.monoMedium,
     fontSize: 9,
     lineHeight: 12,
   },
   serverAddressStatusTextSelected: {
-    color: "#93E1B6",
+    color: theme.success,
   },
   signOutRow: {
-    backgroundColor: "rgba(216, 79, 79, 0.08)",
-    borderColor: "rgba(255, 180, 168, 0.14)",
+    backgroundColor: theme.dangerSoft,
+    borderColor: theme.dangerBorder,
     borderRadius: 8,
     borderWidth: 1,
     justifyContent: "center",
@@ -1327,7 +1336,7 @@ const styles = StyleSheet.create({
   },
   signOutIconSlot: {
     alignItems: "center",
-    backgroundColor: "rgba(216, 79, 79, 0.16)",
+    backgroundColor: theme.dangerSoft,
     borderRadius: 15,
     flexShrink: 0,
     height: 30,
@@ -1351,4 +1360,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-});
+}));

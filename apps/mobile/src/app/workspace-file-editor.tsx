@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import { useComputerOperations } from "@/hooks/use-computer-operations";
 import type { WorkspaceFileContentResponse } from "codex-relay/api-schema";
 import { router, useLocalSearchParams } from "expo-router";
@@ -17,7 +18,7 @@ import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { WorkspaceCodeWebView } from "@/components/chat/workspace-preview/WorkspaceCodeWebView";
-import { Colors, Spacing } from "@/constants/theme";
+import { Spacing } from "@/constants/theme";
 import {
   getWorkspaceFileContent as rawGetWorkspaceFileContent,
   updateWorkspaceFileContent as rawUpdateWorkspaceFileContent,
@@ -29,6 +30,7 @@ import {
 } from "@/lib/workspace-file-queries";
 
 export default function WorkspaceFileEditorScreen() {
+  const theme = useTheme();
   const { getWorkspaceFileContent, updateWorkspaceFileContent } = useComputerOperations({
     getWorkspaceFileContent: rawGetWorkspaceFileContent,
     updateWorkspaceFileContent: rawUpdateWorkspaceFileContent,
@@ -111,7 +113,10 @@ export default function WorkspaceFileEditorScreen() {
   }, [canEditFile, canSaveFile, draftContent, mutateSaveFile, path]);
 
   return (
-    <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.screen}>
+    <SafeAreaView
+      edges={["top", "left", "right", "bottom"]}
+      style={[styles.screen, { backgroundColor: theme.background }]}
+    >
       <KeyboardAvoidingView
         automaticOffset
         behavior="height"
@@ -126,7 +131,7 @@ export default function WorkspaceFileEditorScreen() {
             onPress={closeEditor}
             style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
           >
-            <Icon name="back" size={18} tintColor={Colors.dark.text} />
+            <Icon name="back" size={18} tintColor={theme.text} />
           </Pressable>
           <View style={styles.titleGroup}>
             <ThemedText type="smallBold" numberOfLines={1} style={styles.title}>
@@ -168,7 +173,7 @@ export default function WorkspaceFileEditorScreen() {
             <EditorState title="Missing file" message="No workspace file path was provided." />
           ) : fileContentQuery.isLoading ? (
             <View style={styles.loadingState}>
-              <ActivityIndicator color={Colors.dark.textSecondary} size="small" />
+              <ActivityIndicator color={theme.textSecondary} size="small" />
               <ThemedText type="small" themeColor="textSecondary">
                 Loading file
               </ThemedText>
@@ -256,9 +261,9 @@ function languageFromPath(path: string) {
   return extension || "text";
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   screen: {
-    backgroundColor: Colors.dark.background,
+    backgroundColor: theme.background,
     flex: 1,
   },
   keyboardAwareContent: {
@@ -267,7 +272,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    borderBottomColor: "rgba(132, 145, 165, 0.16)",
+    borderBottomColor: theme.border,
     borderBottomWidth: 1,
     flexDirection: "row",
     gap: Spacing.two,
@@ -290,7 +295,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   metaBar: {
-    borderBottomColor: "rgba(132, 145, 165, 0.12)",
+    borderBottomColor: theme.borderSubtle,
     borderBottomWidth: 1,
     minHeight: 34,
     justifyContent: "center",
@@ -309,8 +314,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptyState: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(132, 145, 165, 0.2)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 8,
     borderWidth: 1,
@@ -318,8 +323,8 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
   },
   noticeError: {
-    backgroundColor: "rgba(255, 107, 107, 0.1)",
-    borderColor: "rgba(255, 107, 107, 0.24)",
+    backgroundColor: theme.dangerSoft,
+    borderColor: theme.dangerBorder,
     borderCurve: "continuous",
     borderRadius: 7,
     borderWidth: 1,
@@ -331,4 +336,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-});
+}));

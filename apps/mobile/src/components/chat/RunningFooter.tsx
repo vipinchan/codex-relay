@@ -108,9 +108,9 @@ function RunningLabel() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   dot: {
-    backgroundColor: "rgba(176, 180, 186, 0.55)",
+    backgroundColor: theme.tintHeavy,
     borderRadius: 3,
     height: 6,
     width: 6,
@@ -127,4 +127,4 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.three,
     paddingTop: Spacing.one,
   },
-});
+}));

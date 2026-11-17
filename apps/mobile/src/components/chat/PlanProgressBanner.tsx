@@ -11,7 +11,8 @@ import { StyleSheet } from "react-native-unistyles";
 
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
-import { Colors, Spacing } from "@/constants/theme";
+import { Spacing, type ThemeColors } from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
 import { hapticSelection } from "@/lib/haptics";
 
 import {
@@ -24,13 +25,6 @@ import {
 } from "./plan-progress";
 
 const MAX_VISIBLE_SUBAGENT_GLYPHS = 4;
-const SUBAGENT_GLYPH_STYLES = [
-  { color: Colors.dark.agentGreen, name: "agentAsterisk" },
-  { color: Colors.dark.agentViolet, name: "agentGem" },
-  { color: Colors.dark.agentCyan, name: "agentAtom" },
-  { color: Colors.dark.agentTeal, name: "agentShell" },
-] as const;
-
 export function PlanProgressBanner({
   progress,
   subagents,
@@ -38,6 +32,7 @@ export function PlanProgressBanner({
   progress?: TimelinePlanProgress;
   subagents?: TimelineSubagentSummary;
 }) {
+  const theme = useTheme();
   const [isExpanded, setExpanded] = useState(false);
 
   if (!progress) {
@@ -90,7 +85,7 @@ export function PlanProgressBanner({
               <Icon
                 name={isExpanded ? "expand" : "chevronRight"}
                 size={16}
-                tintColor={Colors.dark.textSecondary}
+                tintColor={theme.textSecondary}
               />
             </View>
           </View>
@@ -126,7 +121,7 @@ export function PlanProgressBanner({
               style={styles.subagentSection}
             >
               <View style={styles.subagentSectionHeader}>
-                <Icon name="branch" size={12} tintColor={Colors.dark.textSecondary} />
+                <Icon name="branch" size={12} tintColor={theme.textSecondary} />
                 <ThemedText type="code" style={styles.subagentLabel}>
                   Subagents
                 </ThemedText>
@@ -146,6 +141,7 @@ export function PlanProgressBanner({
 }
 
 function SubagentGlyphs({ agents }: { agents: readonly TimelineSubagent[] }) {
+  const theme = useTheme();
   return (
     <View
       accessibilityElementsHidden
@@ -154,7 +150,7 @@ function SubagentGlyphs({ agents }: { agents: readonly TimelineSubagent[] }) {
       style={styles.subagentGlyphs}
     >
       {agents.slice(0, MAX_VISIBLE_SUBAGENT_GLYPHS).map((agent, index) => {
-        const glyph = subagentGlyphStyle(index);
+        const glyph = subagentGlyphStyle(index, theme);
         return (
           <Animated.View
             entering={FadeIn.delay(index * 35).duration(120)}
@@ -169,16 +165,22 @@ function SubagentGlyphs({ agents }: { agents: readonly TimelineSubagent[] }) {
   );
 }
 
-function subagentGlyphStyle(index: number) {
-  switch (index % SUBAGENT_GLYPH_STYLES.length) {
+function subagentGlyphStyle(index: number, theme: ThemeColors) {
+  const styles = [
+    { color: theme.agentGreen, name: "agentAsterisk" },
+    { color: theme.agentViolet, name: "agentGem" },
+    { color: theme.agentCyan, name: "agentAtom" },
+    { color: theme.agentTeal, name: "agentShell" },
+  ] as const;
+  switch (index % styles.length) {
     case 0:
-      return SUBAGENT_GLYPH_STYLES[0];
+      return styles[0];
     case 1:
-      return SUBAGENT_GLYPH_STYLES[1];
+      return styles[1];
     case 2:
-      return SUBAGENT_GLYPH_STYLES[2];
+      return styles[2];
     default:
-      return SUBAGENT_GLYPH_STYLES[3];
+      return styles[3];
   }
 }
 
@@ -219,6 +221,7 @@ function planProgressStatusLabel(status: TimelinePlanProgressStepStatus) {
 }
 
 function PlanProgressMarker({ status }: { status: TimelinePlanProgressStepStatus }) {
+  const theme = useTheme();
   const rotation = useSharedValue(0);
   const spinnerStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
@@ -235,7 +238,7 @@ function PlanProgressMarker({ status }: { status: TimelinePlanProgressStepStatus
   if (status === "completed") {
     return (
       <View style={[styles.marker, styles.markerCompleted]}>
-        <Icon name="check" size={8} tintColor="#151515" strokeWidth={3} />
+        <Icon name="check" size={8} tintColor={theme.planMarkerForeground} strokeWidth={3} />
       </View>
     );
   }
@@ -244,7 +247,7 @@ function PlanProgressMarker({ status }: { status: TimelinePlanProgressStepStatus
     return (
       <View style={[styles.marker, styles.markerActive]}>
         <Animated.View style={spinnerStyle}>
-          <Icon name="running" size={9} tintColor="#151515" strokeWidth={2.8} />
+          <Icon name="running" size={9} tintColor={theme.planMarkerForeground} strokeWidth={2.8} />
         </Animated.View>
       </View>
     );
@@ -253,10 +256,10 @@ function PlanProgressMarker({ status }: { status: TimelinePlanProgressStepStatus
   return <View style={[styles.marker, styles.markerPending]} />;
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   banner: {
-    backgroundColor: "rgba(42, 42, 42, 0.9)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.planBannerBackground,
+    borderColor: theme.inputBorder,
     borderRadius: 10,
     borderWidth: 1,
     paddingHorizontal: Spacing.three,
@@ -274,7 +277,7 @@ const styles = StyleSheet.create({
     opacity: 0.78,
   },
   countText: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     fontSize: 11,
   },
   compactSubagents: {
@@ -284,8 +287,8 @@ const styles = StyleSheet.create({
     marginRight: Spacing.half,
   },
   expandedPanel: {
-    backgroundColor: "rgba(42, 42, 42, 0.96)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.planBannerExpandedBackground,
+    borderColor: theme.inputBorder,
     borderRadius: 10,
     borderWidth: 1,
     elevation: 20,
@@ -300,7 +303,7 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   label: {
-    color: "#9B8BD4",
+    color: theme.planAccent,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -312,13 +315,13 @@ const styles = StyleSheet.create({
     width: 14,
   },
   markerActive: {
-    backgroundColor: "#9B8BD4",
+    backgroundColor: theme.planAccent,
   },
   markerCompleted: {
-    backgroundColor: "#8FD19E",
+    backgroundColor: theme.planCompleted,
   },
   markerPending: {
-    borderColor: "rgba(176, 180, 186, 0.42)",
+    borderColor: theme.planPendingBorder,
     borderWidth: 1,
   },
   stepRow: {
@@ -331,12 +334,12 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   stepText: {
-    color: Colors.dark.text,
+    color: theme.text,
     flex: 1,
     lineHeight: 18,
   },
   stepTextPending: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
   },
   summaryRow: {
     alignItems: "center",
@@ -347,7 +350,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   summaryText: {
-    color: Colors.dark.text,
+    color: theme.text,
     flex: 1,
     lineHeight: 20,
     minWidth: 0,
@@ -358,7 +361,7 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   subagentCountText: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     fontSize: 10,
   },
   subagentGlyph: {
@@ -373,12 +376,12 @@ const styles = StyleSheet.create({
     gap: Spacing.half,
   },
   subagentLabel: {
-    color: Colors.dark.textSecondaryStrong,
+    color: theme.textSecondaryStrong,
     fontSize: 11,
     lineHeight: 15,
   },
   subagentSection: {
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    borderTopColor: theme.borderSubtle,
     borderTopWidth: 1,
     gap: Spacing.one,
     marginTop: Spacing.one,
@@ -390,7 +393,7 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   subagentStatusText: {
-    color: Colors.dark.textSecondary,
+    color: theme.textSecondary,
     flex: 1,
     fontSize: 10,
     lineHeight: 14,
@@ -402,4 +405,4 @@ const styles = StyleSheet.create({
     minHeight: 16,
     paddingLeft: Spacing.three,
   },
-});
+}));

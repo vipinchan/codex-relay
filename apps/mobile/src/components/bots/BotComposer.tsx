@@ -227,7 +227,7 @@ export function BotComposer({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   selectedRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -236,15 +236,15 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   selectedChip: {
-    backgroundColor: "#253148",
+    backgroundColor: theme.backgroundElement,
     borderRadius: 14,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  selectedText: { color: "#A9C9FF", fontSize: 12 },
+  selectedText: { color: theme.accent, fontSize: 12 },
   suggestions: {
-    backgroundColor: "#1E2026",
-    borderTopColor: "#32343A",
+    backgroundColor: theme.backgroundElement,
+    borderTopColor: theme.backgroundElement,
     borderTopWidth: 1,
     maxHeight: 166,
   },
@@ -256,19 +256,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 17,
   },
   suggestionDot: { height: 18, width: 18, borderRadius: 7 },
-  suggestionText: { color: "#F1F1F3", fontSize: 14 },
+  suggestionText: { color: theme.text, fontSize: 14 },
   routingRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   mentionButton: { alignItems: "center", justifyContent: "center", width: 36, height: 32 },
-  mentionButtonText: { color: "#6EA8FF", fontWeight: "700", fontSize: 24 },
-  routingHint: { flex: 1, color: "#85858B", fontSize: 11 },
+  mentionButtonText: { color: theme.accent, fontWeight: "700", fontSize: 24 },
+  routingHint: { flex: 1, color: theme.textSecondary, fontSize: 11 },
   primaryAction: {
     alignItems: "center",
-    backgroundColor: "#4169D8",
+    backgroundColor: theme.botPrimaryBackground,
     borderRadius: 11,
     minHeight: 46,
     justifyContent: "center",
     marginTop: 14,
     marginBottom: 8,
   },
-  primaryText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-});
+  primaryText: { color: theme.botActionForeground, fontWeight: "700", fontSize: 15 },
+}));

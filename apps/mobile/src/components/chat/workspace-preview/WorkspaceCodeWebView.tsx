@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
 import { Spacing } from "@/constants/theme";
+import { useTheme, useThemeScheme } from "@/hooks/use-theme";
+import {
+  createWorkspaceWebTheme,
+  type WorkspaceWebTheme,
+} from "../../../../web/workspace-code-editor/src/theme";
 
 import {
   createWorkspaceCodeEditorId,
@@ -15,6 +20,8 @@ import {
   type WorkspaceCodeEditorState,
 } from "./workspace-code-editor-bridge";
 import workspaceCodeEditorHtml from "./workspace-code-editor-html";
+
+const editorSource = { html: workspaceCodeEditorHtml };
 
 export function WorkspaceCodeWebView({
   fill,
@@ -31,6 +38,11 @@ export function WorkspaceCodeWebView({
   value: string;
   onChangeText?: (value: string) => void;
 }) {
+  const theme = useTheme();
+  const scheme = useThemeScheme();
+  const webTheme = useMemo(() => createWorkspaceWebTheme(theme, scheme, "code"), [theme, scheme]);
+  const webThemeRef = useRef(webTheme);
+  webThemeRef.current = webTheme;
   const onChangeTextRef = useRef(onChangeText);
   const editorIdRef = useRef<string | null>(null);
   const postEditorStateRef = useRef(() => {});
@@ -39,12 +51,14 @@ export function WorkspaceCodeWebView({
     editorIdRef.current = createWorkspaceCodeEditorId();
   }
   const editorId = editorIdRef.current;
+  const initialScript = useRef(workspaceCodeEditorIdScript(editorId, webTheme));
   const stateRef = useRef<WorkspaceCodeEditorState>({
     editorId,
     language: normalizeMonacoLanguage(language),
     lineNumbers: Boolean(lineNumbers),
     mode,
     value,
+    theme: webTheme,
   });
   const [editorError, setEditorError] = useState<string | null>(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
@@ -98,16 +112,22 @@ export function WorkspaceCodeWebView({
   }, []);
 
   useEffect(() => {
-    const nextState: WorkspaceCodeEditorState = {
+    const nextState = {
       editorId,
       language: normalizeMonacoLanguage(language),
       lineNumbers: Boolean(lineNumbers),
       mode,
       value,
+      theme: webThemeRef.current,
     };
     stateRef.current = nextState;
     postEditorState();
   }, [editorId, language, lineNumbers, mode, postEditorState, value]);
+
+  useEffect(() => {
+    stateRef.current = { ...stateRef.current, theme: webTheme };
+    postEditorState();
+  }, [postEditorState, webTheme]);
 
   return (
     <View
@@ -120,7 +140,7 @@ export function WorkspaceCodeWebView({
         allowFileAccess={false}
         allowUniversalAccessFromFileURLs={false}
         domStorageEnabled={false}
-        injectedJavaScriptBeforeContentLoaded={workspaceCodeEditorIdScript(editorId)}
+        injectedJavaScriptBeforeContentLoaded={initialScript.current}
         javaScriptEnabled
         nestedScrollEnabled
         onLoadStart={() => {
@@ -130,12 +150,12 @@ export function WorkspaceCodeWebView({
         onLoadEnd={postEditorStateWithRetries}
         originWhitelist={["*"]}
         scrollEnabled={false}
-        source={{ html: workspaceCodeEditorHtml }}
+        source={editorSource}
         style={styles.editorWebView}
       />
       {!isEditorReady && !editorError ? (
         <View style={styles.editorWebLoading}>
-          <ActivityIndicator color="#8EA2BD" size="small" />
+          <ActivityIndicator color={theme.accent} size="small" />
           <ThemedText type="small" style={styles.editorWebLoadingText}>
             Loading editor
           </ThemedText>
@@ -143,7 +163,7 @@ export function WorkspaceCodeWebView({
       ) : null}
       {editorError ? (
         <View style={styles.editorWebError}>
-          <Icon name="warning" size={15} tintColor="#F87171" />
+          <Icon name="warning" size={15} tintColor={theme.dangerStrong} />
           <ThemedText type="small" style={styles.editorWebErrorText}>
             {editorError}
           </ThemedText>
@@ -153,8 +173,8 @@ export function WorkspaceCodeWebView({
   );
 }
 
-function workspaceCodeEditorIdScript(editorId: string) {
-  return `window.__workspaceCodeEditorId = ${JSON.stringify(editorId)}; true;`;
+function workspaceCodeEditorIdScript(editorId: string, theme: WorkspaceWebTheme) {
+  return `window.__workspaceCodeEditorId = ${JSON.stringify(editorId)}; window.__workspaceCodeEditorTheme = ${JSON.stringify(theme)}; true;`;
 }
 
 function normalizeMonacoLanguage(language: string) {
@@ -178,10 +198,10 @@ function normalizeMonacoLanguage(language: string) {
   return aliases[normalized] ?? normalized;
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   editorInputFrame: {
-    backgroundColor: "#252525",
-    borderColor: "rgba(132, 145, 165, 0.18)",
+    backgroundColor: theme.codeBackground,
+    borderColor: theme.border,
     borderCurve: "continuous",
     borderRadius: 8,
     borderWidth: 1,
@@ -195,12 +215,12 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
   editorWebView: {
-    backgroundColor: "#252525",
+    backgroundColor: theme.codeBackground,
     flex: 1,
   },
   editorWebLoading: {
     alignItems: "center",
-    backgroundColor: "#252525",
+    backgroundColor: theme.codeBackground,
     bottom: 0,
     gap: Spacing.two,
     justifyContent: "center",
@@ -210,11 +230,11 @@ const styles = StyleSheet.create({
     top: 0,
   },
   editorWebLoadingText: {
-    color: "#8EA2BD",
+    color: theme.accent,
   },
   editorWebError: {
     alignItems: "center",
-    backgroundColor: "rgba(37, 37, 37, 0.94)",
+    backgroundColor: theme.backgroundOverlayStrong,
     bottom: 0,
     flexDirection: "row",
     gap: Spacing.one,
@@ -225,7 +245,7 @@ const styles = StyleSheet.create({
     top: 0,
   },
   editorWebErrorText: {
-    color: "#F87171",
+    color: theme.dangerStrong,
     flex: 1,
   },
-});
+}));

@@ -2,6 +2,8 @@ import type { RuntimeMode } from "codex-relay/api-schema";
 
 import { AppBottomSheet, SheetActionRow, SheetSelectedDot } from "@/components/ui/bottom-sheet";
 import type { AppIconName } from "@/components/ui/icon";
+import type { ThemeColors } from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
 
 export type RuntimePickerOption = {
   compactLabel: string;
@@ -25,6 +27,7 @@ export function RuntimeModeSheet({
   runtimeMode: RuntimeMode;
   visible: boolean;
 }) {
+  const theme = useTheme();
   const selectedMode = normalizeRuntimeMode(runtimeMode);
 
   return (
@@ -34,7 +37,7 @@ export function RuntimeModeSheet({
       onClose={onClose}
       visible={visible}
     >
-      {runtimeDisplayOptions.map((option) => {
+      {runtimeDisplayOptions(theme).map((option) => {
         const selected = option.value === selectedMode;
         return (
           <SheetActionRow
@@ -56,46 +59,47 @@ export function RuntimeModeSheet({
   );
 }
 
-export function runtimeOptionForMode(runtimeMode: RuntimeMode) {
+export function runtimeOptionForMode(runtimeMode: RuntimeMode, theme: ThemeColors) {
   const normalized = normalizeRuntimeMode(runtimeMode);
-  return (
-    runtimeDisplayOptions.find((option) => option.value === normalized) ?? runtimeDisplayOptions[0]
-  );
+  const options = runtimeDisplayOptions(theme);
+  return options.find((option) => option.value === normalized) ?? options[0];
 }
 
 export function normalizeRuntimeMode(runtimeMode: RuntimeMode): RuntimeMode {
   return runtimeMode === "on-request" ? "default" : runtimeMode;
 }
 
-const runtimeDisplayOptions: RuntimePickerOption[] = [
-  {
-    compactLabel: "Default",
-    icon: "permissionsDefault",
-    iconBackgroundColor: "rgba(255, 255, 255, 0.08)",
-    iconTintColor: "rgba(243, 244, 246, 0.72)",
-    label: "Default permissions",
-    selectedTitleColor: "rgba(243, 244, 246, 0.86)",
-    subtitle: "Ask before sensitive actions",
-    value: "default",
-  },
-  {
-    compactLabel: "Auto",
-    icon: "permissionsAuto",
-    iconBackgroundColor: "rgba(125, 211, 252, 0.1)",
-    iconTintColor: "rgba(125, 211, 252, 0.76)",
-    label: "Auto",
-    selectedTitleColor: "rgba(125, 211, 252, 0.9)",
-    subtitle: "Run in workspace, ask after sandbox failures",
-    value: "auto",
-  },
-  {
-    compactLabel: "Full access",
-    icon: "permissionsFull",
-    iconBackgroundColor: "rgba(255, 138, 69, 0.1)",
-    iconTintColor: "rgba(255, 171, 116, 0.76)",
-    label: "Full access",
-    selectedTitleColor: "rgba(255, 171, 116, 0.9)",
-    subtitle: "Run without permission prompts",
-    value: "full-access",
-  },
-];
+function runtimeDisplayOptions(theme: ThemeColors): RuntimePickerOption[] {
+  return [
+    {
+      compactLabel: "Default",
+      icon: "permissionsDefault",
+      iconBackgroundColor: theme.tintSoft,
+      iconTintColor: theme.controlForeground,
+      label: "Default permissions",
+      selectedTitleColor: theme.controlSelectedForeground,
+      subtitle: "Ask before sensitive actions",
+      value: "default",
+    },
+    {
+      compactLabel: "Auto",
+      icon: "permissionsAuto",
+      iconBackgroundColor: theme.runtimeAutoBackground,
+      iconTintColor: theme.runtimeAutoForeground,
+      label: "Auto",
+      selectedTitleColor: theme.runtimeAutoSelectedForeground,
+      subtitle: "Run in workspace, ask after sandbox failures",
+      value: "auto",
+    },
+    {
+      compactLabel: "Full access",
+      icon: "permissionsFull",
+      iconBackgroundColor: theme.permissionWarningBackground,
+      iconTintColor: theme.runtimeFullForeground,
+      label: "Full access",
+      selectedTitleColor: theme.runtimeFullSelectedForeground,
+      subtitle: "Run without permission prompts",
+      value: "full-access",
+    },
+  ];
+}

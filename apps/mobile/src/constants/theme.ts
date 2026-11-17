@@ -1,34 +1,34 @@
-/**
- * OpenMinis-inspired native iOS palette for the personal Codex Relay client.
- * The app intentionally stays dark-only; semantic surfaces mirror iOS system
- * background/fill hierarchy so chat content remains the visual focus.
- */
-
 import { Platform } from "react-native";
 
-const nativeDark = {
-  text: "#F5F5F7",
-  background: "#000000",
-  backgroundElement: "#1C1C1E",
-  backgroundSelected: "#2C2C2E",
-  textSecondary: "#8E8E93",
-  textSecondaryStrong: "#AEAEB2",
-  powerTrack: "#3A3A3C",
-  powerBlue: "#5E9EFF",
-  powerViolet: "#8B7BFF",
-  powerMagenta: "#C77DFF",
-  agentGreen: "#70C769",
-  agentViolet: "#A68BDD",
-  agentCyan: "#55C2DE",
-  agentTeal: "#59BDB5",
-} as const;
+import { appearanceDark, appearanceLight, type AppearanceColors } from "./appearance";
 
-export const Colors = {
-  light: nativeDark,
-  dark: nativeDark,
+export const Colors: Record<ThemeScheme, AppearanceColors> = {
+  light: appearanceLight,
+  dark: appearanceDark,
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+export type ThemeColors = AppearanceColors;
+export type ThemeMode = "system" | "light" | "dark";
+export type ThemeScheme = "light" | "dark";
+
+export function normalizeThemeMode(value: unknown): ThemeMode {
+  return value === "light" || value === "dark" || value === "system" ? value : "system";
+}
+
+export function resolveThemeScheme(
+  mode: ThemeMode,
+  systemScheme: ThemeScheme | null | undefined,
+): ThemeScheme {
+  return mode === "system" ? (systemScheme ?? "light") : mode;
+}
+
+declare module "react-native-unistyles" {
+  interface UnistylesThemes {
+    light: AppearanceColors;
+    dark: AppearanceColors;
+  }
+}
 
 export const Fonts = Platform.select({
   default: {

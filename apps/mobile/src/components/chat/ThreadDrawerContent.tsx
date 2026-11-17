@@ -522,11 +522,8 @@ export function ThreadDrawerContent(props: ThreadDrawerContentProps) {
               placeholder="Chat title"
               placeholderTextColor={theme.textSecondary}
               returnKeyType="done"
-              selectionColor="rgba(124, 199, 255, 0.28)"
-              style={[
-                styles.renameSheetInput,
-                { borderColor: "rgba(255, 255, 255, 0.14)", color: theme.text },
-              ]}
+              selectionColor={theme.accentMuted}
+              style={[styles.renameSheetInput, { borderColor: theme.border, color: theme.text }]}
               value={renameDraft}
             />
             <View style={styles.renameSheetActions}>
@@ -1229,7 +1226,10 @@ function WorkspaceBrowserModal({
       presentationStyle="pageSheet"
       visible={visible}
     >
-      <SafeAreaView edges={["top", "left", "right"]} style={styles.workspaceDrawer}>
+      <SafeAreaView
+        edges={["top", "left", "right"]}
+        style={[styles.workspaceDrawer, { backgroundColor: theme.background }]}
+      >
         <View style={styles.workspaceDrawerPanel}>
           <View style={styles.workspaceDrawerHeader}>
             <View style={styles.workspaceDrawerTitleBlock}>
@@ -1300,12 +1300,7 @@ function WorkspaceBrowserModal({
               keyExtractor={(item) => item.id}
               recycleItems={false}
               renderItem={({ item }) => (
-                <WorkspaceBrowserListRow
-                  item={item}
-                  onOpenDirectory={onLoadWorkspaceDirectories}
-                  pressedColor={theme.backgroundSelected}
-                  textSecondaryColor={theme.textSecondary}
-                />
+                <WorkspaceBrowserListRow item={item} onOpenDirectory={onLoadWorkspaceDirectories} />
               )}
               style={styles.workspaceListViewport}
             />
@@ -1331,14 +1326,11 @@ function WorkspaceBrowserModal({
 const WorkspaceBrowserListRow = memo(function WorkspaceBrowserListRow({
   item,
   onOpenDirectory,
-  pressedColor,
-  textSecondaryColor,
 }: {
   item: WorkspaceBrowserRow;
   onOpenDirectory: (path?: string) => Promise<void>;
-  pressedColor: string;
-  textSecondaryColor: string;
 }) {
+  const theme = useTheme();
   const isParent = item.kind === "parent";
 
   return (
@@ -1353,20 +1345,20 @@ const WorkspaceBrowserListRow = memo(function WorkspaceBrowserListRow({
           style={[
             styles.workspaceFolderRow,
             pressed && {
-              backgroundColor: pressedColor,
+              backgroundColor: theme.backgroundSelected,
             },
           ]}
         >
           <View style={styles.workspaceFolderDisclosure}>
             {isParent ? null : (
-              <Icon name="chevronRight" size={14} tintColor={textSecondaryColor} />
+              <Icon name="chevronRight" size={14} tintColor={theme.textSecondary} />
             )}
           </View>
           <View style={styles.workspaceFolderIcon}>
             <Icon
               name={isParent ? "up" : "folder"}
               size={isParent ? 16 : 17}
-              tintColor={textSecondaryColor}
+              tintColor={theme.textSecondary}
             />
           </View>
           <View style={styles.workspaceFolderCopy}>
@@ -1417,7 +1409,7 @@ function RelayVersionNotice({
     <View accessibilityRole="alert" style={styles.versionNotice}>
       <View style={styles.versionNoticeHeader}>
         <View style={styles.versionNoticeIcon}>
-          <Icon name="warning" size={16} tintColor="#F8C46D" />
+          <Icon name="warning" size={16} tintColor={theme.warningStrong} />
         </View>
         <View style={styles.versionNoticeCopy}>
           <Text style={styles.versionNoticeTitle}>Update relay</Text>
@@ -1558,7 +1550,7 @@ function formatRelativeTime(value: string) {
   return `${Math.floor(diffMs / day)}d`;
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   drawerRoot: {
     flex: 1,
     position: "relative",
@@ -1587,8 +1579,8 @@ const styles = StyleSheet.create({
   },
   searchShell: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.055)",
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
@@ -1617,8 +1609,8 @@ const styles = StyleSheet.create({
     width: 22,
   },
   versionNotice: {
-    backgroundColor: "rgba(248, 196, 109, 0.1)",
-    borderColor: "rgba(248, 196, 109, 0.24)",
+    backgroundColor: theme.warningSoft,
+    borderColor: theme.warningBorder,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     gap: 9,
@@ -1640,13 +1632,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   versionNoticeTitle: {
-    color: "#F8C46D",
+    color: theme.warningStrong,
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 16,
   },
   versionNoticeBody: {
-    color: "rgba(255, 255, 255, 0.76)",
+    color: theme.text,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 2,
@@ -1660,7 +1652,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   versionNoticeLabel: {
-    color: "rgba(255, 255, 255, 0.54)",
+    color: theme.textSecondary,
     flexShrink: 0,
     fontSize: 10,
     fontWeight: "600",
@@ -1668,14 +1660,14 @@ const styles = StyleSheet.create({
     width: 78,
   },
   versionNoticeValue: {
-    color: "rgba(255, 255, 255, 0.82)",
+    color: theme.text,
     flex: 1,
     fontSize: 10,
     lineHeight: 14,
     minWidth: 0,
   },
   versionNoticeCommand: {
-    backgroundColor: "rgba(0, 0, 0, 0.18)",
+    backgroundColor: theme.overlay,
     borderRadius: 6,
     fontFamily: Fonts.mono,
     fontSize: 10,
@@ -1799,13 +1791,13 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   threadSelected: {
-    backgroundColor: "rgba(255, 255, 255, 0.075)",
+    backgroundColor: theme.tintSoft,
   },
   drawerPressedContent: {
     opacity: 0.68,
   },
   sidebarResizeGrip: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: theme.tintHeavy,
     borderRadius: 1,
     height: 44,
     opacity: 0.72,
@@ -1841,7 +1833,7 @@ const styles = StyleSheet.create({
     width: 6,
   },
   activeDotSelected: {
-    backgroundColor: "#8CC7FF",
+    backgroundColor: theme.info,
   },
   moreRow: {
     alignItems: "center",
@@ -1864,8 +1856,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   footerBlock: {
-    backgroundColor: "#191919",
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.backgroundElevated,
+    borderTopColor: theme.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     paddingTop: 8,
@@ -1896,11 +1888,11 @@ const styles = StyleSheet.create({
     opacity: 0.42,
   },
   workspaceDrawer: {
-    backgroundColor: "#191919",
+    backgroundColor: theme.backgroundElevated,
     flex: 1,
   },
   workspaceDrawerFooter: {
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    borderTopColor: theme.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: 10,
   },
@@ -1931,8 +1923,8 @@ const styles = StyleSheet.create({
   },
   workspaceCloseButton: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     height: 36,
@@ -2039,4 +2031,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 32,
   },
-});
+}));

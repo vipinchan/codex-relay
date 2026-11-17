@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import { useSelector } from "@legendapp/state/react";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -29,6 +30,7 @@ import { chatStore$ } from "@/state/chat-store";
 type Editor = { kind: "name" | "address"; computer: ComputerProfile; previousAddress?: string };
 
 export function ComputerSettings() {
+  const theme = useTheme();
   const snapshot = useSyncExternalStore(
     subscribeComputerProfiles,
     getComputerProfilesSnapshot,
@@ -336,7 +338,7 @@ export function ComputerSettings() {
           autoCapitalize="none"
           autoCorrect={false}
           placeholder={editor?.kind === "name" ? "Computer name" : "https://host.example.com:18787"}
-          placeholderTextColor="#888"
+          placeholderTextColor={theme.textSecondary}
         />
         <SheetActionRow
           icon="check"
@@ -366,7 +368,7 @@ export function ComputerSettings() {
               autoCorrect={false}
               editable={!busy}
               placeholder="codex-relay://pair..."
-              placeholderTextColor="#888"
+              placeholderTextColor={theme.textSecondary}
             />
             <SheetActionRow
               icon="check"
@@ -409,28 +411,28 @@ export function ComputerSettings() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   section: { gap: 12 },
   panel: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: theme.backgroundElement,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#303032",
+    borderColor: theme.backgroundElement,
     padding: 12,
     gap: 10,
   },
   computer: { flexDirection: "row", alignItems: "center", borderRadius: 12, padding: 12, gap: 10 },
   selected: {
-    backgroundColor: "rgba(44,163,111,0.10)",
-    borderColor: "rgba(44,163,111,0.4)",
+    backgroundColor: theme.successSoft,
+    borderColor: theme.successBorder,
     borderWidth: 1,
   },
   copy: { flex: 1, gap: 5 },
   button: { padding: 10 },
   addressActions: { flexDirection: "row", gap: 24, paddingLeft: 54, paddingBottom: 12 },
   input: {
-    color: "#fff",
-    backgroundColor: "#222",
+    color: theme.text,
+    backgroundColor: theme.backgroundInput,
     borderRadius: 10,
     padding: 14,
     marginVertical: 12,
@@ -438,5 +440,5 @@ const styles = StyleSheet.create({
   },
   approval: { gap: 16, paddingVertical: 16 },
   camera: { height: 240, borderRadius: 12, overflow: "hidden" },
-  error: { color: "#FF9F8A", padding: 12 },
-});
+  error: { color: theme.danger, padding: 12 },
+}));

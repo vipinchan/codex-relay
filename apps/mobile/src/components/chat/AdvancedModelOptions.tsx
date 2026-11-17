@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import type { CodexModel, ReasoningEffort } from "codex-relay/api-schema";
 
 import { SheetActionRow, SheetSelectedDot } from "@/components/ui/bottom-sheet";
@@ -36,6 +37,7 @@ export function AdvancedModelOptions({
   selectedReasoningEffort: ReasoningEffort | undefined;
   selectedServiceTier: string | undefined;
 }) {
+  const theme = useTheme();
   const reasoningOptions = reasoningDisplayOptions(
     activeModel,
     Boolean(selectedModel && !activeModel),
@@ -121,11 +123,11 @@ export function AdvancedModelOptions({
                 key={option.value ?? "standard"}
                 accessibilityLabel={`Speed ${option.label}`}
                 icon={option.value ? "fast" : "controls"}
-                iconBackgroundColor={option.value ? "rgba(255, 214, 102, 0.11)" : undefined}
-                iconTintColor={option.value ? "rgba(255, 214, 102, 0.88)" : undefined}
+                iconBackgroundColor={option.value ? theme.warningSoft : undefined}
+                iconTintColor={option.value ? theme.warning : undefined}
                 onPress={() => onServiceTierChange(option.value)}
                 selected={selected}
-                selectedTitleColor={option.value ? "rgba(255, 214, 102, 0.95)" : undefined}
+                selectedTitleColor={option.value ? theme.warning : undefined}
                 subtitle={option.subtitle}
                 subtitleNumberOfLines={2}
                 title={option.label}

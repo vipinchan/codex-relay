@@ -721,7 +721,7 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   save: { fontFamily: Fonts.sansSemiBold, fontSize: 15 },
   content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 50, gap: 7 },
   field: { gap: 7, marginBottom: 14 },
@@ -749,11 +749,11 @@ const styles = StyleSheet.create({
   settingDetail: { fontSize: 12 },
   reset: { alignSelf: "flex-start", paddingVertical: 12 },
   resetText: { fontFamily: Fonts.sansMedium, fontSize: 13 },
-  error: { color: "#FF8DA5", fontSize: 12, lineHeight: 18, paddingVertical: 9 },
+  error: { color: theme.danger, fontSize: 12, lineHeight: 18, paddingVertical: 9 },
   note: { fontSize: 12, lineHeight: 17, padding: 8 },
   conflict: { borderRadius: 13, padding: 14, gap: 8, marginBottom: 12 },
   conflictSource: { fontFamily: Fonts.mono, fontSize: 11, lineHeight: 17 },
-});
+}));
 
 function isRevisionConflict(error: unknown) {
   return !!error && typeof error === "object" && "status" in error && error.status === 409;

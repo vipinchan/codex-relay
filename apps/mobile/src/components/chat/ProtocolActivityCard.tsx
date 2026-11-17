@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { AppBottomSheet } from "@/components/ui/bottom-sheet";
-import { Fonts, Spacing } from "@/constants/theme";
+import { Fonts, Spacing, type ThemeColors } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
   getThreadMessageDetail as rawGetThreadMessageDetail,
@@ -37,7 +37,7 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
   );
   const queryClient = useQueryClient();
   const theme = useTheme();
-  const model = activityModel(message);
+  const model = activityModel(message, theme);
   const approvalId = stringDetail(message, "approvalId");
   const approvalKind = stringDetail(message, "approvalKind");
   const resolvedDecision = stringDetail(message, "approvalDecision");
@@ -202,8 +202,8 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
             isInputRequest && [
               styles.inputRequestCard,
               {
-                backgroundColor: "rgba(255, 138, 69, 0.08)",
-                borderColor: "rgba(255, 138, 69, 0.4)",
+                backgroundColor: theme.permissionInputBackground,
+                borderColor: theme.permissionInputBorder,
               },
             ],
         ]}
@@ -217,8 +217,8 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
             needsUserAction && [
               styles.actionRow,
               {
-                backgroundColor: "rgba(255, 138, 69, 0.1)",
-                borderColor: "rgba(255, 138, 69, 0.46)",
+                backgroundColor: theme.permissionWarningBackground,
+                borderColor: theme.permissionActionBorder,
               },
             ],
             isInputRequest && styles.inputRequestHeader,
@@ -226,9 +226,9 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
           ]}
         >
           {needsUserAction ? (
-            <Icon name="warning" size={15} tintColor="#FF9A5C" strokeWidth={2.2} />
+            <Icon name="warning" size={15} tintColor={theme.permissionWarning} strokeWidth={2.2} />
           ) : displayedResolution ? (
-            <Icon name="check" size={13} tintColor="#78B88B" strokeWidth={2.3} />
+            <Icon name="check" size={13} tintColor={theme.activitySuccess} strokeWidth={2.3} />
           ) : null}
           <ThemedText
             type="code"
@@ -271,7 +271,7 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
                   multiline
                   onChangeText={setAnswer}
                   placeholder="Type your answer"
-                  placeholderTextColor="rgba(176, 180, 186, 0.72)"
+                  placeholderTextColor={theme.inputPlaceholder}
                   style={styles.answerInput}
                   value={answer}
                 />
@@ -322,6 +322,7 @@ function FileChangeAccordion({
   message: ChatMessage;
   onTogglePath: (id: string) => void;
 }) {
+  const theme = useTheme();
   const entries = fileChangeEntries(message);
   if (entries.length === 0) {
     return (
@@ -363,7 +364,7 @@ function FileChangeAccordion({
                 name={isExpanded ? "expand" : "chevronRight"}
                 size={15}
                 strokeWidth={2.25}
-                tintColor="#8B98AA"
+                tintColor={theme.diffMuted}
               />
             </Pressable>
             {isExpanded ? <InlinePatchPreview patch={entry.patch} /> : null}
@@ -577,7 +578,7 @@ function ActivityDetailSheet({
                     section.large && styles.largeSectionBody,
                     section.monospace && {
                       backgroundColor: theme.backgroundSelected,
-                      borderColor: "rgba(255, 255, 255, 0.08)",
+                      borderColor: theme.borderSubtle,
                     },
                   ]}
                 >
@@ -592,7 +593,9 @@ function ActivityDetailSheet({
                     variant="secondary"
                     style={styles.loadFullButton}
                   >
-                    {isLoadingFull ? <ActivityIndicator color="#F3F4F6" size="small" /> : null}
+                    {isLoadingFull ? (
+                      <ActivityIndicator color={theme.activityText} size="small" />
+                    ) : null}
                     <Text style={styles.loadFullButtonText}>
                       {isLoadingFull ? "Loading full detail" : `Load full ${section.field}`}
                     </Text>
@@ -607,64 +610,64 @@ function ActivityDetailSheet({
   );
 }
 
-function activityModel(message: ChatMessage): ActivityModel {
+function activityModel(message: ChatMessage, theme: ThemeColors): ActivityModel {
   switch (message.kind) {
     case "commandExecution": {
       const command = stringDetail(message, "command") ?? message.content;
       const display = humanizeCommand(command);
       const status = stringDetail(message, "status") ?? exitStatus(message);
       return {
-        color: "#B7A36A",
+        color: theme.activityCommand,
         label: display.label,
         detail: [display.detail, status].filter(Boolean).join(", "),
       };
     }
     case "fileChange":
       return {
-        color: "#C7776A",
+        color: theme.activityFileChange,
         label: fileChangeLabel(message),
         detail: fileChangeDetail(message),
       };
     case "webSearch":
       return {
-        color: "#6FA8DC",
+        color: theme.activityInfo,
         label: "Searched",
         detail: stringDetail(message, "query") ?? message.content,
       };
     case "thinking":
       return {
-        color: "#9B8BD4",
+        color: theme.planAccent,
         label: "Thinking",
         detail: firstLine(message.content),
       };
     case "plan":
       return {
-        color: "#9B8BD4",
+        color: theme.planAccent,
         label: "Plan",
         detail: firstLine(planBody(message)),
       };
     case "structuredUserInput":
       return {
-        color: "#6FA8DC",
+        color: theme.activityInfo,
         label: "Input requested",
         detail: structuredInputDetail(message),
       };
     case "approvalRequest":
       return {
-        color: "#FF8A45",
+        color: theme.activityPermission,
         label: approvalLabel(message),
         detail: approvalDetail(message),
       };
     case "subagentAction":
       return {
-        color: "#78B88B",
+        color: theme.activitySuccess,
         label: "Subagents",
         detail: firstLine(message.content),
       };
     case "toolActivity":
     default:
       return {
-        color: "#78B88B",
+        color: theme.activitySuccess,
         label: "Called",
         detail: toolDetail(message),
       };
@@ -844,15 +847,15 @@ function planMarkdownStyle(
       marginTop: 0,
     },
     code: {
-      backgroundColor: "rgba(255, 255, 255, 0.08)",
-      borderColor: "rgba(255, 255, 255, 0.12)",
-      color: "#D7E0EA",
+      backgroundColor: theme.inlineCodeBackground,
+      borderColor: theme.inlineCodeBorder,
+      color: theme.diffText,
       fontFamily: Fonts.monoMedium,
       fontSize: 13,
     },
     codeBlock: {
       backgroundColor: theme.backgroundSelected,
-      borderColor: "rgba(132, 145, 165, 0.25)",
+      borderColor: theme.planCodeBorder,
       borderRadius: 8,
       borderWidth: 1,
       color: theme.text,
@@ -863,7 +866,7 @@ function planMarkdownStyle(
       padding: 10,
     },
     link: {
-      color: "#5fa7ff",
+      color: theme.accentStrong,
       fontFamily: Fonts.sans,
       underline: false,
     },
@@ -873,8 +876,8 @@ function planMarkdownStyle(
       fontWeight: "normal",
     },
     blockquote: {
-      backgroundColor: "rgba(95, 167, 255, 0.08)",
-      borderColor: "#5fa7ff",
+      backgroundColor: theme.accentSoft,
+      borderColor: theme.accentStrong,
       borderWidth: 2,
       color: theme.text,
       fontFamily: Fonts.sans,
@@ -1508,7 +1511,7 @@ function firstLine(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   actionWrap: {
     alignSelf: "stretch",
     gap: Spacing.two,
@@ -1543,7 +1546,7 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
   },
   inputRequestHeader: {
-    backgroundColor: "transparent",
+    backgroundColor: theme.transparent,
     borderWidth: 0,
     minHeight: 0,
     paddingHorizontal: 0,
@@ -1575,11 +1578,11 @@ const styles = StyleSheet.create({
   },
   answerInput: {
     alignSelf: "stretch",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(255, 255, 255, 0.10)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.inputBorder,
     borderRadius: 8,
     borderWidth: 1,
-    color: "#F3F4F6",
+    color: theme.activityText,
     fontFamily: Fonts.sans,
     fontSize: 13,
     minHeight: 36,
@@ -1588,7 +1591,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   inputPrompt: {
-    color: "#F3F4F6",
+    color: theme.activityText,
     fontSize: 12,
     lineHeight: 17,
     maxWidth: 420,
@@ -1597,8 +1600,8 @@ const styles = StyleSheet.create({
   row: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255, 255, 255, 0.045)",
-    borderColor: "rgba(255, 255, 255, 0.06)",
+    backgroundColor: theme.activityBackground,
+    borderColor: theme.activityBorder,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
@@ -1666,18 +1669,18 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
   fileChangeAdditions: {
-    color: "#3DDC84",
+    color: theme.diffAdditions,
   },
   fileChangeDeletions: {
-    color: "#FF7B72",
+    color: theme.syntaxKeyword,
   },
   fileChangeAccordion: {
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    borderTopColor: theme.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   fullDetailsRow: {
     alignItems: "center",
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    borderTopColor: theme.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1689,7 +1692,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   fileChangeFileItem: {
-    borderTopColor: "rgba(255, 255, 255, 0.06)",
+    borderTopColor: theme.activityBorder,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   fileChangeFileRow: {
@@ -1702,17 +1705,17 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   fileChangeFileRowPressed: {
-    backgroundColor: "rgba(255, 255, 255, 0.055)",
+    backgroundColor: theme.diffRowPressed,
   },
   fileChangeKind: {
-    color: "#8B98AA",
+    color: theme.diffMuted,
     fontSize: 10,
     lineHeight: 14,
     textAlign: "center",
     width: 14,
   },
   fileChangePath: {
-    color: "#D7E0EA",
+    color: theme.diffText,
     flex: 1,
     flexShrink: 1,
     fontSize: 12,
@@ -1724,8 +1727,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   inlinePatchScroller: {
-    backgroundColor: "rgba(5, 8, 13, 0.74)",
-    borderTopColor: "rgba(255, 255, 255, 0.07)",
+    backgroundColor: theme.diffBackground,
+    borderTopColor: theme.dividerSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   inlinePatchLines: {
@@ -1733,8 +1736,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   inlinePatchEmpty: {
-    backgroundColor: "rgba(5, 8, 13, 0.52)",
-    borderTopColor: "rgba(255, 255, 255, 0.07)",
+    backgroundColor: theme.diffEmptyBackground,
+    borderTopColor: theme.dividerSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
     fontSize: 11,
     lineHeight: 15,
@@ -1748,13 +1751,13 @@ const styles = StyleSheet.create({
     paddingLeft: Spacing.two,
   },
   inlinePatchLineAdded: {
-    backgroundColor: "rgba(46, 160, 67, 0.16)",
+    backgroundColor: theme.diffAddedBackground,
   },
   inlinePatchLineDeleted: {
-    backgroundColor: "rgba(248, 81, 73, 0.15)",
+    backgroundColor: theme.diffDeletedBackground,
   },
   inlinePatchLineHunk: {
-    backgroundColor: "rgba(255, 255, 255, 0.075)",
+    backgroundColor: theme.diffHunkBackground,
   },
   inlinePatchText: {
     flexShrink: 0,
@@ -1765,19 +1768,19 @@ const styles = StyleSheet.create({
     paddingRight: Spacing.three,
   },
   inlinePatchTextAdded: {
-    color: "#A7F3C1",
+    color: theme.diffAddedText,
   },
   inlinePatchTextDeleted: {
-    color: "#FFB3B3",
+    color: theme.diffDeletedText,
   },
   inlinePatchTextHunk: {
-    color: "#D7E0EA",
+    color: theme.diffText,
   },
   inlinePatchTextContext: {
-    color: "#B9C0CA",
+    color: theme.diffContextText,
   },
   inlinePatchMuted: {
-    color: "#8B98AA",
+    color: theme.diffMuted,
   },
   label: {
     fontSize: 10,
@@ -1860,4 +1863,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 16,
   },
-});
+}));

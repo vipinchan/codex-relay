@@ -32,7 +32,7 @@ export function ThemedText({ style, type = "default", themeColor, ...rest }: The
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   small: {
     fontFamily: Fonts.sansMedium,
     fontSize: 14,
@@ -74,10 +74,10 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     fontSize: 14,
     fontWeight: "500",
-    color: "#3c87f7",
+    color: theme.link,
   },
   code: {
     fontFamily: Fonts.mono,
     fontSize: 12,
   },
-});
+}));

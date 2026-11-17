@@ -1,6 +1,6 @@
 import { useComputerOperations } from "@/hooks/use-computer-operations";
 import * as Clipboard from "expo-clipboard";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -14,6 +14,11 @@ import { StyleSheet } from "react-native-unistyles";
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
 import { Spacing } from "@/constants/theme";
+import { useTheme, useThemeScheme } from "@/hooks/use-theme";
+import {
+  createWorkspaceWebTheme,
+  type WorkspaceWebTheme,
+} from "../../../../web/workspace-code-editor/src/theme";
 import {
   closeWorkspaceTerminalSession as rawCloseWorkspaceTerminalSession,
   createWorkspaceTerminalSession as rawCreateWorkspaceTerminalSession,
@@ -28,10 +33,12 @@ import {
   postWorkspaceSshTerminalState,
   registerWorkspaceSshTerminalBridgeHandlers,
   type WorkspaceSshTerminalSessionStatus,
+  type WorkspaceSshTerminalState,
   WorkspaceSshTerminalBridgeWebView,
 } from "./workspace-ssh-terminal-bridge";
 import workspaceSshTerminalHtml from "./workspace-ssh-terminal-html";
 
+const terminalSource = { html: workspaceSshTerminalHtml };
 const defaultTerminalFontSize = 13;
 const minimumTerminalFontSize = 11;
 const maximumTerminalFontSize = 18;
@@ -45,6 +52,18 @@ const terminalArrowSequences = {
 };
 
 export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: string }) {
+  const theme = useTheme();
+  const scheme = useThemeScheme();
+  const webTheme = useMemo(
+    () => createWorkspaceWebTheme(theme, scheme, "terminal"),
+    [theme, scheme],
+  );
+  const webThemeRef = useRef(webTheme);
+  webThemeRef.current = webTheme;
+  const postTerminalState = useCallback((state: WorkspaceSshTerminalState) => {
+    const themedState = { ...state, theme: webThemeRef.current };
+    postWorkspaceSshTerminalState(themedState);
+  }, []);
   const {
     closeWorkspaceTerminalSession,
     createWorkspaceTerminalSession,
@@ -76,6 +95,7 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
     terminalIdRef.current = createWorkspaceSshTerminalId();
   }
   const terminalId = terminalIdRef.current;
+  const initialScript = useRef(workspaceSshTerminalIdScript(terminalId, webTheme));
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [isTerminalReady, setIsTerminalReady] = useState(false);
   const [terminalInputValue, setTerminalInputValue] = useState("");
@@ -197,7 +217,7 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
       Math.max(minimumTerminalFontSize, nextFontSize),
     );
     setTerminalFontSize(clampedFontSize);
-    postWorkspaceSshTerminalState({
+    postTerminalState({
       fontSize: clampedFontSize,
       reconnectRequestId,
       terminalId,
@@ -211,7 +231,7 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
     setTerminalError(null);
     setTerminalSessionStatus("reconnecting");
     setTerminalSessionMessage("Reconnecting to the existing terminal session");
-    postWorkspaceSshTerminalState({
+    postTerminalState({
       fontSize: terminalFontSize,
       reconnectRequestId: nextReconnectRequestId,
       terminalId,
@@ -239,7 +259,7 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
       reportReady() {
         setIsTerminalReady(true);
         setTerminalError(null);
-        postWorkspaceSshTerminalState({
+        postTerminalState({
           fontSize: terminalFontSize,
           reconnectRequestId,
           terminalId,
@@ -337,6 +357,7 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
   }, [
     closeWorkspaceTerminalSession,
     createWorkspaceTerminalSession,
+    postTerminalState,
     reconnectRequestId,
     resizeWorkspaceTerminalSession,
     streamWorkspaceTerminalOutput,
@@ -347,13 +368,20 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
   ]);
 
   useEffect(() => {
-    postWorkspaceSshTerminalState({
+    postTerminalState({
       fontSize: terminalFontSize,
       reconnectRequestId,
       terminalId,
       workspacePath,
     });
-  }, [reconnectRequestId, terminalFontSize, terminalId, workspacePath]);
+  }, [
+    postTerminalState,
+    reconnectRequestId,
+    terminalFontSize,
+    terminalId,
+    workspacePath,
+    webTheme,
+  ]);
 
   useEffect(
     () => () => {
@@ -393,7 +421,7 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
             allowFileAccess={false}
             allowUniversalAccessFromFileURLs={false}
             domStorageEnabled={false}
-            injectedJavaScriptBeforeContentLoaded={workspaceSshTerminalIdScript(terminalId)}
+            injectedJavaScriptBeforeContentLoaded={initialScript.current}
             javaScriptEnabled
             keyboardDisplayRequiresUserAction={false}
             nestedScrollEnabled
@@ -405,7 +433,7 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
             }}
             originWhitelist={["*"]}
             scrollEnabled={false}
-            source={{ html: workspaceSshTerminalHtml }}
+            source={terminalSource}
             style={styles.terminalWebView}
           />
           <TextInput
@@ -431,7 +459,7 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
           />
           {!isTerminalReady && !terminalError ? (
             <View style={styles.terminalOverlay}>
-              <ActivityIndicator color="#8EA2BD" size="small" />
+              <ActivityIndicator color={theme.accent} size="small" />
               <ThemedText type="small" style={styles.terminalOverlayText}>
                 Loading terminal
               </ThemedText>
@@ -440,7 +468,7 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
           {terminalError ? (
             <View style={styles.terminalError}>
               <View style={styles.terminalErrorContent}>
-                <Icon name="warning" size={15} tintColor="#F87171" />
+                <Icon name="warning" size={15} tintColor={theme.dangerStrong} />
                 <ThemedText type="small" style={styles.terminalErrorText}>
                   {terminalError}
                 </ThemedText>
@@ -461,9 +489,9 @@ export function WorkspaceSshTerminalTab({ workspacePath }: { workspacePath?: str
         {terminalSessionStatus !== "connected" && !terminalError ? (
           <View style={styles.terminalStatusBanner}>
             {terminalSessionStatus === "connecting" || terminalSessionStatus === "reconnecting" ? (
-              <ActivityIndicator color="#8EA2BD" size="small" />
+              <ActivityIndicator color={theme.accent} size="small" />
             ) : (
-              <Icon name="terminal" size={14} tintColor="#8EA2BD" />
+              <Icon name="terminal" size={14} tintColor={theme.accent} />
             )}
             <ThemedText type="small" style={styles.terminalStatusText}>
               {terminalSessionStatus === "closed"
@@ -640,8 +668,8 @@ function TerminalShortcutButton({
   );
 }
 
-function workspaceSshTerminalIdScript(terminalId: string) {
-  return `window.__workspaceSshTerminalId = ${JSON.stringify(terminalId)}; true;`;
+function workspaceSshTerminalIdScript(terminalId: string, theme: WorkspaceWebTheme) {
+  return `window.__workspaceSshTerminalId = ${JSON.stringify(terminalId)}; window.__workspaceSshTerminalTheme = ${JSON.stringify(theme)}; true;`;
 }
 
 function normalizeTerminalInput(data: string) {
@@ -694,14 +722,14 @@ function controlCharacter(char: string) {
   }
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   keyboardAwareContent: {
     flex: 1,
     minHeight: 0,
   },
   terminalFrame: {
-    backgroundColor: "#1F1F1F",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.terminalBackground,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     flex: 1,
@@ -715,7 +743,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   terminalWebView: {
-    backgroundColor: "#1F1F1F",
+    backgroundColor: theme.terminalBackground,
     flex: 1,
   },
   terminalNativeInput: {
@@ -731,7 +759,7 @@ const styles = StyleSheet.create({
   },
   terminalOverlay: {
     alignItems: "center",
-    backgroundColor: "#1F1F1F",
+    backgroundColor: theme.terminalBackground,
     bottom: 0,
     gap: Spacing.two,
     justifyContent: "center",
@@ -741,11 +769,11 @@ const styles = StyleSheet.create({
     top: 0,
   },
   terminalOverlayText: {
-    color: "#8EA2BD",
+    color: theme.accent,
   },
   terminalError: {
     alignItems: "stretch",
-    backgroundColor: "rgba(25, 25, 25, 0.94)",
+    backgroundColor: theme.backgroundOverlayStrong,
     bottom: 0,
     gap: Spacing.two,
     justifyContent: "center",
@@ -761,14 +789,14 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   terminalErrorText: {
-    color: "#F87171",
+    color: theme.dangerStrong,
     flex: 1,
   },
   terminalErrorButton: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: "#3A2A2A",
-    borderColor: "rgba(248, 113, 113, 0.42)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.dangerBorder,
     borderRadius: 6,
     borderWidth: 1,
     minHeight: 34,
@@ -776,14 +804,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   terminalErrorButtonText: {
-    color: "#FCA5A5",
+    color: theme.danger,
     fontSize: 13,
     fontWeight: "700",
   },
   terminalStatusBanner: {
     alignItems: "center",
-    backgroundColor: "#202832",
-    borderTopColor: "rgba(142, 162, 189, 0.18)",
+    backgroundColor: theme.backgroundElement,
+    borderTopColor: theme.border,
     borderTopWidth: 1,
     flexDirection: "row",
     gap: Spacing.one,
@@ -791,18 +819,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   terminalStatusText: {
-    color: "#CBD5E1",
+    color: theme.textSecondary,
     fontSize: 12,
     fontWeight: "700",
   },
   terminalStatusDetail: {
-    color: "#8EA2BD",
+    color: theme.accent,
     flex: 1,
     fontSize: 12,
   },
   terminalShortcutBar: {
-    backgroundColor: "#232323",
-    borderTopColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.backgroundElement,
+    borderTopColor: theme.borderSubtle,
     borderTopWidth: 1,
     gap: 7,
     paddingHorizontal: 10,
@@ -817,8 +845,8 @@ const styles = StyleSheet.create({
   },
   terminalShortcutButton: {
     alignItems: "center",
-    backgroundColor: "#2B2B2B",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.borderSubtle,
     borderRadius: 6,
     borderWidth: 1,
     flex: 1,
@@ -828,14 +856,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   terminalShortcutButtonActive: {
-    backgroundColor: "#3B4450",
-    borderColor: "rgba(142, 162, 189, 0.72)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.borderEmphasis,
   },
   terminalShortcutButtonText: {
-    color: "#D6D6D6",
+    color: theme.textSecondary,
     fontSize: 13,
     fontWeight: "600",
     lineHeight: 17,
     textAlign: "center",
   },
-});
+}));

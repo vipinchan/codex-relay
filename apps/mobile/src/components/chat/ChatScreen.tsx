@@ -59,7 +59,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { ThemedText } from "@/components/themed-text";
 import { CopyableCommand } from "@/components/ui/copyable-command";
 import { AppToast } from "@/components/ui/toast";
-import { Colors, Fonts, Spacing } from "@/constants/theme";
+import { Fonts, Spacing } from "@/constants/theme";
 import { activeThreadAfterRefresh } from "@/lib/active-thread-selection";
 import { consumeHydratedDefaultThread } from "@/lib/server-state-hydration";
 import {
@@ -83,6 +83,7 @@ import {
   hapticSuccess,
   hapticWarning,
 } from "@/lib/haptics";
+import { useTheme } from "@/hooks/use-theme";
 import {
   runtimePreferencesForThread,
   runtimePreferencesForWorkspace,
@@ -203,6 +204,7 @@ type ChatScreenProps = {
 };
 
 export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
+  const theme = useTheme();
   const screenConnection = useMemo(captureConnection, []);
   const {
     applyStreamEventToServerState,
@@ -2723,7 +2725,10 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         presentationStyle="pageSheet"
         visible={isPastePairOpen}
       >
-        <SafeAreaView edges={["top", "left", "right"]} style={styles.manualScreen}>
+        <SafeAreaView
+          edges={["top", "left", "right"]}
+          style={[styles.manualScreen, { backgroundColor: theme.background }]}
+        >
           <View style={styles.manualPanel}>
             <View style={styles.manualHeader}>
               <ThemedText type="smallBold" style={styles.manualTitle}>
@@ -2778,7 +2783,7 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
         presentationStyle="fullScreen"
         visible={isScannerOpen}
       >
-        <View style={styles.scannerScreen}>
+        <View style={[styles.scannerScreen, { backgroundColor: theme.background }]}>
           {cameraPermission?.granted ? (
             <CameraView
               active={isScannerOpen}
@@ -3180,7 +3185,7 @@ function clampPreviewPaneWidth(value: number, layoutWidth: number) {
 
 const chatBannerLayoutTransition = LinearTransition.duration(180);
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   pressed: {
     opacity: 0.7,
   },
@@ -3191,7 +3196,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   wideLayout: {
-    backgroundColor: Colors.dark.background,
+    backgroundColor: theme.background,
     flex: 1,
     flexDirection: "row",
   },
@@ -3208,7 +3213,7 @@ const styles = StyleSheet.create({
     flex: 1.08,
   },
   previewResizeGrip: {
-    backgroundColor: "rgba(255, 255, 255, 0.22)",
+    backgroundColor: theme.tintHeavy,
     borderRadius: 1,
     height: 44,
     marginLeft: -1,
@@ -3217,7 +3222,7 @@ const styles = StyleSheet.create({
   },
   previewResizeHandle: {
     alignItems: "flex-start",
-    borderLeftColor: "rgba(255, 255, 255, 0.08)",
+    borderLeftColor: theme.borderSubtle,
     borderLeftWidth: StyleSheet.hairlineWidth,
     justifyContent: "center",
     width: PREVIEW_RESIZE_HANDLE_WIDTH,
@@ -3226,7 +3231,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   scannerScreen: {
-    backgroundColor: Colors.dark.background,
+    backgroundColor: theme.background,
     flex: 1,
   },
   camera: {
@@ -3244,8 +3249,8 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.three,
   },
   scannerTitle: {
-    backgroundColor: "rgba(42, 42, 42, 0.78)",
-    borderColor: "rgba(255, 255, 255, 0.14)",
+    backgroundColor: theme.backgroundOverlay,
+    borderColor: theme.border,
     borderRadius: 18,
     borderWidth: 1,
     overflow: "hidden",
@@ -3253,8 +3258,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   scannerClose: {
-    backgroundColor: "rgba(42, 42, 42, 0.78)",
-    borderColor: "rgba(255, 255, 255, 0.14)",
+    backgroundColor: theme.backgroundOverlay,
+    borderColor: theme.border,
     borderRadius: 18,
     borderWidth: 1,
     paddingHorizontal: Spacing.three,
@@ -3267,8 +3272,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
   },
   scannerMessage: {
-    backgroundColor: "rgba(42, 42, 42, 0.78)",
-    borderColor: "rgba(255, 255, 255, 0.14)",
+    backgroundColor: theme.backgroundOverlay,
+    borderColor: theme.border,
     borderRadius: 18,
     borderWidth: 1,
     overflow: "hidden",
@@ -3283,8 +3288,8 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
   },
   scannerPermissionCard: {
-    backgroundColor: Colors.dark.backgroundElement,
-    borderColor: "rgba(255, 255, 255, 0.14)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     gap: Spacing.three,
@@ -3302,8 +3307,8 @@ const styles = StyleSheet.create({
   },
   scannerPermissionAction: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "rgba(132, 145, 165, 0.24)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     minHeight: 40,
@@ -3311,10 +3316,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
   },
   scannerPermissionActionText: {
-    color: Colors.dark.text,
+    color: theme.text,
   },
   manualScreen: {
-    backgroundColor: Colors.dark.background,
+    backgroundColor: theme.background,
     flex: 1,
   },
   manualPanel: {
@@ -3334,28 +3339,28 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   manualApproval: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.tintMuted,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     gap: Spacing.two,
     padding: Spacing.three,
   },
   manualApprovalCode: {
-    color: Colors.dark.text,
+    color: theme.text,
     fontFamily: Fonts.monoMedium,
     fontSize: 24,
     lineHeight: 30,
   },
   manualApprovalCommand: {
-    color: Colors.dark.text,
+    color: theme.text,
     fontFamily: Fonts.monoMedium,
     fontSize: 13,
     lineHeight: 18,
   },
   manualButtonSecondary: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "rgba(132, 145, 165, 0.24)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.border,
     borderRadius: 13,
     borderWidth: 1,
     paddingHorizontal: Spacing.two,
@@ -3363,8 +3368,8 @@ const styles = StyleSheet.create({
   },
   manualStatus: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: theme.tintSoft,
+    borderColor: theme.borderSubtle,
     borderRadius: 8,
     borderWidth: 1,
     minHeight: 48,
@@ -3374,4 +3379,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
   },
-});
+}));

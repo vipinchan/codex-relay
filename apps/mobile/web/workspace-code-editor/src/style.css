@@ -1,7 +1,7 @@
 html,
 body,
 #editor-shell {
-  background: #252525;
+  background: var(--workspace-background);
   height: 100%;
   margin: 0;
   overflow: hidden;
@@ -13,9 +13,9 @@ body,
 }
 
 #line-number-rail {
-  background: #252525;
+  background: var(--workspace-background);
   box-sizing: border-box;
-  color: #8e98a6;
+  color: var(--workspace-muted);
   display: none;
   flex: 0 0 38px;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -47,16 +47,16 @@ body,
 .monaco-editor,
 .monaco-editor-background,
 .monaco-editor .inputarea.ime-input {
-  background: #252525 !important;
+  background: var(--workspace-background) !important;
 }
 
 .monaco-editor .margin,
 .monaco-editor .glyph-margin {
-  background: #252525 !important;
+  background: var(--workspace-background) !important;
 }
 
 .monaco-editor .mtk1 {
-  color: #d6dee8 !important;
+  color: var(--workspace-foreground) !important;
 }
 
 body.viewer-mode .monaco-editor .cursor,

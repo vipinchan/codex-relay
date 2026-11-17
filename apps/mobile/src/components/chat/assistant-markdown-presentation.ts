@@ -1,12 +1,7 @@
 import type { MarkdownStyle } from "react-native-enriched-markdown";
+import type { AppearanceColors } from "../../constants/appearance";
 
 export const ASSISTANT_MARKDOWN_FLAVOR = "github" as const;
-
-type AssistantMarkdownTheme = {
-  backgroundSelected: string;
-  text: string;
-  textSecondary: string;
-};
 
 type AssistantMarkdownFonts = {
   mono: string;
@@ -17,7 +12,7 @@ type AssistantMarkdownFonts = {
 };
 
 export function createAssistantMarkdownStyle(
-  theme: AssistantMarkdownTheme,
+  theme: AppearanceColors,
   fonts: AssistantMarkdownFonts,
 ): MarkdownStyle {
   return {
@@ -87,20 +82,20 @@ export function createAssistantMarkdownStyle(
       fontFamily: fonts.sans,
     },
     link: {
-      color: "#6EB6FF",
+      color: theme.accent,
       fontFamily: fonts.sansMedium,
       underline: false,
     },
     code: {
-      backgroundColor: "rgba(255, 255, 255, 0.08)",
-      borderColor: "rgba(255, 255, 255, 0.12)",
-      color: "#DCE6F0",
+      backgroundColor: theme.tintSoft,
+      borderColor: theme.borderSubtle,
+      color: theme.inlineCodeText,
       fontFamily: fonts.monoMedium,
       fontSize: 13,
     },
     codeBlock: {
       backgroundColor: theme.backgroundSelected,
-      borderColor: "rgba(132, 145, 165, 0.28)",
+      borderColor: theme.borderStrong,
       borderRadius: 10,
       borderWidth: 1,
       color: theme.text,
@@ -111,20 +106,20 @@ export function createAssistantMarkdownStyle(
       marginBottom: 16,
       padding: 12,
       syntaxColors: {
-        keyword: "#FF7B72",
-        operator: "#C9D1D9",
-        punctuation: "#C9D1D9",
-        string: "#A5D6FF",
-        number: "#79C0FF",
-        constant: "#79C0FF",
-        comment: "#8B949E",
-        function: "#D2A8FF",
-        type: "#FFA657",
-        variable: "#FFA657",
-        property: "#79C0FF",
-        tag: "#7EE787",
-        attribute: "#79C0FF",
-        embedded: "#C9D1D9",
+        keyword: theme.syntaxKeyword,
+        operator: theme.syntaxOperator,
+        punctuation: theme.syntaxPunctuation,
+        string: theme.syntaxString,
+        number: theme.syntaxNumber,
+        constant: theme.syntaxConstant,
+        comment: theme.syntaxComment,
+        function: theme.syntaxFunction,
+        type: theme.syntaxType,
+        variable: theme.syntaxVariable,
+        property: theme.syntaxProperty,
+        tag: theme.syntaxTag,
+        attribute: theme.syntaxAttribute,
+        embedded: theme.syntaxEmbedded,
       },
     },
     list: {
@@ -142,8 +137,8 @@ export function createAssistantMarkdownStyle(
       itemSpacing: 6,
     },
     blockquote: {
-      backgroundColor: "rgba(95, 167, 255, 0.07)",
-      borderColor: "#5FA7FF",
+      backgroundColor: theme.accentSoft,
+      borderColor: theme.accentStrong,
       borderRadius: 8,
       borderWidth: 3,
       color: theme.text,
@@ -163,11 +158,11 @@ export function createAssistantMarkdownStyle(
       marginTop: 12,
       marginBottom: 18,
       headerFontFamily: fonts.sansSemiBold,
-      headerBackgroundColor: "rgba(255, 255, 255, 0.08)",
+      headerBackgroundColor: theme.tableHeader,
       headerTextColor: theme.text,
-      rowEvenBackgroundColor: "rgba(255, 255, 255, 0.025)",
-      rowOddBackgroundColor: "rgba(255, 255, 255, 0.045)",
-      borderColor: "rgba(132, 145, 165, 0.28)",
+      rowEvenBackgroundColor: theme.tableRowEven,
+      rowOddBackgroundColor: theme.tableRowOdd,
+      borderColor: theme.borderStrong,
       borderWidth: 1,
       borderRadius: 9,
       cellPaddingHorizontal: 12,
@@ -176,16 +171,16 @@ export function createAssistantMarkdownStyle(
       align: "left",
     },
     taskList: {
-      borderColor: "rgba(214, 222, 232, 0.46)",
-      checkedColor: "#5FA7FF",
-      checkmarkColor: "#07111D",
+      borderColor: theme.textSecondary,
+      checkedColor: theme.accentStrong,
+      checkmarkColor: theme.backgroundElement,
       checkboxBorderRadius: 4,
       checkboxSize: 17,
       checkedTextColor: theme.textSecondary,
       checkedStrikethrough: false,
     },
     thematicBreak: {
-      color: "rgba(132, 145, 165, 0.28)",
+      color: theme.tintHeavy,
       height: 1,
       marginTop: 20,
       marginBottom: 20,

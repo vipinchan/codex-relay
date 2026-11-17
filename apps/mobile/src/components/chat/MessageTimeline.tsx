@@ -1,3 +1,4 @@
+import { useTheme } from "@/hooks/use-theme";
 import type { ChatMessage } from "codex-relay/api-schema";
 import { type LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { useCallback, useEffect } from "react";
@@ -14,7 +15,7 @@ import Animated, {
 
 import { ThemedText } from "@/components/themed-text";
 import { Icon } from "@/components/ui/icon";
-import { Colors, Spacing } from "@/constants/theme";
+import { Spacing } from "@/constants/theme";
 import { getCodexRelayCacheIdentity } from "@/lib/codex-relay-api";
 
 import { MessageBubble } from "./MessageBubble";
@@ -67,6 +68,7 @@ export function MessageTimeline({
   onRetry?: () => void;
   threadId?: string;
 }) {
+  const theme = useTheme();
   const controller = useMessageListController({
     timelineKey: `${getCodexRelayCacheIdentity()}:${threadId ?? "no-thread"}`,
     messages,
@@ -132,7 +134,7 @@ export function MessageTimeline({
             ) : (
               <View style={styles.empty}>
                 <View style={styles.emptyMark}>
-                  <Icon name="model" size={20} tintColor="#F5F5F7" />
+                  <Icon name="model" size={20} tintColor={theme.text} />
                 </View>
                 <ThemedText type="smallBold" style={styles.emptyTitle}>
                   What do you want to build?
@@ -177,9 +179,10 @@ export function MessageTimeline({
 }
 
 function LoadingConversation() {
+  const theme = useTheme();
   return (
     <View style={styles.empty} accessibilityRole="progressbar">
-      <ActivityIndicator color={Colors.dark.textSecondary} />
+      <ActivityIndicator color={theme.textSecondary} />
       <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
         Loading conversation…
       </ThemedText>
@@ -230,7 +233,7 @@ function timelineRowItemType(row: TimelineRow) {
   return row.type === "message" ? messageItemType(row.message) : row.type;
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   content: {
     paddingBottom: 6,
     paddingHorizontal: 18,
@@ -245,8 +248,8 @@ const styles = StyleSheet.create({
   },
   emptyMark: {
     alignItems: "center",
-    backgroundColor: "#1C1C1E",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.backgroundElement,
+    borderColor: theme.borderSubtle,
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
     height: 44,
@@ -274,7 +277,7 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
   },
   retryButton: {
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderColor: theme.border,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     marginTop: Spacing.one,
@@ -296,4 +299,4 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-});
+}));

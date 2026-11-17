@@ -69,16 +69,16 @@ export function BotSubmissionRetry({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   retryBar: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     padding: 12,
-    backgroundColor: "#2E1D23",
+    backgroundColor: theme.dangerSoft,
   },
-  error: { color: "#FFB3C1", fontSize: 12 },
+  error: { color: theme.danger, fontSize: 12 },
   retryCopy: { flex: 1, gap: 5 },
-  action: { color: "#6EA8FF", fontSize: 13 },
-  hint: { color: "#929AA8", fontSize: 11 },
-});
+  action: { color: theme.accent, fontSize: 13 },
+  hint: { color: theme.textSecondary, fontSize: 11 },
+}));

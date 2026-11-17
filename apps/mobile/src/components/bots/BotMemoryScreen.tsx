@@ -227,7 +227,7 @@ export function BotMemoryScreen({ botId }: { botId: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 40, gap: 11 },
   intro: { fontSize: 13, lineHeight: 19, marginBottom: 5 },
   input: {
@@ -249,13 +249,13 @@ const styles = StyleSheet.create({
   manual: { fontSize: 11 },
   actions: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#3A3A3C",
+    borderTopColor: theme.controlTrack,
     paddingTop: 10,
     flexDirection: "row",
     gap: 24,
   },
   link: { fontFamily: Fonts.sansMedium, fontSize: 13 },
-  delete: { color: "#FF8DA5", fontFamily: Fonts.sansMedium, fontSize: 13 },
-  error: { color: "#FF8DA5", fontSize: 13 },
+  delete: { color: theme.danger, fontFamily: Fonts.sansMedium, fontSize: 13 },
+  error: { color: theme.danger, fontSize: 13 },
   empty: { textAlign: "center", paddingVertical: 24, fontSize: 13 },
-});
+}));

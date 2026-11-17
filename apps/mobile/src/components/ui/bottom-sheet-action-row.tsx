@@ -98,7 +98,7 @@ export function SheetSelectedDot({ selected }: { selected?: boolean }) {
   return <View style={[styles.selectedDot, selected ? null : styles.unselectedDot]} />;
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   actionRow: {
     alignItems: "center",
     alignSelf: "stretch",
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
   },
   actionIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: theme.tintSoft,
     borderCurve: "continuous",
     borderRadius: 16,
     height: 32,
@@ -145,14 +145,14 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   selectedDot: {
-    backgroundColor: "#F3F4F6",
+    backgroundColor: theme.accent,
     borderRadius: 6,
     height: 12,
     width: 12,
   },
   unselectedDot: {
     backgroundColor: "transparent",
-    borderColor: "rgba(243, 244, 246, 0.4)",
+    borderColor: theme.borderStrong,
     borderWidth: 1,
   },
-});
+}));

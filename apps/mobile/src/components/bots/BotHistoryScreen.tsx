@@ -120,7 +120,7 @@ export function BotHistoryScreen({ botId }: { botId: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
   content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 40, gap: 11 },
   intro: { fontSize: 13, lineHeight: 19 },
   search: {
@@ -137,5 +137,5 @@ const styles = StyleSheet.create({
   body: { fontSize: 14, lineHeight: 20 },
   date: { fontSize: 11 },
   empty: { textAlign: "center", paddingVertical: 24, fontSize: 13 },
-  error: { color: "#FF8DA5", fontSize: 13 },
-});
+  error: { color: theme.danger, fontSize: 13 },
+}));

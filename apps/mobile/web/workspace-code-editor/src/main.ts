@@ -3,6 +3,9 @@ import { linkBridge } from "@webview-bridge/web";
 import * as monaco from "monaco-editor-core";
 import { createHighlighter } from "shiki";
 
+import { appearanceLight } from "../../../src/constants/appearance";
+import { applyWorkspaceWebTheme, createWorkspaceWebTheme, type WorkspaceWebTheme } from "./theme";
+
 import type {
   WorkspaceCodeEditorBridge,
   WorkspaceCodeEditorPostMessageSchema,
@@ -11,11 +14,10 @@ import type {
 
 import "./style.css";
 
-const MONACO_THEME = "github-dark-default";
-
 declare global {
   interface Window {
     __workspaceCodeEditorId?: string;
+    __workspaceCodeEditorTheme?: WorkspaceWebTheme;
   }
 }
 
@@ -27,6 +29,8 @@ const defaultEditorState: WorkspaceCodeEditorState = {
   lineNumbers: false,
   mode: "viewer",
   value: "",
+  theme:
+    window.__workspaceCodeEditorTheme ?? createWorkspaceWebTheme(appearanceLight, "light", "code"),
 };
 
 const bridge = linkBridge<WorkspaceCodeEditorBridge, WorkspaceCodeEditorPostMessageSchema>({
@@ -70,6 +74,7 @@ let lastNativeValue = "";
 let pendingState: WorkspaceCodeEditorState | undefined;
 let lastRenderedLineCount = 0;
 let pendingLayoutFrame = 0;
+let hasAppliedState = false;
 
 self.MonacoEnvironment = {
   getWorker() {
@@ -88,6 +93,7 @@ bridge.addEventListener("editorState", (state) => {
   }
 });
 
+applyWorkspaceWebTheme(defaultEditorState.theme!);
 void initializeEditor();
 
 async function initializeEditor() {
@@ -98,7 +104,7 @@ async function initializeEditor() {
 
     const highlighter = await createHighlighter({
       langs: [...supportedLanguages],
-      themes: [MONACO_THEME],
+      themes: ["github-light-default", "github-dark-default"],
     });
     shikiToMonaco(highlighter, monaco);
 
@@ -133,7 +139,7 @@ async function initializeEditor() {
         verticalScrollbarSize: 6,
       },
       tabSize: 2,
-      theme: MONACO_THEME,
+      theme: monacoTheme(state.theme),
       wordWrap: "on",
     });
 
@@ -163,11 +169,19 @@ async function initializeEditor() {
   }
 }
 
+function monacoTheme(theme: WorkspaceWebTheme | undefined) {
+  return theme?.scheme === "dark" ? "github-dark-default" : "github-light-default";
+}
+
 function applyBridgeState(state: WorkspaceCodeEditorState) {
   if (state.editorId !== editorId) {
     return;
   }
+  const previousState = currentState;
   currentState = state;
+  if (state.theme) {
+    applyWorkspaceWebTheme(state.theme);
+  }
 
   if (!editor) {
     pendingState = state;
@@ -175,6 +189,19 @@ function applyBridgeState(state: WorkspaceCodeEditorState) {
   }
 
   const mode = state.mode;
+  monaco.editor.setTheme(monacoTheme(state.theme));
+  const unchangedConfiguration =
+    hasAppliedState &&
+    mode === previousState.mode &&
+    state.language === previousState.language &&
+    state.lineNumbers === previousState.lineNumbers;
+  hasAppliedState = true;
+  if (
+    unchangedConfiguration &&
+    (state.value === lastNativeValue || editor.getValue() === state.value)
+  ) {
+    return;
+  }
   const isEditor = mode === "editor";
   document.body.classList.toggle("viewer-mode", !isEditor);
   document.body.classList.toggle("hide-line-numbers", !state.lineNumbers);

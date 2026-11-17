@@ -1,5 +1,7 @@
 import { bridge, createWebView } from "@webview-bridge/react-native";
 
+import type { WorkspaceWebTheme } from "../../../../web/workspace-code-editor/src/theme";
+
 export type WorkspaceCodeEditorMode = "editor" | "viewer";
 
 export type WorkspaceCodeEditorState = {
@@ -7,6 +9,7 @@ export type WorkspaceCodeEditorState = {
   language: string;
   lineNumbers: boolean;
   mode: WorkspaceCodeEditorMode;
+  theme?: WorkspaceWebTheme;
   value: string;
 };
 
