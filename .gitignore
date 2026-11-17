@@ -46,7 +46,7 @@ yarn-error.*
 app-example
 
 # generated native folders
-/build/macos/
+/build/
 /ios
 /android
 apps/mobile/ios/

@@ -199,7 +199,7 @@ function testNonceFor(sender: "mobile" | "server", counter: number) {
 }
 
 async function git(cwd: string, args: string[]) {
-  await execFileAsync("git", args, { cwd });
+  await execFileAsync("git", ["-c", "core.excludesfile=/dev/null", ...args], { cwd });
 }
 
 async function waitUntil(assertion: () => void | Promise<void>) {

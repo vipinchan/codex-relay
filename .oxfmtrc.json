@@ -3,6 +3,7 @@
   "ignorePatterns": [
     "dogfood-output/**",
     "node_modules/**",
+    "build/**",
     "packages/codex-relay/src/collaboration-mode-templates/**",
     "apps/mobile/src/components/chat/workspace-preview/workspace-code-editor-html.ts",
     "apps/mobile/src/components/chat/workspace-preview/workspace-ssh-terminal-html.ts",
