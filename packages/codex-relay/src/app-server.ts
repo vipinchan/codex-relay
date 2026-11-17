@@ -350,6 +350,18 @@ export class CodexAppServerClient {
   }
 
   async listThreads(limit = Number(process.env.CODEX_RELAY_THREAD_LIST_LIMIT ?? 20)) {
+    return (await this.listThreadsPage({ limit })).data;
+  }
+
+  async listThreadsPage(
+    options: { cursor?: string; limit?: number } = {},
+  ): Promise<{ data: AppServerThread[]; nextCursor: string | null }> {
+    const limit = options.limit ?? Number(process.env.CODEX_RELAY_THREAD_LIST_LIMIT ?? 20);
+    const legacyCursorPrefix = "relay-legacy:";
+    let legacy = options.cursor?.startsWith(legacyCursorPrefix) ?? false;
+    const cursor = legacy
+      ? Buffer.from(options.cursor!.slice(legacyCursorPrefix.length), "base64url").toString("utf8")
+      : options.cursor;
     if (!Number.isSafeInteger(limit) || limit < 1) {
       throw new Error("CODEX_RELAY_THREAD_LIST_LIMIT must be a positive integer.");
     }
@@ -361,16 +373,24 @@ export class CodexAppServerClient {
       sortDirection: "desc",
       sortKey: "recency_at",
       sourceKinds: ["cli", "vscode", "exec", "appServer"],
+      ...(cursor === undefined ? {} : { cursor }),
     };
     // Rescanning legacy rollouts on every refresh can exceed the mobile timeout.
     // Modern Codex sessions are indexed as they are written.
-    let response = await this.request<{ data: AppServerThread[] }>("thread/list", {
+    let response = await this.request<{
+      data: AppServerThread[];
+      nextCursor?: string | null;
+    }>("thread/list", {
       ...params,
-      useStateDbOnly: true,
+      ...(legacy ? {} : { useStateDbOnly: true }),
     });
-    if (response.data.length === 0) {
+    if (response.data.length === 0 && !response.nextCursor && options.cursor === undefined) {
+      legacy = true;
       // Let Codex discover older history when there is no indexed history yet.
-      response = await this.request<{ data: AppServerThread[] }>("thread/list", params);
+      response = await this.request<{ data: AppServerThread[]; nextCursor?: string | null }>(
+        "thread/list",
+        params,
+      );
     }
     relayDebugLog("thread.list.completed", {
       durationMs: Date.now() - startedAt,
@@ -378,7 +398,12 @@ export class CodexAppServerClient {
       count: response.data.length,
     });
     // A limit is a total bound, not a page size followed by an unbounded scan.
-    return response.data.slice(0, limit);
+    const nextCursor = response.nextCursor
+      ? legacy
+        ? `${legacyCursorPrefix}${Buffer.from(response.nextCursor).toString("base64url")}`
+        : response.nextCursor
+      : null;
+    return { data: response.data.slice(0, limit), nextCursor };
   }
 
   async readThread(threadId: string, options: { includeTurns?: boolean } = {}) {

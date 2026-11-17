@@ -277,6 +277,41 @@ describe("CodexAppServerClient shared socket mode", () => {
     }
   });
 
+  it("returns thread page cursors and forwards continuation without rescanning an empty page", async () => {
+    const codexHome = await mkdtemp(join(socketTempRoot, "codex-relay-thread-pages-"));
+    const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");
+    const server = await startSharedSocketServer(socketPath, (request) => {
+      if (request.method !== "thread/list") return {};
+      return request.params?.cursor
+        ? { data: [], nextCursor: null }
+        : { data: [{ id: "recent-thread" }], nextCursor: "older-page" };
+    });
+    vi.stubEnv("CODEX_HOME", codexHome);
+    vi.stubEnv("CODEX_RELAY_APP_SERVER_MODE", "socket");
+    const client = new CodexAppServerClient();
+    try {
+      await expect(client.listThreadsPage({ limit: 20 })).resolves.toEqual({
+        data: [{ id: "recent-thread" }],
+        nextCursor: "older-page",
+      });
+      await expect(client.listThreadsPage({ limit: 20, cursor: "older-page" })).resolves.toEqual({
+        data: [],
+        nextCursor: null,
+      });
+      const requests = server.requests.filter((request) => request.method === "thread/list");
+      expect(requests).toHaveLength(2);
+      expect(requests[1]?.params).toMatchObject({
+        cursor: "older-page",
+        limit: 20,
+        useStateDbOnly: true,
+      });
+    } finally {
+      client.close();
+      await server.close();
+      await rm(codexHome, { force: true, recursive: true });
+    }
+  });
+
   it("loads full turn pages from newest to oldest using the returned cursor", async () => {
     const codexHome = await mkdtemp(join(socketTempRoot, "codex-relay-turn-pages-"));
     const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");
@@ -341,6 +376,33 @@ describe("CodexAppServerClient shared socket mode", () => {
         }),
       ]);
       expect(server.requests.some((request) => request.method === "thread/read")).toBe(false);
+    } finally {
+      client.close();
+      await server.close();
+      await rm(codexHome, { force: true, recursive: true });
+    }
+  });
+
+  it("continues legacy discovery pages using the same history source", async () => {
+    const codexHome = await mkdtemp(join(socketTempRoot, "codex-relay-legacy-list-"));
+    const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");
+    const server = await startSharedSocketServer(socketPath, (request) => {
+      if (request.method !== "thread/list") return {};
+      if (request.params?.useStateDbOnly) return { data: [], nextCursor: null };
+      return request.params?.cursor
+        ? { data: [{ id: "oldest-legacy" }], nextCursor: null }
+        : { data: [{ id: "recent-legacy" }], nextCursor: "legacy-next" };
+    });
+    vi.stubEnv("CODEX_HOME", codexHome);
+    vi.stubEnv("CODEX_RELAY_APP_SERVER_MODE", "socket");
+    const client = new CodexAppServerClient();
+    try {
+      const recent = await client.listThreadsPage({ limit: 20 });
+      const older = await client.listThreadsPage({ limit: 20, cursor: recent.nextCursor! });
+      expect(older.data.map((thread) => thread.id)).toEqual(["oldest-legacy"]);
+      const last = server.requests.filter((request) => request.method === "thread/list").at(-1);
+      expect(last?.params).toMatchObject({ cursor: "legacy-next", limit: 20 });
+      expect(last?.params).not.toHaveProperty("useStateDbOnly");
     } finally {
       client.close();
       await server.close();

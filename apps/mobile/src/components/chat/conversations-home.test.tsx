@@ -38,9 +38,16 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => ({
     data: queryClient.getQueryData(queryKey),
   }),
-  useMutation: ({ mutationFn }: { mutationFn: (input: unknown) => Promise<unknown> }) => ({
-    isPending: ui.pending,
+  useMutation: ({
+    mutationFn,
+    mutationKey,
+  }: {
+    mutationFn: (input: unknown) => Promise<unknown>;
+    mutationKey?: unknown[];
+  }) => ({
+    isPending: !mutationKey && ui.pending,
     mutateAsync: mutationFn,
+    reset: vi.fn<() => void>(),
   }),
 }));
 vi.mock("react-native", () => ({

@@ -921,8 +921,12 @@ export async function unregisterPushNotifications(): Promise<PushNotificationSet
   );
 }
 
-export async function listThreads(): Promise<ListThreadsResponse> {
-  return request(apiPaths.threads, undefined, ListThreadsResponseSchema.parse);
+export async function listThreads(
+  options: { cursor?: string; limit?: number } = {},
+): Promise<ListThreadsResponse> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
+  if (options.cursor !== undefined) params.set("cursor", options.cursor);
+  return request(`${apiPaths.threads}?${params}`, undefined, ListThreadsResponseSchema.parse);
 }
 
 export async function archiveThread(threadId: string): Promise<ArchiveThreadResponse> {

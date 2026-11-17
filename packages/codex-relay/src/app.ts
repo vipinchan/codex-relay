@@ -2987,30 +2987,93 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.get(apiPaths.threads, async (c) => {
+    const rawLimit = c.req.query("limit") ?? "20";
+    const cursor = c.req.query("cursor");
+    const limit = Number(rawLimit);
+    if (
+      !/^\d+$/.test(rawLimit) ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100 ||
+      (cursor !== undefined && (!cursor || cursor.length > 16_384))
+    ) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_request", "Invalid thread list limit or cursor."),
+        400,
+      );
+    }
     if (appServer) {
       try {
-        const appServerThreads = await appServer.listThreads();
         const botThreadIds = await (await botStore).listThreadIds();
+        const appServerThreads: AppServerThread[] = [];
+        const seenThreadIds = new Set<string>();
+        const visitedCursors = new Set<string>();
+        let nextCursor = cursor;
+        do {
+          if (nextCursor) {
+            if (visitedCursors.has(nextCursor))
+              throw new Error("Thread list cursor did not advance.");
+            visitedCursors.add(nextCursor);
+          }
+          const page = await appServer.listThreadsPage({
+            limit: limit - appServerThreads.length,
+            ...(nextCursor === undefined ? {} : { cursor: nextCursor }),
+          });
+          for (const thread of page.data) {
+            if (
+              !isSubagentThread(thread) &&
+              !titleGenerationThreadIds.has(thread.id) &&
+              !botThreadIds.has(thread.id) &&
+              !seenThreadIds.has(thread.id)
+            ) {
+              appServerThreads.push(thread);
+              seenThreadIds.add(thread.id);
+            }
+          }
+          nextCursor = page.nextCursor ?? undefined;
+          if (nextCursor && visitedCursors.has(nextCursor)) {
+            throw new Error("Thread list cursor did not advance.");
+          }
+        } while (appServerThreads.length < limit && nextCursor);
         const response: ListThreadsResponse = ListThreadsResponseSchema.parse({
-          threads: appServerThreads
-            .filter(
-              (thread) =>
-                !isSubagentThread(thread) &&
-                !titleGenerationThreadIds.has(thread.id) &&
-                !botThreadIds.has(thread.id),
-            )
-            .map((thread) => rememberAppServerThread(threads, thread)),
+          threads: appServerThreads.map((thread) => rememberAppServerThread(threads, thread)),
           source: "app-server",
+          nextCursor: nextCursor ?? null,
         });
         return secureJson(c, options.pairing, secureSessionsByTokenHash, response);
-      } catch {
-        // Fall through to in-memory threads so tests and offline development keep working.
+      } catch (error) {
+        return secureJson(
+          c,
+          options.pairing,
+          secureSessionsByTokenHash,
+          apiError("threads_unavailable", errorMessage(error)),
+          502,
+        );
       }
     }
 
+    const knownThreads = sortedThreads(threads);
+    const start = cursor
+      ? knownThreads.findIndex((thread) => `memory:${thread.id}` === cursor) + 1
+      : 0;
+    if (cursor && start === 0) {
+      return secureJson(
+        c,
+        options.pairing,
+        secureSessionsByTokenHash,
+        apiError("invalid_request", "Thread list cursor is no longer available. Refresh the list."),
+        400,
+      );
+    }
+    const page = knownThreads.slice(start, start + limit);
     const response: ListThreadsResponse = ListThreadsResponseSchema.parse({
-      threads: sortedThreads(threads),
+      threads: page,
       source: "memory",
+      nextCursor:
+        start + page.length < knownThreads.length ? `memory:${page[page.length - 1].id}` : null,
     });
 
     return secureJson(c, options.pairing, secureSessionsByTokenHash, response);

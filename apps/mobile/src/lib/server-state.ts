@@ -19,6 +19,7 @@ import type {
   VersionResponse,
 } from "codex-relay/api-schema";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
+import { captureConnection, ConnectionChangedError } from "./connection-context";
 
 import {
   archiveThread,
@@ -67,9 +68,17 @@ const olderThreadRequests = new WeakMap<
   Map<string, Promise<ThreadDetailResponse | undefined>>
 >();
 const threadHistoryGenerations = new WeakMap<QueryClient, Map<string, number>>();
+type ThreadListState = ListThreadsResponse & { olderPagesLoaded?: boolean };
+const olderListRequests = new WeakMap<
+  QueryClient,
+  Map<string, Promise<ThreadListState | undefined>>
+>();
 
 function threadHistoryGeneration(queryClient: QueryClient, requestKey: string) {
-  return threadHistoryGenerations.get(queryClient)?.get(requestKey) ?? 0;
+  const generations = threadHistoryGenerations.get(queryClient) ?? new Map<string, number>();
+  if (!generations.has(requestKey)) generations.set(requestKey, 0);
+  threadHistoryGenerations.set(queryClient, generations);
+  return generations.get(requestKey)!;
 }
 
 function advanceThreadHistoryGeneration(queryClient: QueryClient, requestKey: string) {
@@ -108,11 +117,101 @@ export function fetchStatusState(queryClient: QueryClient) {
   });
 }
 
-export function fetchThreadsState(queryClient: QueryClient) {
+export async function fetchThreadsState(
+  queryClient: QueryClient,
+  options: { refresh?: boolean } = {},
+) {
+  const connection = captureConnection();
+  const queryKey = serverStateKeys.threads();
+  if (options.refresh) {
+    advanceThreadHistoryGeneration(queryClient, JSON.stringify(queryKey));
+    olderListRequests.get(queryClient)?.delete(JSON.stringify(queryKey));
+    await queryClient.cancelQueries({ queryKey, exact: true });
+  }
+  connection.assertCurrent();
+  if (queryKey[1] !== serverStateKeys.threads()[1]) throw new ConnectionChangedError();
   return queryClient.fetchQuery({
-    queryKey: serverStateKeys.threads(),
-    queryFn: listThreads,
+    queryKey,
+    queryFn: () => fetchThreadsQueryState(queryClient, options.refresh, queryKey),
   });
+}
+
+async function fetchThreadsQueryState(
+  queryClient: QueryClient,
+  refresh = false,
+  queryKey: QueryKey = serverStateKeys.threads(),
+) {
+  const connection = captureConnection();
+  if (queryKey[1] !== serverStateKeys.threads()[1]) throw new ConnectionChangedError();
+  const requestKey = JSON.stringify(queryKey);
+  const generation = threadHistoryGeneration(queryClient, requestKey);
+  const response = await listThreads({ limit: 20 });
+  connection.assertCurrent();
+  if (queryKey[1] !== serverStateKeys.threads()[1]) throw new ConnectionChangedError();
+  const current = queryClient.getQueryData<ThreadListState>(queryKey);
+  if (generation !== threadHistoryGeneration(queryClient, requestKey)) return current ?? response;
+  if (refresh || !current?.olderPagesLoaded || current.source !== response.source) return response;
+  return {
+    ...response,
+    threads: mergeThreadLists(current.threads, response.threads),
+    nextCursor: current.nextCursor,
+    olderPagesLoaded: true,
+  };
+}
+
+export function fetchOlderThreadsState(
+  queryClient: QueryClient,
+): Promise<ThreadListState | undefined> {
+  const queryKey = serverStateKeys.threads();
+  const requestKey = JSON.stringify(queryKey);
+  const pending = olderListRequests.get(queryClient) ?? new Map();
+  olderListRequests.set(queryClient, pending);
+  const existing = pending.get(requestKey);
+  if (existing) return existing;
+  const current = queryClient.getQueryData<ThreadListState>(queryKey);
+  const cursor = current?.nextCursor;
+  if (!cursor) return Promise.resolve(undefined);
+  const generation = threadHistoryGeneration(queryClient, requestKey);
+  const request = listThreads({ limit: 20, cursor }).then(async (response) => {
+    await queryClient
+      .getQueryCache()
+      .find({ queryKey, exact: true })
+      ?.promise?.catch(() => undefined);
+    if (
+      serverStateKeys.threads()[1] !== queryKey[1] ||
+      generation !== threadHistoryGeneration(queryClient, requestKey)
+    ) {
+      return undefined;
+    }
+    let merged: ThreadListState | undefined;
+    queryClient.setQueryData<ThreadListState>(queryKey, (latest) => {
+      if (!latest || latest.nextCursor !== cursor || latest.source !== response.source)
+        return latest;
+      if (response.nextCursor === cursor) throw new Error("Thread list cursor did not advance.");
+      merged = {
+        ...response,
+        threads: mergeThreadLists(response.threads, latest.threads),
+        olderPagesLoaded: true,
+      };
+      return merged;
+    });
+    return merged;
+  });
+  const tracked = request.finally(() => {
+    if (pending.get(requestKey) === tracked) pending.delete(requestKey);
+  });
+  pending.set(requestKey, tracked);
+  return tracked;
+}
+
+function mergeThreadLists(current: ThreadSummary[], incoming: ThreadSummary[]) {
+  const byId = new Map(current.map((thread) => [thread.id, thread]));
+  for (const thread of incoming) {
+    const existing = byId.get(thread.id);
+    byId.set(thread.id, existing ? preferredThreadSnapshot(existing, thread) : thread);
+  }
+  const orderedIds = new Set([...incoming, ...current].map((thread) => thread.id));
+  return sortThreads([...orderedIds].map((id) => byId.get(id)!));
 }
 
 export function fetchModelsState(queryClient: QueryClient) {
@@ -265,7 +364,8 @@ export const serverStateQueryFns = {
   rateLimits: getRateLimits,
   status: getStatus,
   thread: getThread,
-  threads: listThreads,
+  threads: ({ client, queryKey }: { client: QueryClient; queryKey: QueryKey }) =>
+    fetchThreadsQueryState(client, false, queryKey),
   version: getVersion,
   workspaceChanges: getWorkspaceChanges,
   workspaceDirectories: listWorkspaceDirectories,
@@ -279,7 +379,18 @@ export async function createThreadServerState(queryClient: QueryClient, body: Cr
 
 export async function archiveThreadServerState(queryClient: QueryClient, threadId: string) {
   const response = await archiveThread(threadId);
-  setThreadsState(queryClient, response.threads, response.source);
+  const queryKey = serverStateKeys.threads();
+  advanceThreadHistoryGeneration(queryClient, JSON.stringify(queryKey));
+  olderListRequests.get(queryClient)?.delete(JSON.stringify(queryKey));
+  await queryClient.cancelQueries({ queryKey, exact: true });
+  queryClient.setQueryData<ThreadListState>(serverStateKeys.threads(), (current) => ({
+    ...current,
+    source: response.source,
+    threads: mergeThreadLists(
+      current?.olderPagesLoaded ? current.threads : [],
+      response.threads,
+    ).filter((thread) => thread.id !== response.archivedThreadId),
+  }));
   removeThreadDetailState(queryClient, response.archivedThreadId);
   return response;
 }
@@ -394,6 +505,9 @@ export async function clearThreadGoalServerState(queryClient: QueryClient, threa
 }
 
 export function clearServerState(queryClient: QueryClient) {
+  const generations = threadHistoryGenerations.get(queryClient);
+  generations?.forEach((generation, key) => generations.set(key, generation + 1));
+  olderListRequests.delete(queryClient);
   queryClient.removeQueries({ queryKey: [rootKey] });
   const botScopes = new Set([
     "bots",
@@ -499,10 +613,11 @@ export function setThreadsState(
   threads: ThreadSummary[],
   source: ListThreadsResponse["source"] = "memory",
 ) {
-  queryClient.setQueryData<ListThreadsResponse>(serverStateKeys.threads(), {
+  queryClient.setQueryData<ThreadListState>(serverStateKeys.threads(), (current) => ({
+    ...(current?.source === source ? current : {}),
     source,
     threads: sortThreads(threads),
-  });
+  }));
 }
 
 export function upsertThreadState(queryClient: QueryClient, thread: ThreadSummary) {
@@ -510,6 +625,7 @@ export function upsertThreadState(queryClient: QueryClient, thread: ThreadSummar
     const threads = current?.threads ?? [];
     const existing = threads.find((candidate) => candidate.id === thread.id);
     return {
+      ...current,
       source: current?.source ?? "memory",
       threads: sortThreads(
         upsertById(threads, existing ? preferredThreadSnapshot(existing, thread) : thread),

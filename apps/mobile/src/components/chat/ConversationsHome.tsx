@@ -3,8 +3,16 @@ import { useSelector } from "@legendapp/state/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ThreadSummary } from "codex-relay/api-schema";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, SectionList, TextInput, View, type SectionListData } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  SectionList,
+  TextInput,
+  View,
+  type SectionListData,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
@@ -22,6 +30,8 @@ import { hasCodexRelaySession } from "@/lib/codex-relay-api";
 import { hapticLightImpact, hapticSelection, hapticSuccess } from "@/lib/haptics";
 import {
   archiveThreadServerState as rawArchiveThreadServerState,
+  fetchOlderThreadsState as rawFetchOlderThreadsState,
+  fetchThreadsState as rawFetchThreadsState,
   regenerateThreadTitleServerState as rawRegenerateThreadTitleServerState,
   renameThreadServerState as rawRenameThreadServerState,
   serverStateKeys,
@@ -47,12 +57,19 @@ type ThreadSection = { key: string; title: string; data: ThreadSummary[] };
 type ThreadGlyph = "agentAtom" | "branch" | "file" | "folder" | "terminal";
 
 export function ConversationsHome() {
-  const { archiveThreadServerState, regenerateThreadTitleServerState, renameThreadServerState } =
-    useComputerOperations({
-      archiveThreadServerState: rawArchiveThreadServerState,
-      regenerateThreadTitleServerState: rawRegenerateThreadTitleServerState,
-      renameThreadServerState: rawRenameThreadServerState,
-    });
+  const {
+    archiveThreadServerState,
+    fetchOlderThreadsState,
+    fetchThreadsState,
+    regenerateThreadTitleServerState,
+    renameThreadServerState,
+  } = useComputerOperations({
+    archiveThreadServerState: rawArchiveThreadServerState,
+    fetchOlderThreadsState: rawFetchOlderThreadsState,
+    fetchThreadsState: rawFetchThreadsState,
+    regenerateThreadTitleServerState: rawRegenerateThreadTitleServerState,
+    renameThreadServerState: rawRenameThreadServerState,
+  });
 
   const queryClient = useQueryClient();
   const theme = useTheme();
@@ -70,6 +87,15 @@ export function ConversationsHome() {
   const [threadWithActions, setThreadWithActions] = useState<ThreadSummary>();
   const [isRenamingThread, setIsRenamingThread] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
+  const canLoadOlder = useRef(false);
+  const olderThreadsMutation = useMutation({
+    mutationKey: [...serverStateKeys.threads(), "older"],
+    mutationFn: () => fetchOlderThreadsState(queryClient),
+  });
+  const refreshThreadsMutation = useMutation({
+    mutationKey: [...serverStateKeys.threads(), "refresh"],
+    mutationFn: () => fetchThreadsState(queryClient, { refresh: true }),
+  });
 
   const renameThreadMutation = useMutation({
     mutationFn: ({ threadId, title }: { threadId: string; title: string }) =>
@@ -248,6 +274,65 @@ export function ConversationsHome() {
     toggleConversationsGroupingMode();
   }
 
+  function loadOlderThreads() {
+    if (
+      !hasPairedSession ||
+      !threadsQuery.data?.nextCursor ||
+      threadsQuery.isFetching ||
+      olderThreadsMutation.isPending ||
+      refreshThreadsMutation.isPending
+    ) {
+      return;
+    }
+    canLoadOlder.current = false;
+    void olderThreadsMutation.mutateAsync().catch(() => undefined);
+  }
+
+  function refreshThreads() {
+    canLoadOlder.current = false;
+    olderThreadsMutation.reset();
+    void refreshThreadsMutation.mutateAsync().catch(() => undefined);
+  }
+
+  function loadOlderAtEnd() {
+    if (
+      canLoadOlder.current &&
+      !searchQuery.trim() &&
+      !threadsQuery.error &&
+      !olderThreadsMutation.error &&
+      !refreshThreadsMutation.error
+    ) {
+      loadOlderThreads();
+    }
+  }
+
+  const paginationFooter = olderThreadsMutation.isPending ? (
+    <View style={styles.paginationFooter}>
+      <ActivityIndicator color={theme.textSecondary} />
+      <ThemedText style={styles.paginationText}>
+        {zh ? "正在加载更早的会话…" : "Loading earlier conversations…"}
+      </ThemedText>
+    </View>
+  ) : refreshThreadsMutation.error || olderThreadsMutation.error || threadsQuery.error ? (
+    <Pressable
+      accessibilityRole="button"
+      onPress={
+        refreshThreadsMutation.error || threadsQuery.error ? refreshThreads : loadOlderThreads
+      }
+      style={styles.paginationFooter}
+    >
+      <ThemedText style={styles.paginationText}>
+        {zh ? "加载失败，点击重试" : "Couldn’t load conversations. Tap to retry"}
+      </ThemedText>
+    </Pressable>
+  ) : threadsQuery.data?.nextCursor === null && threads.length > 0 ? (
+    <View style={styles.paginationFooter}>
+      <ThemedText style={styles.paginationText}>
+        {zh ? "已加载全部会话" : "All conversations loaded"}
+      </ThemedText>
+    </View>
+  ) : null;
+
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
@@ -299,14 +384,29 @@ export function ConversationsHome() {
       <SectionList
         key={groupingMode}
         sections={displayedSections as readonly SectionListData<ThreadSummary, ThreadSection>[]}
-        keyExtractor={(item, index) => `${item.id}:${item.createdAt}:${index}`}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
-        onRefresh={() => {
-          void threadsQuery.refetch();
+        onScrollBeginDrag={() => {
+          canLoadOlder.current = true;
         }}
-        refreshing={threadsQuery.isFetching && threads.length > 0}
+        onEndReached={loadOlderAtEnd}
+        onScroll={({ nativeEvent }) => {
+          const { contentOffset, contentSize, layoutMeasurement } = nativeEvent;
+          if (
+            contentSize.height - contentOffset.y - layoutMeasurement.height <=
+            layoutMeasurement.height * 0.3
+          ) {
+            loadOlderAtEnd();
+          }
+        }}
+        scrollEventThrottle={64}
+        onEndReachedThreshold={0.3}
+        onRefresh={refreshThreads}
+        refreshing={refreshThreadsMutation.isPending}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        ListFooterComponent={paginationFooter}
         renderSectionHeader={({ section }) => {
           const collapsed = collapsedSectionKeys.has(section.key) && !searchQuery.trim();
           return (
@@ -343,20 +443,22 @@ export function ConversationsHome() {
           />
         )}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
-              <Icon name="newChat" size={22} tintColor={theme.textSecondary} />
+          threadsQuery.error ? null : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Icon name="newChat" size={22} tintColor={theme.textSecondary} />
+              </View>
+              <ThemedText style={styles.emptyTitle}>
+                {searchQuery
+                  ? zh
+                    ? "没有匹配的会话"
+                    : "No matching conversations"
+                  : zh
+                    ? "开始一个新会话"
+                    : "Start a new conversation"}
+              </ThemedText>
             </View>
-            <ThemedText style={styles.emptyTitle}>
-              {searchQuery
-                ? zh
-                  ? "没有匹配的会话"
-                  : "No matching conversations"
-                : zh
-                  ? "开始一个新会话"
-                  : "Start a new conversation"}
-            </ThemedText>
-          </View>
+          )
         }
       />
 
@@ -797,6 +899,15 @@ const styles = StyleSheet.create((theme) => ({
   },
   searchInput: { flex: 1, color: theme.text, fontSize: 16, paddingVertical: 9 },
   listContent: { paddingBottom: 92 },
+  paginationFooter: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 20,
+  },
+  paginationText: { color: theme.textSecondary, fontSize: 13 },
   sectionHeader: {
     alignItems: "center",
     backgroundColor: theme.backgroundElement,

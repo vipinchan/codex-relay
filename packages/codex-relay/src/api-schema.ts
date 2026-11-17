@@ -924,6 +924,7 @@ export const ResolveApprovalResponseSchema = z.object({
 export const ListThreadsResponseSchema = z.object({
   threads: z.array(ThreadSummarySchema),
   source: z.enum(["app-server", "memory"]).default("memory"),
+  nextCursor: z.string().nullable().optional(),
 });
 
 export const ArchiveThreadResponseSchema = z.object({
@@ -1468,8 +1469,18 @@ export function createOpenApiDocument() {
       "/v1/threads": {
         get: {
           summary: "List locally known threads",
+          parameters: [
+            {
+              name: "limit",
+              in: "query",
+              schema: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+            },
+            { name: "cursor", in: "query", schema: { type: "string" } },
+          ],
           responses: {
             "200": jsonResponse("ListThreadsResponse"),
+            "400": jsonResponse("ErrorResponse"),
+            "502": jsonResponse("ErrorResponse"),
           },
         },
         post: {
@@ -2291,6 +2302,8 @@ export function createOpenApiDocument() {
           type: "object",
           required: ["threads"],
           properties: {
+            nextCursor: { type: ["string", "null"] },
+            source: { type: "string", enum: ["app-server", "memory"] },
             threads: {
               type: "array",
               items: { $ref: "#/components/schemas/ThreadSummary" },

@@ -70,7 +70,7 @@ export function BotsHome() {
   });
   const threadsQuery = useQuery({
     queryKey: ["bot-workspaces", serverUrl],
-    queryFn: listThreads,
+    queryFn: () => listThreads(),
     enabled: paired,
   });
   const bots = botsQuery.data ?? [];

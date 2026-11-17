@@ -460,6 +460,9 @@ describe("bot conversations", () => {
       async listThreads() {
         return calls.map((call) => ({ id: call.threadId }));
       },
+      async listThreadsPage() {
+        return { data: calls.map((call) => ({ id: call.threadId })), nextCursor: null };
+      },
     } as unknown as CodexAppServerClient;
     const app = createApp({ appServer });
     const post = async (path: string, body: unknown) => {

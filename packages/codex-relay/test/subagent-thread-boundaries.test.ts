@@ -43,6 +43,10 @@ function appServerThread(id: string, parentThreadId: string | null = null) {
 function appServerWithThreads(listedThreads: AppServerThread[], readableThreads = listedThreads) {
   const appServer = new CodexAppServerClient();
   vi.spyOn(appServer, "listThreads").mockResolvedValue(listedThreads);
+  vi.spyOn(appServer, "listThreadsPage").mockResolvedValue({
+    data: listedThreads,
+    nextCursor: null,
+  });
   vi.spyOn(appServer, "readThread").mockImplementation(async (threadId) => {
     const thread = readableThreads.find((candidate) => candidate.id === threadId);
     if (!thread) {

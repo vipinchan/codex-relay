@@ -1808,6 +1808,7 @@ describe("Codex Relay server routes", () => {
     const appServer = {
       archiveThread,
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [remainingThread]),
+      listThreadsPage: async () => ({ data: [remainingThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },
@@ -4795,6 +4796,7 @@ describe("Codex Relay server routes", () => {
         return () => undefined;
       },
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [appThread]),
+      listThreadsPage: async () => ({ data: [appThread], nextCursor: null }),
       startThread: vi.fn<() => Promise<unknown>>(async () => appThread),
       startTurn,
     };
@@ -4873,6 +4875,7 @@ describe("Codex Relay server routes", () => {
     const appServer = {
       interruptTurn,
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [appThread]),
+      listThreadsPage: async () => ({ data: [appThread], nextCursor: null }),
       onNotification(handler: (notification: { method: string; params?: unknown }) => void) {
         notificationHandlers.push(handler);
         return () => undefined;
@@ -7532,6 +7535,7 @@ describe("Codex Relay server routes", () => {
     }));
     const appServer = {
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [longThread]),
+      listThreadsPage: async () => ({ data: [longThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },
@@ -7594,6 +7598,7 @@ describe("Codex Relay server routes", () => {
     });
     const appServer = {
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [baseThread]),
+      listThreadsPage: async () => ({ data: [baseThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },
@@ -7673,6 +7678,7 @@ describe("Codex Relay server routes", () => {
     >(async () => appThread);
     const appServer = {
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [appThread]),
+      listThreadsPage: async () => ({ data: [appThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },
@@ -7770,6 +7776,7 @@ describe("Codex Relay server routes", () => {
     >(async () => appThread);
     const appServer = {
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [appThread]),
+      listThreadsPage: async () => ({ data: [appThread], nextCursor: null }),
       onNotification(handler: (notification: unknown) => void) {
         notificationHandlers.add(handler);
         return () => notificationHandlers.delete(handler);
@@ -8449,6 +8456,7 @@ describe("Codex Relay server routes", () => {
     >(async () => appThread);
     const appServer = {
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [appThread]),
+      listThreadsPage: async () => ({ data: [appThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },
@@ -8578,6 +8586,7 @@ describe("Codex Relay server routes", () => {
     >(async () => staleDetailThread);
     const appServer = {
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [listedThread]),
+      listThreadsPage: async () => ({ data: [listedThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },
@@ -8675,6 +8684,7 @@ describe("Codex Relay server routes", () => {
     });
     const appServer = {
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [runningThread]),
+      listThreadsPage: async () => ({ data: [runningThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },
@@ -8800,6 +8810,7 @@ describe("Codex Relay server routes", () => {
     });
     const appServer = {
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [runningThread]),
+      listThreadsPage: async () => ({ data: [runningThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },

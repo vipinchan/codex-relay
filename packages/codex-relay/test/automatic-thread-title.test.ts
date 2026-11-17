@@ -54,6 +54,7 @@ describe("automatic thread title generation", () => {
         },
       ]),
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [serverThread]),
+      listThreadsPage: async () => ({ data: [serverThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },
@@ -168,6 +169,7 @@ describe("automatic thread title generation", () => {
       archiveThread: vi.fn<() => Promise<void>>(async () => undefined),
       listModels: vi.fn<() => Promise<unknown[]>>(async () => []),
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [serverThread]),
+      listThreadsPage: async () => ({ data: [serverThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },
@@ -260,6 +262,7 @@ describe("automatic thread title generation", () => {
       archiveThread: vi.fn<() => Promise<void>>(async () => undefined),
       listModels: vi.fn<() => Promise<unknown[]>>(async () => []),
       listThreads: vi.fn<() => Promise<unknown[]>>(async () => [serverThread]),
+      listThreadsPage: async () => ({ data: [serverThread], nextCursor: null }),
       onNotification() {
         return () => undefined;
       },
@@ -345,6 +348,7 @@ it("does not overwrite a title if the user renamed the thread before generation 
       },
     ]),
     listThreads: vi.fn<() => Promise<unknown[]>>(async () => [serverThread]),
+    listThreadsPage: async () => ({ data: [serverThread], nextCursor: null }),
     onNotification() {
       return () => undefined;
     },
@@ -447,6 +451,7 @@ it("handles title generation failure gracefully without failing the stream turn"
       },
     ]),
     listThreads: vi.fn<() => Promise<unknown[]>>(async () => [serverThread]),
+    listThreadsPage: async () => ({ data: [serverThread], nextCursor: null }),
     onNotification() {
       return () => undefined;
     },
