@@ -89,26 +89,72 @@ export function BotPage({
   );
 }
 
+export function BotPreviewTabs<Tab extends string>({
+  tabs,
+  selected,
+  onSelect,
+}: {
+  tabs: { id: Tab; label: string }[];
+  selected: Tab;
+  onSelect: (tab: Tab) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={[styles.previewTabs, { borderColor: theme.backgroundSelected }]}>
+      {tabs.map(({ id, label }) => (
+        <Pressable
+          key={id}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: selected === id }}
+          onPress={() => onSelect(id)}
+          style={[
+            styles.previewTab,
+            selected === id && { backgroundColor: theme.backgroundSelected },
+          ]}
+        >
+          <Text
+            style={[
+              styles.previewTabText,
+              { color: selected === id ? theme.text : theme.textSecondary },
+            ]}
+          >
+            {label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 export function BotRow({
   title,
   subtitle,
   onPress,
   leading,
   trailing,
+  compact = false,
+  disabled = false,
+  busy = false,
 }: {
   title: string;
   subtitle?: string;
   onPress: () => void;
   leading?: ReactNode;
   trailing?: ReactNode;
+  compact?: boolean;
+  disabled?: boolean;
+  busy?: boolean;
 }) {
   const theme = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled, busy }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
+        compact && styles.compactRow,
         { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
       ]}
     >
@@ -118,7 +164,10 @@ export function BotRow({
           {title}
         </Text>
         {subtitle ? (
-          <Text numberOfLines={2} style={[styles.rowSubtitle, { color: theme.textSecondary }]}>
+          <Text
+            numberOfLines={compact ? 1 : 2}
+            style={[styles.rowSubtitle, { color: theme.textSecondary }]}
+          >
             {subtitle}
           </Text>
         ) : null}
@@ -165,6 +214,17 @@ const styles = StyleSheet.create((theme) => ({
   backText: { fontFamily: Fonts.sansMedium, fontSize: 15 },
   headerTitle: { flex: 1, textAlign: "center", fontFamily: Fonts.sansSemiBold, fontSize: 17 },
   action: { width: 72, alignItems: "flex-end" },
+  previewTabs: {
+    flexDirection: "row",
+    gap: 4,
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 4,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  previewTab: { flex: 1, minHeight: 44, justifyContent: "center", borderRadius: 9, padding: 8 },
+  previewTabText: { fontFamily: Fonts.sansSemiBold, fontSize: 13, textAlign: "center" },
   avatar: {
     alignItems: "center",
     justifyContent: "center",
@@ -180,6 +240,13 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: 13,
+  },
+  compactRow: {
+    minHeight: 60,
+    borderRadius: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 10,
   },
   rowCopy: { flex: 1, minWidth: 0, gap: 4 },
   rowTitle: { fontFamily: Fonts.sansSemiBold, fontSize: 16 },

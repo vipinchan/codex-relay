@@ -1,6 +1,6 @@
 import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Bot, BotConversation, BotMessage } from "codex-relay/api-schema";
+import type { BotMessage } from "codex-relay/api-schema";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
@@ -11,24 +11,16 @@ import { StyleSheet } from "react-native-unistyles";
 import { createAssistantMarkdownStyle } from "@/components/chat/assistant-markdown-presentation";
 import { MessageList } from "@/components/chat/MessageList";
 import { useMessageListController } from "@/components/chat/use-message-list-controller";
-import {
-  AppBottomSheet,
-  AppBottomSheetTextInput,
-  SheetActionRow,
-  SheetSelectedDot,
-} from "@/components/ui/bottom-sheet";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { Fonts, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
-  deleteBotConversation as rawDeleteBotConversation,
   getBotConversation as rawGetBotConversation,
   getCodexRelayCacheIdentity,
   listBotMessages as rawListBotMessages,
   listBots as rawListBots,
   stopBotConversation as rawStopBotConversation,
-  updateBotConversation as rawUpdateBotConversation,
 } from "@/lib/codex-relay-api";
 import { mergeBotMessagePages } from "./bot-compose";
 import { BotComposer } from "./BotComposer";
@@ -59,33 +51,19 @@ export function BotChatScreen({
   conversationId: string;
   messageId?: string;
 }) {
-  const {
-    deleteBotConversation,
-    getBotConversation,
-    listBotMessages,
-    listBots,
-    stopBotConversation,
-    updateBotConversation,
-  } = useComputerOperations({
-    deleteBotConversation: rawDeleteBotConversation,
-    getBotConversation: rawGetBotConversation,
-    listBotMessages: rawListBotMessages,
-    listBots: rawListBots,
-    stopBotConversation: rawStopBotConversation,
-    updateBotConversation: rawUpdateBotConversation,
-  });
+  const { getBotConversation, listBotMessages, listBots, stopBotConversation } =
+    useComputerOperations({
+      getBotConversation: rawGetBotConversation,
+      listBotMessages: rawListBotMessages,
+      listBots: rawListBots,
+      stopBotConversation: rawStopBotConversation,
+    });
 
   const queryClient = useQueryClient();
   const theme = useTheme();
   const accent = theme.accent;
   const insets = useSafeAreaInsets();
   const serverUrl = getCodexRelayCacheIdentity();
-  const [sheet, setSheet] = useState<"group" | undefined>();
-  const [groupName, setGroupName] = useState("");
-  const [workspacePath, setWorkspacePath] = useState("");
-  const [memberIds, setMemberIds] = useState<string[]>([]);
-  const [defaultBotId, setDefaultBotId] = useState("");
-  const [savingGroup, setSavingGroup] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [focused, setFocused] = useState(false);
 
@@ -168,53 +146,8 @@ export function BotChatScreen({
     void queryClient.invalidateQueries({ queryKey: ["bot-conversations", serverUrl] });
   }
 
-  function openGroupEditor(group: BotConversation) {
-    setGroupName(group.name);
-    setWorkspacePath(group.workspacePath);
-    setMemberIds(group.botIds);
-    setDefaultBotId(group.defaultBotId ?? group.botIds[0] ?? "");
-    setSheet("group");
-  }
-
-  function toggleGroupMember(botId: string) {
-    if (memberIds.includes(botId)) {
-      const next = memberIds.filter((id) => id !== botId);
-      setMemberIds(next);
-      if (defaultBotId === botId) setDefaultBotId(next[0] ?? "");
-    } else {
-      setMemberIds([...memberIds, botId]);
-      if (!defaultBotId) setDefaultBotId(botId);
-    }
-  }
-
-  async function saveGroup() {
-    if (
-      !conversation ||
-      !groupName.trim() ||
-      !workspacePath.trim() ||
-      !memberIds.length ||
-      !defaultBotId ||
-      savingGroup
-    )
-      return;
-    setSavingGroup(true);
-    try {
-      await updateBotConversation(conversation.id, {
-        name: groupName.trim(),
-        workspacePath: workspacePath.trim(),
-        botIds: memberIds,
-        defaultBotId,
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["bot-conversation", serverUrl, conversationId],
-      });
-      void queryClient.invalidateQueries({ queryKey: ["bot-conversations", serverUrl] });
-      setSheet(undefined);
-    } catch (error) {
-      Alert.alert(tr("群设置保存失败", "Couldn’t save group"), errorText(error));
-    } finally {
-      setSavingGroup(false);
-    }
+  function openGroupSettings() {
+    router.push({ pathname: "/bot-preview/[conversationId]", params: { conversationId } });
   }
 
   async function stopReply() {
@@ -230,32 +163,6 @@ export function BotChatScreen({
     } finally {
       setStopping(false);
     }
-  }
-
-  function confirmDeleteGroup() {
-    if (!conversation || conversation.kind !== "group") return;
-    Alert.alert(
-      tr("删除群聊", "Delete group"),
-      tr("群聊将从会话列表移除。", "The group will leave the session list."),
-      [
-        { text: tr("取消", "Cancel"), style: "cancel" },
-        {
-          text: tr("删除", "Delete"),
-          style: "destructive",
-          onPress: () =>
-            void (async () => {
-              try {
-                await deleteBotConversation(conversation.id);
-                void queryClient.invalidateQueries({ queryKey: ["bot-conversations", serverUrl] });
-                setSheet(undefined);
-                router.back();
-              } catch (error) {
-                Alert.alert(tr("删除失败", "Delete failed"), errorText(error));
-              }
-            })(),
-        },
-      ],
-    );
   }
 
   return (
@@ -277,17 +184,25 @@ export function BotChatScreen({
         </Pressable>
         <Pressable
           accessibilityRole="button"
+          accessibilityHint={
+            conversation?.kind === "direct" ? tr("打开 BOT 资料", "Opens BOT profile") : undefined
+          }
           disabled={!conversation}
           onPress={() => {
-            if (conversation?.kind === "group") openGroupEditor(conversation);
+            if (conversation?.kind === "group") openGroupSettings();
             else if (conversation?.botId)
               router.push({ pathname: "/bot/[botId]", params: { botId: conversation.botId } });
           }}
           style={styles.headerCopy}
         >
-          <Text numberOfLines={1} style={styles.headerTitle}>
-            {directBot?.name ?? conversation?.name ?? tr("聊天", "Chat")}
-          </Text>
+          <View style={styles.headerTitleRow}>
+            <Text numberOfLines={1} style={styles.headerTitle}>
+              {directBot?.name ?? conversation?.name ?? tr("聊天", "Chat")}
+            </Text>
+            {conversation?.kind === "direct" && conversation.botId ? (
+              <Icon name="chevronRight" size={14} tintColor={accent} />
+            ) : null}
+          </View>
           <Text numberOfLines={1} style={styles.headerSubtitle}>
             {conversation?.kind === "group"
               ? `${conversation.botIds.length} BOT · ${conversation.workspacePath}`
@@ -298,7 +213,7 @@ export function BotChatScreen({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={tr("群设置", "Group settings")}
-            onPress={() => openGroupEditor(conversation)}
+            onPress={openGroupSettings}
             style={styles.headerButton}
           >
             <Icon name="controls" size={21} tintColor={accent} />
@@ -428,75 +343,6 @@ export function BotChatScreen({
           ) : null}
         </KeyboardStickyView>
       </KeyboardGestureArea>
-
-      <AppBottomSheet
-        title={tr("群设置", "Group settings")}
-        visible={sheet === "group"}
-        onClose={() => setSheet(undefined)}
-      >
-        <Text style={styles.fieldLabel}>{tr("群名", "Group name")}</Text>
-        <AppBottomSheetTextInput
-          value={groupName}
-          onChangeText={setGroupName}
-          style={styles.sheetInput}
-          placeholderTextColor={theme.textSecondary}
-        />
-        <Text style={styles.fieldLabel}>{tr("共享工作目录", "Shared working directory")}</Text>
-        <AppBottomSheetTextInput
-          value={workspacePath}
-          onChangeText={setWorkspacePath}
-          autoCapitalize="none"
-          style={styles.sheetInput}
-          placeholderTextColor={theme.textSecondary}
-        />
-        <Text style={styles.fieldLabel}>{tr("成员", "Members")}</Text>
-        {bots.map((bot: Bot) => (
-          <SheetActionRow
-            key={bot.id}
-            accessibilityLabel={bot.name}
-            icon="agentAtom"
-            title={bot.name}
-            selected={memberIds.includes(bot.id)}
-            trailing={<SheetSelectedDot selected={memberIds.includes(bot.id)} />}
-            onPress={() => toggleGroupMember(bot.id)}
-          />
-        ))}
-        <Text style={styles.fieldLabel}>{tr("默认 BOT", "Default BOT")}</Text>
-        {bots
-          .filter((bot) => memberIds.includes(bot.id))
-          .map((bot) => (
-            <SheetActionRow
-              key={bot.id}
-              accessibilityLabel={bot.name}
-              icon="agentAtom"
-              title={bot.name}
-              selected={defaultBotId === bot.id}
-              trailing={<SheetSelectedDot selected={defaultBotId === bot.id} />}
-              onPress={() => setDefaultBotId(bot.id)}
-            />
-          ))}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{
-            disabled:
-              savingGroup || !groupName.trim() || !workspacePath.trim() || !memberIds.length,
-          }}
-          disabled={savingGroup || !groupName.trim() || !workspacePath.trim() || !memberIds.length}
-          onPress={() => void saveGroup()}
-          style={[styles.primaryAction, savingGroup ? styles.disabled : null]}
-        >
-          <Text style={styles.primaryText}>
-            {savingGroup ? tr("保存中…", "Saving…") : tr("保存群设置", "Save group settings")}
-          </Text>
-        </Pressable>
-        <SheetActionRow
-          accessibilityLabel={tr("删除群聊", "Delete group")}
-          icon="trash"
-          title={tr("删除群聊", "Delete group")}
-          iconTintColor={theme.danger}
-          onPress={confirmDeleteGroup}
-        />
-      </AppBottomSheet>
     </SafeAreaView>
   );
 }
@@ -514,7 +360,8 @@ const styles = StyleSheet.create((theme) => ({
   },
   headerButton: { alignItems: "center", justifyContent: "center", width: 44, height: 44 },
   headerCopy: { flex: 1, minWidth: 0, alignItems: "center" },
-  headerTitle: { color: theme.text, fontWeight: "700", fontSize: 17 },
+  headerTitleRow: { maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 4 },
+  headerTitle: { color: theme.text, flexShrink: 1, fontWeight: "700", fontSize: 17 },
   headerSubtitle: { color: theme.textSecondary, fontSize: 11, marginTop: 3 },
   timeline: { paddingHorizontal: 15, paddingTop: 12, paddingBottom: 16, flexGrow: 1 },
   sourceNotice: { color: theme.accent, fontSize: 12, textAlign: "center", paddingVertical: 6 },
@@ -531,30 +378,4 @@ const styles = StyleSheet.create((theme) => ({
   loadMore: { alignItems: "center", paddingVertical: 8 },
   error: { color: theme.danger, fontSize: 13, textAlign: "center", padding: 10 },
   empty: { color: theme.textSecondary, fontSize: 13, textAlign: "center", marginTop: 30 },
-  fieldLabel: {
-    color: theme.textSecondaryStrong,
-    fontSize: 13,
-    fontWeight: "600",
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  sheetInput: {
-    color: theme.text,
-    backgroundColor: theme.backgroundElement,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: 44,
-    fontSize: 15,
-  },
-  primaryAction: {
-    alignItems: "center",
-    backgroundColor: theme.botPrimaryBackground,
-    borderRadius: 11,
-    minHeight: 46,
-    justifyContent: "center",
-    marginTop: 14,
-    marginBottom: 8,
-  },
-  primaryText: { color: theme.botActionForeground, fontWeight: "700", fontSize: 15 },
 }));

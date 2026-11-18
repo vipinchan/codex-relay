@@ -11,14 +11,12 @@ import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
-  createBotConversation as rawCreateBotConversation,
   deleteBot as rawDeleteBot,
   getCodexRelayCacheIdentity,
-  listBotConversations as rawListBotConversations,
   listBots as rawListBots,
 } from "@/lib/codex-relay-api";
 
-import { BotAvatar, BotPage, BotPrimaryButton, BotRow, botError, botText } from "./bot-ui";
+import { BotAvatar, BotPage, BotRow, botError, botText } from "./bot-ui";
 
 const runtimeLabel = (mode: Bot["runtimeMode"]) =>
   ({
@@ -29,13 +27,10 @@ const runtimeLabel = (mode: Bot["runtimeMode"]) =>
   })[mode];
 
 export function BotDetailScreen({ botId }: { botId: string }) {
-  const { createBotConversation, deleteBot, listBotConversations, listBots } =
-    useComputerOperations({
-      createBotConversation: rawCreateBotConversation,
-      deleteBot: rawDeleteBot,
-      listBotConversations: rawListBotConversations,
-      listBots: rawListBots,
-    });
+  const { deleteBot, listBots } = useComputerOperations({
+    deleteBot: rawDeleteBot,
+    listBots: rawListBots,
+  });
 
   const theme = useTheme();
   const queryClient = useQueryClient();
@@ -43,32 +38,6 @@ export function BotDetailScreen({ botId }: { botId: string }) {
   const botsQuery = useQuery({ queryKey: ["bots", serverUrl], queryFn: listBots });
   const [busy, setBusy] = useState(false);
   const bot = botsQuery.data?.find((item) => item.id === botId);
-
-  async function openChat() {
-    if (!bot || busy) return;
-    setBusy(true);
-    try {
-      const conversations = await queryClient.fetchQuery({
-        queryKey: ["bot-conversations", serverUrl],
-        queryFn: listBotConversations,
-        staleTime: 0,
-      });
-      const existing = conversations.find(
-        (item) => item.kind === "direct" && item.botId === bot.id,
-      );
-      const conversation =
-        existing ?? (await createBotConversation({ kind: "direct", botId: bot.id }));
-      await queryClient.invalidateQueries({ queryKey: ["bot-conversations", serverUrl] });
-      router.push({
-        pathname: "/bot-chat/[conversationId]",
-        params: { conversationId: conversation.id },
-      });
-    } catch (error) {
-      Alert.alert(botText("无法打开私聊", "Could not open chat"), botError(error));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   function confirmDelete() {
     if (!bot || busy) return;
@@ -140,11 +109,6 @@ export function BotDetailScreen({ botId }: { botId: string }) {
               </Text>
             </View>
           </View>
-          <BotPrimaryButton
-            label={busy ? botText("打开中…", "Opening…") : botText("开始聊天", "Start chat")}
-            disabled={busy}
-            onPress={() => void openChat()}
-          />
           <Text style={[styles.section, { color: theme.textSecondaryStrong }]}>
             {botText("角色简介", "About this BOT")}
           </Text>

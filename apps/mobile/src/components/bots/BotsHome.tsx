@@ -1,8 +1,16 @@
 import { useComputerOperations } from "@/hooks/use-computer-operations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from "react-native";
+import { useCallback, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
@@ -25,6 +33,7 @@ import {
   listThreads as rawListThreads,
 } from "@/lib/codex-relay-api";
 
+import { botHomeSummary, resolveDirectBotConversation } from "./bot-home";
 import { BotAvatar, BotPrimaryButton, BotRow, botError, botText } from "./bot-ui";
 
 export function BotsHome() {
@@ -42,19 +51,27 @@ export function BotsHome() {
   const [paired, setPaired] = useState(hasCodexRelaySession());
   const [focused, setFocused] = useState(false);
   const [search, setSearch] = useState("");
-  const [groupOpen, setGroupOpen] = useState(false);
+  const [sheet, setSheet] = useState<{ mode: "create" | "group"; visible: boolean }>({
+    mode: "create",
+    visible: false,
+  });
   const [groupName, setGroupName] = useState("");
   const [workspacePath, setWorkspacePath] = useState("");
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [defaultBotId, setDefaultBotId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [openingBotId, setOpeningBotId] = useState<string>();
+  const openingRequest = useRef<{ active: boolean } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       setPaired(hasCodexRelaySession());
       setServerUrl(getCodexRelayCacheIdentity());
       setFocused(true);
-      return () => setFocused(false);
+      return () => {
+        if (openingRequest.current) openingRequest.current.active = false;
+        setFocused(false);
+      };
     }, []),
   );
   const botsQuery = useQuery({
@@ -92,12 +109,57 @@ export function BotsHome() {
       .includes(term),
   );
 
+  async function openDirectChat(botId: string) {
+    if (!focused || openingRequest.current || serverUrl !== getCodexRelayCacheIdentity()) return;
+    const request = { active: true };
+    openingRequest.current = request;
+    setOpeningBotId(botId);
+    Keyboard.dismiss();
+    const isCurrent = () => request.active && serverUrl === getCodexRelayCacheIdentity();
+    try {
+      const conversation = await resolveDirectBotConversation(
+        botId,
+        () =>
+          queryClient.fetchQuery({
+            queryKey: ["bot-conversations", serverUrl],
+            queryFn: listBotConversations,
+            staleTime: 0,
+          }),
+        async (input) => {
+          if (!isCurrent()) throw new Error("BOT chat request is no longer active");
+          const created = await createBotConversation(input);
+          void queryClient.invalidateQueries({ queryKey: ["bot-conversations", serverUrl] });
+          return created;
+        },
+      );
+      if (!isCurrent()) return;
+      queryClient.setQueryData(["bot-conversation", serverUrl, conversation.id], conversation);
+      router.push({
+        pathname: "/bot-chat/[conversationId]",
+        params: { conversationId: conversation.id },
+      });
+    } catch (error) {
+      if (isCurrent()) {
+        Alert.alert(botText("无法打开私聊", "Could not open chat"), botError(error), [
+          { text: botText("取消", "Cancel"), style: "cancel" },
+          { text: botText("重试", "Retry"), onPress: () => void openDirectChat(botId) },
+        ]);
+      }
+    } finally {
+      openingRequest.current = null;
+      setOpeningBotId(undefined);
+    }
+  }
+
   function openGroup() {
     setGroupName("");
     setWorkspacePath(workspaces[0] ?? "");
     setMemberIds([]);
     setDefaultBotId("");
-    setGroupOpen(true);
+    setSheet({ mode: "group", visible: true });
+  }
+  function closeSheet() {
+    setSheet((current) => ({ ...current, visible: false }));
   }
   function toggleMember(botId: string) {
     const next = memberIds.includes(botId)
@@ -119,7 +181,7 @@ export function BotsHome() {
         defaultBotId,
       });
       await queryClient.invalidateQueries({ queryKey: ["bot-conversations", serverUrl] });
-      setGroupOpen(false);
+      closeSheet();
       router.push({ pathname: "/bot-chat/[conversationId]", params: { conversationId: group.id } });
     } catch (error) {
       Alert.alert(botText("创建群聊失败", "Could not create group"), botError(error));
@@ -134,16 +196,18 @@ export function BotsHome() {
       style={[styles.screen, { backgroundColor: theme.background }]}
     >
       <View style={styles.header}>
-        <View style={styles.headerCopy}>
-          <Text style={[styles.heading, { color: theme.text }]}>BOT</Text>
-          <Text style={[styles.subheading, { color: theme.textSecondary }]}>
-            {botText("助手与群聊", "Assistants and groups")}
-          </Text>
-        </View>
+        <Text accessibilityRole="header" style={[styles.heading, { color: theme.text }]}>
+          BOT
+        </Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={botText("新建 BOT", "Create BOT")}
-          onPress={() => router.push("/bot/new")}
+          accessibilityLabel={botText("新建机器人或群聊", "Create a BOT or group")}
+          disabled={!!openingBotId}
+          onPress={() => {
+            if (openingRequest.current) return;
+            Keyboard.dismiss();
+            setSheet({ mode: "create", visible: true });
+          }}
           style={[styles.addButton, { backgroundColor: theme.backgroundElement }]}
         >
           <Icon name="newThread" size={23} tintColor={theme.powerBlue} />
@@ -154,7 +218,7 @@ export function BotsHome() {
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder={botText("搜索 BOT 或群聊", "Search BOTs and groups")}
+          placeholder={botText("搜索机器人或群聊", "Search BOTs and groups")}
           placeholderTextColor={theme.textSecondary}
           style={[styles.searchInput, { color: theme.text }]}
           autoCapitalize="none"
@@ -181,19 +245,26 @@ export function BotsHome() {
           </Pressable>
         ) : null}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.textSecondaryStrong }]}>
-            {botText("我的 BOT", "My BOTs")}
+          <Text
+            accessibilityRole="header"
+            style={[styles.sectionTitle, { color: theme.textSecondaryStrong }]}
+          >
+            {botText("机器人", "BOTs")}
           </Text>
-          <Text style={[styles.count, { color: theme.textSecondary }]}>{visibleBots.length}</Text>
         </View>
         {visibleBots.map((bot) => (
           <BotRow
             key={bot.id}
+            compact
+            disabled={!!openingBotId}
+            busy={openingBotId === bot.id}
             title={bot.name}
-            subtitle={bot.instructions || botText("点击查看详情", "View details")}
-            leading={<BotAvatar bot={bot} />}
+            subtitle={botHomeSummary(bot.instructions)}
+            leading={<BotAvatar bot={bot} size={38} />}
             trailing={
-              bot.runtimeState === "queued" || bot.runtimeState === "running" ? (
+              openingBotId === bot.id ? (
+                <ActivityIndicator size="small" color={theme.powerBlue} />
+              ) : bot.runtimeState === "queued" || bot.runtimeState === "running" ? (
                 <View style={styles.statusTrailing}>
                   <View
                     style={[
@@ -219,7 +290,7 @@ export function BotsHome() {
                 </View>
               ) : undefined
             }
-            onPress={() => router.push({ pathname: "/bot/[botId]", params: { botId: bot.id } })}
+            onPress={() => void openDirectChat(bot.id)}
           />
         ))}
         {!visibleBots.length ? (
@@ -229,20 +300,19 @@ export function BotsHome() {
               : botText("还没有 BOT", "No BOTs yet")}
           </Text>
         ) : null}
-        <View style={[styles.section, styles.groupSection]}>
-          <Text style={[styles.sectionTitle, { color: theme.textSecondaryStrong }]}>
+        <View style={styles.section}>
+          <Text
+            accessibilityRole="header"
+            style={[styles.sectionTitle, { color: theme.textSecondaryStrong }]}
+          >
             {botText("群聊", "Groups")}
           </Text>
-          <Pressable accessibilityRole="button" onPress={openGroup} style={styles.newGroup}>
-            <Icon name="newThread" size={17} tintColor={theme.powerBlue} />
-            <Text style={[styles.newGroupText, { color: theme.powerBlue }]}>
-              {botText("建群", "New group")}
-            </Text>
-          </Pressable>
         </View>
         {visibleGroups.map((group) => (
           <BotRow
             key={group.id}
+            compact
+            disabled={!!openingBotId}
             title={group.name}
             subtitle={group.botIds
               .map((id) => bots.find((bot) => bot.id === id)?.name)
@@ -253,12 +323,14 @@ export function BotsHome() {
                 <Text style={styles.groupAvatarText}>#</Text>
               </View>
             }
-            onPress={() =>
+            onPress={() => {
+              if (openingRequest.current) return;
+              Keyboard.dismiss();
               router.push({
                 pathname: "/bot-chat/[conversationId]",
                 params: { conversationId: group.id },
-              })
-            }
+              });
+            }}
           />
         ))}
         {!visibleGroups.length ? (
@@ -270,80 +342,104 @@ export function BotsHome() {
         ) : null}
       </ScrollView>
       <AppBottomSheet
-        title={botText("创建群聊", "Create group")}
-        visible={groupOpen}
-        onClose={() => setGroupOpen(false)}
+        title={
+          sheet.mode === "create" ? botText("新建", "Create") : botText("创建群聊", "Create group")
+        }
+        visible={sheet.visible}
+        onClose={closeSheet}
       >
-        <GroupField
-          label={botText("群名", "Group name")}
-          value={groupName}
-          onChangeText={setGroupName}
-          placeholder={botText("例如：产品讨论", "For example: Product team")}
-        />
-        <GroupField
-          label={botText("共享工作目录", "Shared working directory")}
-          value={workspacePath}
-          onChangeText={setWorkspacePath}
-          placeholder="/Users/name/Project"
-          autoCapitalize="none"
-        />
-        {workspaces.length ? (
+        {sheet.mode === "create" ? (
           <>
+            <SheetActionRow
+              accessibilityLabel={botText("新建机器人", "New BOT")}
+              title={botText("新建机器人", "New BOT")}
+              icon="agentAsterisk"
+              onPress={() => {
+                closeSheet();
+                router.push("/bot/new");
+              }}
+            />
+            <SheetActionRow
+              accessibilityLabel={botText("新建群聊", "New group")}
+              title={botText("新建群聊", "New group")}
+              icon="newChat"
+              onPress={openGroup}
+            />
+          </>
+        ) : (
+          <>
+            <GroupField
+              label={botText("群名", "Group name")}
+              value={groupName}
+              onChangeText={setGroupName}
+              placeholder={botText("例如：产品讨论", "For example: Product team")}
+            />
+            <GroupField
+              label={botText("共享工作目录", "Shared working directory")}
+              value={workspacePath}
+              onChangeText={setWorkspacePath}
+              placeholder="/Users/name/Project"
+              autoCapitalize="none"
+            />
+            {workspaces.length ? (
+              <>
+                <Text style={[styles.sheetLabel, { color: theme.textSecondaryStrong }]}>
+                  {botText("最近目录", "Recent directories")}
+                </Text>
+                {workspaces.map((path) => (
+                  <SheetActionRow
+                    key={path}
+                    accessibilityLabel={path}
+                    icon="folder"
+                    title={path.split("/").filter(Boolean).pop() || path}
+                    subtitle={path}
+                    selected={workspacePath === path}
+                    onPress={() => setWorkspacePath(path)}
+                  />
+                ))}
+              </>
+            ) : null}
             <Text style={[styles.sheetLabel, { color: theme.textSecondaryStrong }]}>
-              {botText("最近目录", "Recent directories")}
+              {botText("成员", "Members")}
             </Text>
-            {workspaces.map((path) => (
+            {bots.map((bot) => (
               <SheetActionRow
-                key={path}
-                accessibilityLabel={path}
-                icon="folder"
-                title={path.split("/").filter(Boolean).pop() || path}
-                subtitle={path}
-                selected={workspacePath === path}
-                onPress={() => setWorkspacePath(path)}
+                key={bot.id}
+                accessibilityLabel={bot.name}
+                icon="agentAtom"
+                title={bot.name}
+                selected={memberIds.includes(bot.id)}
+                trailing={<SheetSelectedDot selected={memberIds.includes(bot.id)} />}
+                onPress={() => toggleMember(bot.id)}
               />
             ))}
-          </>
-        ) : null}
-        <Text style={[styles.sheetLabel, { color: theme.textSecondaryStrong }]}>
-          {botText("成员", "Members")}
-        </Text>
-        {bots.map((bot) => (
-          <SheetActionRow
-            key={bot.id}
-            accessibilityLabel={bot.name}
-            icon="agentAtom"
-            title={bot.name}
-            selected={memberIds.includes(bot.id)}
-            trailing={<SheetSelectedDot selected={memberIds.includes(bot.id)} />}
-            onPress={() => toggleMember(bot.id)}
-          />
-        ))}
-        <Text style={[styles.sheetLabel, { color: theme.textSecondaryStrong }]}>
-          {botText("默认回复 BOT", "Default BOT")}
-        </Text>
-        {bots
-          .filter((bot) => memberIds.includes(bot.id))
-          .map((bot) => (
-            <SheetActionRow
-              key={bot.id}
-              accessibilityLabel={bot.name}
-              icon="agentAtom"
-              title={bot.name}
-              selected={defaultBotId === bot.id}
-              trailing={<SheetSelectedDot selected={defaultBotId === bot.id} />}
-              onPress={() => setDefaultBotId(bot.id)}
+            <Text style={[styles.sheetLabel, { color: theme.textSecondaryStrong }]}>
+              {botText("默认回复 BOT", "Default BOT")}
+            </Text>
+            {bots
+              .filter((bot) => memberIds.includes(bot.id))
+              .map((bot) => (
+                <SheetActionRow
+                  key={bot.id}
+                  accessibilityLabel={bot.name}
+                  icon="agentAtom"
+                  title={bot.name}
+                  selected={defaultBotId === bot.id}
+                  trailing={<SheetSelectedDot selected={defaultBotId === bot.id} />}
+                  onPress={() => setDefaultBotId(bot.id)}
+                />
+              ))}
+            <BotPrimaryButton
+              label={
+                busy
+                  ? botText("创建中…", "Creating…")
+                  : botText("创建并进入群聊", "Create and open group")
+              }
+              disabled={busy || !groupName.trim() || !workspacePath.trim() || !memberIds.length}
+              onPress={() => void createGroup()}
             />
-          ))}
-        <BotPrimaryButton
-          label={
-            busy
-              ? botText("创建中…", "Creating…")
-              : botText("创建并进入群聊", "Create and open group")
-          }
-          disabled={busy || !groupName.trim() || !workspacePath.trim() || !memberIds.length}
-          onPress={() => void createGroup()}
-        />
+          </>
+        )}
       </AppBottomSheet>
     </SafeAreaView>
   );
@@ -379,19 +475,18 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: 13,
     paddingBottom: 15,
   },
-  headerCopy: { gap: 4 },
-  heading: { fontFamily: Fonts.sansBold, fontSize: 30, lineHeight: 38, fontWeight: "700" },
-  subheading: { fontFamily: Fonts.sans, fontSize: 13 },
+  heading: { fontFamily: Fonts.sansBold, fontSize: 30, fontWeight: "700" },
   addButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
   },
   searchBox: {
     marginHorizontal: 20,
-    height: 42,
+    minHeight: 44,
+    paddingVertical: 8,
     borderRadius: 12,
     paddingHorizontal: 12,
     flexDirection: "row",
@@ -399,23 +494,13 @@ const styles = StyleSheet.create((theme) => ({
     gap: 9,
   },
   searchInput: { flex: 1, fontFamily: Fonts.sans, fontSize: 14, paddingVertical: 0 },
-  content: { paddingHorizontal: 20, paddingBottom: 36, gap: 8 },
-  section: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 20, paddingBottom: 5 },
+  content: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 28, gap: 6 },
+  section: { paddingTop: 14, paddingBottom: 2 },
   sectionTitle: { fontFamily: Fonts.sansSemiBold, fontSize: 14 },
-  count: { fontSize: 13 },
-  groupSection: { paddingTop: 27 },
-  newGroup: {
-    marginLeft: "auto",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    minHeight: 36,
-  },
-  newGroupText: { fontFamily: Fonts.sansSemiBold, fontSize: 14 },
   groupAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: theme.backgroundAlt,
     alignItems: "center",
     justifyContent: "center",

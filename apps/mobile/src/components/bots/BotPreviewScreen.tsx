@@ -21,8 +21,9 @@ import {
   updateBot as rawUpdateBot,
 } from "@/lib/codex-relay-api";
 
-import { BotPage, BotRow, botError, botText } from "./bot-ui";
+import { BotPage, BotPreviewTabs, BotRow, botError, botText } from "./bot-ui";
 import { botPreviewMarkdownPath } from "./bot-preview-path";
+import { BotGroupSettingsScreen } from "./BotGroupSettingsScreen";
 import {
   BotConfigurationRow,
   BotPreferredCapabilities,
@@ -213,27 +214,27 @@ export function BotPreviewScreen({
     );
   }
 
+  if (conversation?.kind === "group") {
+    return (
+      <BotGroupSettingsScreen
+        key={`${serverUrl}:${conversationId}`}
+        conversation={conversation}
+        filePath={filePath}
+      />
+    );
+  }
+
   return (
     <BotPage title={botText("预览", "Preview")}>
-      <View style={[styles.tabs, { borderColor: theme.backgroundSelected }]}>
-        <TabButton
-          label={botText("BOT 定义", "BOT definition")}
-          selected={tab === "definition"}
-          onPress={() => setTab("definition")}
-        />
-        <TabButton
-          label={botText("工作区文件", "Workspace files")}
-          selected={tab === "files"}
-          onPress={() => setTab("files")}
-        />
-        {filePath ? (
-          <TabButton
-            label={botText("文档", "Document")}
-            selected={tab === "document"}
-            onPress={() => setTab("document")}
-          />
-        ) : null}
-      </View>
+      <BotPreviewTabs<PreviewTab>
+        tabs={[
+          { id: "definition", label: botText("BOT 定义", "BOT definition") },
+          { id: "files", label: botText("工作区文件", "Workspace files") },
+          ...(filePath ? [{ id: "document" as const, label: botText("文档", "Document") }] : []),
+        ]}
+        selected={tab}
+        onSelect={setTab}
+      />
       {conversationQuery.error ? (
         <Text style={styles.error}>{botError(conversationQuery.error)}</Text>
       ) : null}
@@ -260,11 +261,6 @@ export function BotPreviewScreen({
         <ScrollView contentContainerStyle={styles.content}>
           {definitionQuery.isLoading || runtimeQuery.isLoading ? (
             <ActivityIndicator color={theme.powerBlue} />
-          ) : null}
-          {!botId && conversation ? (
-            <Text style={styles.hint}>
-              {botText("群聊请打开具体 BOT 查看定义。", "Open a BOT to view its definition.")}
-            </Text>
           ) : null}
           {definitionQuery.error ? (
             <Pressable onPress={() => void definitionQuery.refetch()}>
@@ -511,42 +507,7 @@ export function BotPreviewScreen({
   );
 }
 
-function TabButton({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="tab"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[styles.tab, { backgroundColor: selected ? theme.backgroundSelected : "transparent" }]}
-    >
-      <Text style={[styles.tabText, { color: selected ? theme.text : theme.textSecondary }]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create((theme) => ({
-  tabs: {
-    flexDirection: "row",
-    gap: 4,
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 4,
-    borderWidth: 1,
-    borderRadius: 12,
-  },
-  tab: { flex: 1, alignItems: "center", borderRadius: 9, paddingVertical: 10 },
-  tabText: { fontFamily: Fonts.sansSemiBold, fontSize: 13 },
   content: { gap: 14, paddingHorizontal: 16, paddingVertical: 18, paddingBottom: 48 },
   sectionHeader: { gap: 4, marginBottom: 2 },
   sectionTitle: { fontFamily: Fonts.sansBold, fontSize: 23 },
