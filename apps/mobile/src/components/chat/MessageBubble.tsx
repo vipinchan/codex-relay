@@ -35,6 +35,7 @@ import {
   createAssistantMarkdownStyle,
 } from "./assistant-markdown-presentation";
 import { messageLinkAction, messageMarkdownContentForRender } from "./message-markdown-content";
+import { MessageFileCards } from "./MessageFileCards";
 import { PromptMarkdownText } from "./PromptMarkdownText";
 import { ProtocolActivityCard } from "./ProtocolActivityCard";
 import type { WorkspaceMarkdownPreviewTarget } from "./workspace-preview/markdown-target";
@@ -99,6 +100,7 @@ const imageDownloadPromises = new Map<string, Promise<void>>();
 
 export const MessageBubble = memo(function MessageBubble({
   assistantBlock,
+  fileSource = "session",
   message,
   onMessageCopied,
   onMessageRewind,
@@ -109,6 +111,7 @@ export const MessageBubble = memo(function MessageBubble({
     isFirst: boolean;
     isLast: boolean;
   };
+  fileSource?: "session" | "bot";
   message: ChatMessage;
   onMessageCopied?: () => void;
   onMessageRewind?: (message: ChatMessage) => void;
@@ -332,6 +335,16 @@ export const MessageBubble = memo(function MessageBubble({
                   messageId={message.id}
                   onOpenMarkdownAttachment={onOpenMarkdownAttachment}
                 />
+                {!message.state || message.state === "completed" ? (
+                  <MessageFileCards
+                    content={assistantBlock?.copyContent ?? message.content}
+                    message={{
+                      source: fileSource,
+                      conversationId: message.threadId,
+                      messageId: message.id,
+                    }}
+                  />
+                ) : null}
                 <MessageFooter
                   canCopy={copyMarkdown.length > 0}
                   isCopied={isCopied}

@@ -5,7 +5,7 @@ import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { fromByteArray, toByteArray } from "base64-js";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -170,6 +170,13 @@ function testDeriveSession(sharedSecret: Uint8Array, transcript: Uint8Array, key
   const salt = sha256(transcript);
   const infoPrefix = `codex-relay-e2ee-v1|${keyEpoch}|${fromByteArray(sha256(transcript))}`;
   return {
+    mobileToServerKey: hkdf(
+      sha256,
+      sharedSecret,
+      salt,
+      utf8ToBytes(`${infoPrefix}|mobileToServer`),
+      32,
+    ),
     serverToMobileKey: hkdf(
       sha256,
       sharedSecret,
@@ -1493,158 +1500,265 @@ describe("Codex Relay server routes", () => {
     expect(afterClear.status).toBe(401);
   });
 
-  it("approves pairing requests and encrypts paired responses", async () => {
-    const sessions = await createTursoPairingSessionStore(":memory:");
-    const serverIdentity = createServerIdentity();
-    const tokens = ["client-token", "client-token-2"];
-    const onPairApprovalRequested =
-      vi.fn<(client: { approvalCode: string; clientName?: string }) => void>();
-    const onPairApproved = vi.fn<(client: { approvalCode: string; clientName?: string }) => void>();
-    const onPaired = vi.fn<(client: { clientName?: string; tokenCount: number }) => void>();
-    const onTokenRefreshed = vi.fn<(client: { clientName?: string; tokenCount: number }) => void>();
-    const app = createApp({
-      codex: createMockCodex(),
-      pairing: {
-        approvalSecret: "approve-secret",
-        createClientToken: () => tokens.shift()!,
-        hashClientToken: (token) => token,
-        onPairApprovalRequested,
-        onPairApproved,
-        onPaired,
-        onTokenRefreshed,
-        serverIdentity,
-        sessions,
-      },
-      workspacePath: "/tmp/codex-relay",
-    });
-    const clientPrivateKey = x25519.utils.randomSecretKey();
-    const clientPublicKey = fromByteArray(x25519.getPublicKey(clientPrivateKey));
-    const clientNonce = fromByteArray(randomBytes(32));
+  it("requires an encrypted pairing to prepare a message file or read a chunk", async () => {
+    const app = createApp({ codex: createMockCodex() });
+    for (const route of ["prepare", "chunk"]) {
+      const response = await app.request(`/v1/message-files/${route}`, { method: "POST" });
+      expect(response.status).toBe(401);
+      expect(await response.json()).toMatchObject({ error: { code: "secure_session_required" } });
+    }
+  });
 
-    const pairing = await app.request("http://127.0.0.1/v1/pair", {
-      method: "POST",
-      body: JSON.stringify({
-        clientSessionId: "phone-session",
-        clientName: "test phone",
-        secure: {
-          clientEphemeralPublicKey: clientPublicKey,
-          clientNonce,
-          protocolVersion: 1,
+  it(
+    "approves pairing requests and encrypts paired responses",
+    async ({ onTestFinished }) => {
+      const sessions = await createTursoPairingSessionStore(":memory:");
+      const serverIdentity = createServerIdentity();
+      const workspacePath = await mkdtemp(join(tmpdir(), "relay-paired-files-"));
+      onTestFinished(() => rm(workspacePath, { recursive: true, force: true }));
+      const fixturePath = process.env.CODEX_RELAY_TEST_IPA;
+      const fileBytes = fixturePath ? await readFile(fixturePath) : Buffer.alloc(600 * 1024, 19);
+      await writeFile(join(workspacePath, "build.ipa"), fileBytes);
+      const thread = appServerHistoryThread({
+        id: "file-thread",
+        name: "Delivery",
+        workspacePath,
+        turns: [
+          {
+            ...appServerTurn("delivery", "Build it", Date.now() / 1000 - 1),
+            items: [{ id: "file-reply", type: "agentMessage", text: "[Download](./build.ipa)" }],
+          },
+        ],
+      });
+      const appServer = {
+        onNotification: () => () => undefined,
+        onRequest: () => () => undefined,
+        readThread: async () => thread,
+      };
+      const tokens = ["client-token", "client-token-2"];
+      const onPairApprovalRequested =
+        vi.fn<(client: { approvalCode: string; clientName?: string }) => void>();
+      const onPairApproved =
+        vi.fn<(client: { approvalCode: string; clientName?: string }) => void>();
+      const onPaired = vi.fn<(client: { clientName?: string; tokenCount: number }) => void>();
+      const onTokenRefreshed =
+        vi.fn<(client: { clientName?: string; tokenCount: number }) => void>();
+      const app = createApp({
+        appServer: appServer as never,
+        codex: createMockCodex(),
+        pairing: {
+          approvalSecret: "approve-secret",
+          createClientToken: () => tokens.shift()!,
+          hashClientToken: (token) => token,
+          onPairApprovalRequested,
+          onPairApproved,
+          onPaired,
+          onTokenRefreshed,
+          serverIdentity,
+          sessions,
         },
-      }),
-      headers: { "content-type": "application/json" },
-    });
-    const pairingBody = await pairing.json();
+        workspacePath,
+      });
+      const clientPrivateKey = x25519.utils.randomSecretKey();
+      const clientPublicKey = fromByteArray(x25519.getPublicKey(clientPrivateKey));
+      const clientNonce = fromByteArray(randomBytes(32));
 
-    expect(pairing.status).toBe(202);
-    expect(pairingBody.approvalCode).toEqual(expect.any(String));
-    expect(pairingBody.secure).toBeUndefined();
-    expect(onPairApprovalRequested).toHaveBeenCalledWith({
-      approvalCode: pairingBody.approvalCode,
-      clientName: "test phone",
-    });
+      const pairing = await app.request("http://127.0.0.1/v1/pair", {
+        method: "POST",
+        body: JSON.stringify({
+          clientSessionId: "phone-session",
+          clientName: "test phone",
+          secure: {
+            clientEphemeralPublicKey: clientPublicKey,
+            clientNonce,
+            protocolVersion: 1,
+          },
+        }),
+        headers: { "content-type": "application/json" },
+      });
+      const pairingBody = await pairing.json();
 
-    const pending = await app.request(`/v1/pair/${pairingBody.approvalCode}`);
-    expect(pending.status).toBe(202);
+      expect(pairing.status).toBe(202);
+      expect(pairingBody.approvalCode).toEqual(expect.any(String));
+      expect(pairingBody.secure).toBeUndefined();
+      expect(onPairApprovalRequested).toHaveBeenCalledWith({
+        approvalCode: pairingBody.approvalCode,
+        clientName: "test phone",
+      });
 
-    const unauthorizedApproval = await app.request("/v1/pair/approve", {
-      method: "POST",
-      body: JSON.stringify({ approvalCode: pairingBody.approvalCode }),
-      headers: { "content-type": "application/json" },
-    });
-    expect(unauthorizedApproval.status).toBe(401);
+      const pending = await app.request(`/v1/pair/${pairingBody.approvalCode}`);
+      expect(pending.status).toBe(202);
 
-    const approval = await app.request("/v1/pair/approve", {
-      method: "POST",
-      body: JSON.stringify({ approvalCode: pairingBody.approvalCode }),
-      headers: {
-        "content-type": "application/json",
-        "x-codex-relay-approve-secret": "approve-secret",
-      },
-    });
-    expect(approval.status).toBe(200);
-    expect(onPairApproved).toHaveBeenCalledWith({
-      approvalCode: pairingBody.approvalCode,
-      clientName: "test phone",
-    });
+      const unauthorizedApproval = await app.request("/v1/pair/approve", {
+        method: "POST",
+        body: JSON.stringify({ approvalCode: pairingBody.approvalCode }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(unauthorizedApproval.status).toBe(401);
 
-    const approved = await app.request(`/v1/pair/${pairingBody.approvalCode}`);
-    const approvedBody = await approved.json();
+      const approval = await app.request("/v1/pair/approve", {
+        method: "POST",
+        body: JSON.stringify({ approvalCode: pairingBody.approvalCode }),
+        headers: {
+          "content-type": "application/json",
+          "x-codex-relay-approve-secret": "approve-secret",
+        },
+      });
+      expect(approval.status).toBe(200);
+      expect(onPairApproved).toHaveBeenCalledWith({
+        approvalCode: pairingBody.approvalCode,
+        clientName: "test phone",
+      });
 
-    expect(approved.status).toBe(201);
-    expect(approvedBody.clientToken).toBeUndefined();
-    expect(approvedBody.secure?.encryptedPayload).toEqual(expect.any(String));
-    expect(onPaired).toHaveBeenCalledWith({ clientName: "test phone", tokenCount: 1 });
+      const approved = await app.request(`/v1/pair/${pairingBody.approvalCode}`);
+      const approvedBody = await approved.json();
 
-    const transcript = testPairingTranscript({
-      approvalCode: pairingBody.approvalCode,
-      clientEphemeralPublicKey: clientPublicKey,
-      clientNonce,
-      keyEpoch: approvedBody.secure.keyEpoch,
-      serverEphemeralPublicKey: approvedBody.secure.serverEphemeralPublicKey,
-      serverIdentityPublicKey: serverIdentity.publicKey,
-      serverNonce: approvedBody.secure.serverNonce,
-      serverUrl: "http://127.0.0.1",
-    });
-    expect(
-      ed25519.verify(
-        toByteArray(approvedBody.secure.serverSignature),
-        transcript,
-        toByteArray(serverIdentity.publicKey),
-      ),
-    ).toBe(true);
+      expect(approved.status).toBe(201);
+      expect(approvedBody.clientToken).toBeUndefined();
+      expect(approvedBody.secure?.encryptedPayload).toEqual(expect.any(String));
+      expect(onPaired).toHaveBeenCalledWith({ clientName: "test phone", tokenCount: 1 });
 
-    const sharedSecret = x25519.getSharedSecret(
-      clientPrivateKey,
-      toByteArray(approvedBody.secure.serverEphemeralPublicKey),
-    );
-    const keys = testDeriveSession(sharedSecret, transcript, approvedBody.secure.keyEpoch);
-    const tokenPayload = JSON.parse(
-      testDecrypt(keys.serverToMobileKey, "server", 0, approvedBody.secure.encryptedPayload),
-    );
-    expect(tokenPayload).toMatchObject({
-      clientToken: "client-token",
-      clientTokenExpiresAt: "9999-12-31T23:59:59.999Z",
-    });
-    expect(await sessions.getValidSession("client-token")).toMatchObject({
-      clientName: "test phone",
-      clientSessionId: "phone-session",
-    });
+      const transcript = testPairingTranscript({
+        approvalCode: pairingBody.approvalCode,
+        clientEphemeralPublicKey: clientPublicKey,
+        clientNonce,
+        keyEpoch: approvedBody.secure.keyEpoch,
+        serverEphemeralPublicKey: approvedBody.secure.serverEphemeralPublicKey,
+        serverIdentityPublicKey: serverIdentity.publicKey,
+        serverNonce: approvedBody.secure.serverNonce,
+        serverUrl: "http://127.0.0.1",
+      });
+      expect(
+        ed25519.verify(
+          toByteArray(approvedBody.secure.serverSignature),
+          transcript,
+          toByteArray(serverIdentity.publicKey),
+        ),
+      ).toBe(true);
 
-    const status = await app.request("/v1/status", {
-      headers: { authorization: "Bearer client-token" },
-    });
-    const statusEnvelope = await status.json();
-    expect(statusEnvelope.sender).toBe("server");
-    const statusBody = JSON.parse(
-      testDecrypt(keys.serverToMobileKey, "server", 1, statusEnvelope.ciphertext),
-    );
-    expect(statusBody).toMatchObject({
-      ok: true,
-      machineName: expect.any(String),
-      workspacePath: "/tmp/codex-relay",
-    });
+      const sharedSecret = x25519.getSharedSecret(
+        clientPrivateKey,
+        toByteArray(approvedBody.secure.serverEphemeralPublicKey),
+      );
+      const keys = testDeriveSession(sharedSecret, transcript, approvedBody.secure.keyEpoch);
+      const tokenPayload = JSON.parse(
+        testDecrypt(keys.serverToMobileKey, "server", 0, approvedBody.secure.encryptedPayload),
+      );
+      expect(tokenPayload).toMatchObject({
+        clientToken: "client-token",
+        clientTokenExpiresAt: "9999-12-31T23:59:59.999Z",
+      });
+      expect(await sessions.getValidSession("client-token")).toMatchObject({
+        clientName: "test phone",
+        clientSessionId: "phone-session",
+      });
 
-    const refresh = await app.request("/v1/session/refresh", {
-      method: "POST",
-      headers: { authorization: "Bearer client-token" },
-    });
-    const refreshEnvelope = await refresh.json();
-    const refreshBody = JSON.parse(
-      testDecrypt(keys.serverToMobileKey, "server", 2, refreshEnvelope.ciphertext),
-    );
-    expect(refresh.status).toBe(201);
-    expect(refreshBody).toMatchObject({
-      clientToken: "client-token-2",
-      clientTokenExpiresAt: "9999-12-31T23:59:59.999Z",
-    });
-    expect(await sessions.getValidSession("client-token")).toBeUndefined();
-    expect(await sessions.getValidSession("client-token-2")).toMatchObject({
-      clientName: "test phone",
-      clientSessionId: "phone-session",
-    });
-    expect(onTokenRefreshed).toHaveBeenCalledWith({ clientName: "test phone", tokenCount: 1 });
-  }, 15_000);
+      const status = await app.request("/v1/status", {
+        headers: { authorization: "Bearer client-token" },
+      });
+      const statusEnvelope = await status.json();
+      expect(statusEnvelope.sender).toBe("server");
+      const statusBody = JSON.parse(
+        testDecrypt(keys.serverToMobileKey, "server", 1, statusEnvelope.ciphertext),
+      );
+      expect(statusBody).toMatchObject({
+        ok: true,
+        machineName: expect.any(String),
+        workspacePath,
+        messageFileDownloads: true,
+      });
+
+      let mobileCounter = 1;
+      const fileRequest = async (operation: string, payload: object, encrypted = true) => {
+        const counter = mobileCounter++;
+        const response = await app.request(`/v1/message-files/${operation}`, {
+          method: "POST",
+          headers: { authorization: "Bearer client-token" },
+          body: JSON.stringify(
+            encrypted
+              ? {
+                  counter,
+                  sender: "mobile",
+                  keyEpoch: approvedBody.secure.keyEpoch,
+                  protocolVersion: 1,
+                  ciphertext: fromByteArray(
+                    gcm(keys.mobileToServerKey, testNonceFor("mobile", counter)).encrypt(
+                      utf8ToBytes(JSON.stringify(payload)),
+                    ),
+                  ),
+                }
+              : payload,
+          ),
+        });
+        const envelope = await response.json();
+        return {
+          status: response.status,
+          body: JSON.parse(
+            testDecrypt(keys.serverToMobileKey, "server", envelope.counter, envelope.ciphertext),
+          ),
+        };
+      };
+      const file = {
+        source: "session",
+        conversationId: "file-thread",
+        messageId: "file-reply",
+        path: "./build.ipa",
+      };
+      expect((await fileRequest("prepare", file, false)).status).toBe(400);
+      expect(
+        (await fileRequest("prepare", { ...file, conversationId: "wrong-thread" })).status,
+      ).toBe(404);
+      expect((await fileRequest("prepare", { ...file, path: "./other.ipa" })).status).toBe(404);
+      const prepared = await fileRequest("prepare", file);
+      expect(prepared.status).toBe(200);
+      expect(prepared.body).toMatchObject({ name: "build.ipa", size: fileBytes.length });
+      expect(prepared.body.sha256).toBe(Buffer.from(sha256(fileBytes)).toString("hex"));
+      let written = 0;
+      while (written < fileBytes.length) {
+        const chunk = await fileRequest("chunk", {
+          downloadId: prepared.body.downloadId,
+          offset: written,
+        });
+        expect(chunk.status).toBe(200);
+        const bytes = Buffer.from(chunk.body.data, "base64");
+        expect(bytes.length).toBeGreaterThan(0);
+        expect(chunk.body.offset).toBe(written);
+        expect(chunk.body.nextOffset).toBe(written + bytes.length);
+        expect(bytes.equals(fileBytes.subarray(written, chunk.body.nextOffset))).toBe(true);
+        written = chunk.body.nextOffset;
+      }
+      expect(written).toBe(fileBytes.length);
+      expect(
+        (await fileRequest("chunk", { downloadId: prepared.body.downloadId, offset: 0 })).status,
+      ).toBe(404);
+
+      const refresh = await app.request("/v1/session/refresh", {
+        method: "POST",
+        headers: { authorization: "Bearer client-token" },
+      });
+      const refreshEnvelope = await refresh.json();
+      const refreshBody = JSON.parse(
+        testDecrypt(
+          keys.serverToMobileKey,
+          "server",
+          refreshEnvelope.counter,
+          refreshEnvelope.ciphertext,
+        ),
+      );
+      expect(refresh.status).toBe(201);
+      expect(refreshBody).toMatchObject({
+        clientToken: "client-token-2",
+        clientTokenExpiresAt: "9999-12-31T23:59:59.999Z",
+      });
+      expect(await sessions.getValidSession("client-token")).toBeUndefined();
+      expect(await sessions.getValidSession("client-token-2")).toMatchObject({
+        clientName: "test phone",
+        clientSessionId: "phone-session",
+      });
+      expect(onTokenRefreshed).toHaveBeenCalledWith({ clientName: "test phone", tokenCount: 1 });
+    },
+    process.env.CODEX_RELAY_TEST_IPA ? 60_000 : 15_000,
+  );
 
   it("auto-approves pairing when the dangerous auto-approve option is enabled", async () => {
     const sessions = await createTursoPairingSessionStore(":memory:");

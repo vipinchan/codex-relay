@@ -29,6 +29,9 @@ import {
   CreateThreadRequestSchema,
   EncryptedPayloadSchema,
   ImageAttachmentUploadResponseSchema,
+  MessageFileChunkRequestSchema,
+  MessageFileRequestSchema,
+  MessageFileResponseSchema,
   InterruptThreadRunResponseSchema,
   ListModelsResponseSchema,
   ListQueuedThreadInputsResponseSchema,
@@ -197,9 +200,16 @@ import {
   selectTitleGenerationModelCandidates,
 } from "./title-generation.js";
 import { codexRelayDataPath } from "./paths.js";
+import {
+  deliveredFileMetadata,
+  DeliveredFileTooLargeError,
+  readDeliveredFileChunk,
+  type DeliveredFileInput,
+  type DeliveredFileMetadata,
+} from "./delivered-file.js";
 import { relayDebugLog } from "./debug-log.js";
 import { historyCursor, localHistoryPage, parseHistoryPage } from "./thread-history-pagination.js";
-import { readRolloutHistoryPage } from "./rollout-history-page.js";
+import { readRolloutHistoryLine, readRolloutHistoryPage } from "./rollout-history-page.js";
 import { permanentClientSessionExpiresAt, type PairingSessionStore } from "./pairing-store.js";
 import {
   createExpoPushNotificationSender,
@@ -445,6 +455,16 @@ export function createApp(options: AppOptions = {}) {
   );
   const threads = new Map<string, ThreadMetadata>();
   const messagesByThreadId = new Map<string, ChatMessage[]>();
+  const messageFileDownloads = new Map<
+    string,
+    {
+      owner: string;
+      file: Pick<DeliveredFileInput, "workspace" | "staging" | "path">;
+      metadata: DeliveredFileMetadata;
+      expiresAt: number;
+    }
+  >();
+  const messageFileIdleMs = 15 * 60 * 1000;
   const liveThreads = new Map<string, ReturnType<CodexClient["startThread"]>>();
   const pendingApprovals = new Map<string, PendingApproval>();
   const resolvedApprovals = new Map<string, ResolvedApproval>();
@@ -1980,6 +2000,7 @@ export function createApp(options: AppOptions = {}) {
       workspacePath,
       threadCount: threads.size,
       appServerAvailable: Boolean(appServer),
+      messageFileDownloads: Boolean(options.pairing?.serverIdentity),
       preferences: await preferences.read(workspacePath),
       runtimePreferencesByWorkspacePath: await preferences.readByWorkspacePath(),
     });
@@ -2700,6 +2721,152 @@ export function createApp(options: AppOptions = {}) {
         apiError("skills_unavailable", errorMessage(error)),
         502,
       );
+    }
+  });
+
+  app.post(apiPaths.messageFile, async (c) => {
+    const session = getSecureSessionForRequest(c, options.pairing, secureSessionsByTokenHash);
+    if (!session)
+      return c.json(apiError("secure_session_required", "Secure pairing required."), 401);
+    const reply = (payload: unknown, status?: number) =>
+      secureJson(c, options.pairing, secureSessionsByTokenHash, payload, status);
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      MessageFileRequestSchema,
+    );
+    if (!parsed.success) return reply(apiError("invalid_request", "Invalid file request."), 400);
+    const { source, conversationId, messageId, path } = parsed.data;
+    try {
+      let workspace: string | undefined;
+      let message: DeliveredFileInput["message"] | undefined;
+      if (source === "bot") {
+        const store = await botStore;
+        const conversation = await store.getConversation(conversationId);
+        const botMessage = await store.getMessage(messageId);
+        if (
+          botMessage?.conversationId === conversationId &&
+          botMessage.sender === "bot" &&
+          botMessage.status === "completed" &&
+          !botMessage.activity
+        ) {
+          workspace = conversation?.workspacePath;
+          message = { ...botMessage, role: "assistant" };
+        }
+      } else {
+        workspace = threads.get(conversationId)?.cwd;
+        let threadMessage = messagesByThreadId
+          .get(conversationId)
+          ?.find((candidate) => candidate.id === messageId);
+        if ((!workspace || !threadMessage || threadMessage.state === "streaming") && appServer) {
+          const rolloutOffset = /^rollout:byte:(\d+):assistant$/.exec(messageId)?.[1];
+          const thread = await appServer.readThread(conversationId, {
+            includeTurns: !rolloutOffset,
+          });
+          if (thread.id === conversationId) {
+            workspace = thread.cwd;
+            if (
+              rolloutOffset &&
+              thread.path?.endsWith(".jsonl") &&
+              !isPaginatedRolloutFile(thread.path)
+            ) {
+              const line = await readRolloutHistoryLine(thread.path, Number(rolloutOffset));
+              if (line) {
+                const candidate = rolloutRecordMessage(
+                  conversationId,
+                  JSON.parse(line),
+                  `rollout:byte:${rolloutOffset}`,
+                  workspace,
+                );
+                threadMessage = candidate?.id === messageId ? candidate : undefined;
+              }
+            } else {
+              threadMessage = mapAppServerMessages(thread).find(
+                (candidate) => candidate.id === messageId,
+              );
+              const turn = thread.turns?.find(
+                (candidate) => candidate.id === threadMessage?.turnId,
+              );
+              if (turn && mapAppServerTurnStatusState(turn.status) !== "completed")
+                threadMessage = undefined;
+            }
+          }
+        }
+        if (
+          threadMessage?.threadId === conversationId &&
+          threadMessage.role === "assistant" &&
+          threadMessage.kind === "chat" &&
+          (!threadMessage.state || threadMessage.state === "completed")
+        )
+          message = threadMessage;
+      }
+      if (!workspace || !message) {
+        return reply(
+          apiError("file_unavailable", "The completed file message was not found."),
+          404,
+        );
+      }
+      const file = { workspace, path, staging: codexRelayDataPath("deliveries") };
+      const metadata = await deliveredFileMetadata({ ...file, message });
+      const downloadId = randomUUID();
+      const response = MessageFileResponseSchema.parse({ ...metadata, downloadId });
+      const now = Date.now();
+      for (const [id, download] of messageFileDownloads) {
+        if (download.expiresAt <= now) messageFileDownloads.delete(id);
+      }
+      if (messageFileDownloads.size >= 128) {
+        const oldest = messageFileDownloads.keys().next().value;
+        if (oldest) messageFileDownloads.delete(oldest);
+      }
+      messageFileDownloads.set(downloadId, {
+        owner: session.tokenHash,
+        file,
+        metadata,
+        expiresAt: now + messageFileIdleMs,
+      });
+      return reply(response);
+    } catch (error) {
+      if (error instanceof DeliveredFileTooLargeError)
+        return reply(
+          apiError("file_too_large", "This file exceeds the 200 MB download limit."),
+          413,
+        );
+      return reply(apiError("file_unavailable", "The original file is unavailable."), 404);
+    }
+  });
+
+  app.post(apiPaths.messageFileChunk, async (c) => {
+    const session = getSecureSessionForRequest(c, options.pairing, secureSessionsByTokenHash);
+    if (!session)
+      return c.json(apiError("secure_session_required", "Secure pairing required."), 401);
+    const reply = (payload: unknown, status?: number) =>
+      secureJson(c, options.pairing, secureSessionsByTokenHash, payload, status);
+    const parsed = await parseRequestJson(
+      c,
+      options.pairing,
+      secureSessionsByTokenHash,
+      MessageFileChunkRequestSchema,
+    );
+    if (!parsed.success)
+      return reply(apiError("invalid_request", "Invalid file chunk request."), 400);
+    const { downloadId, offset } = parsed.data;
+    const download = messageFileDownloads.get(downloadId);
+    if (!download || download.owner !== session.tokenHash || download.expiresAt <= Date.now()) {
+      return reply(apiError("download_expired", "Start a new download."), 404);
+    }
+    try {
+      const chunk = await readDeliveredFileChunk({
+        ...download.file,
+        metadata: download.metadata,
+        offset,
+      });
+      download.expiresAt = Date.now() + messageFileIdleMs;
+      if (chunk.nextOffset === download.metadata.size) messageFileDownloads.delete(downloadId);
+      return reply(chunk);
+    } catch {
+      messageFileDownloads.delete(downloadId);
+      return reply(apiError("file_changed", "The original file changed during download."), 409);
     }
   });
 

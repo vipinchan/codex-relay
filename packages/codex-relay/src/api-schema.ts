@@ -553,6 +553,75 @@ export const ChatMessageSchema = z.object({
   state: ChatMessageStateSchema.optional(),
 });
 
+export const messageFileSizeLimit = 200 * 1024 * 1024;
+export const messageFileChunkSize = 512 * 1024;
+export const MessageFileRequestSchema = z.object({
+  source: z.enum(["session", "bot"]),
+  conversationId: z.string().min(1).max(256),
+  messageId: z.string().min(1).max(256),
+  path: z.string().min(1).max(4096),
+});
+export const MessageFileResponseSchema = z.object({
+  downloadId: z.uuid(),
+  name: z
+    .string()
+    .min(1)
+    .refine((name) => name !== "." && name !== ".." && !/[/\\\p{Cc}]/u.test(name)),
+  size: z.number().int().nonnegative().max(messageFileSizeLimit),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export const MessageFileChunkRequestSchema = z.object({
+  downloadId: z.uuid(),
+  offset: z.number().int().nonnegative().max(messageFileSizeLimit),
+});
+export const MessageFileChunkResponseSchema = z.object({
+  data: z.base64().max(Math.ceil(messageFileChunkSize / 3) * 4),
+  offset: z.number().int().nonnegative(),
+  nextOffset: z.number().int().nonnegative(),
+});
+export type MessageFileRequest = z.infer<typeof MessageFileRequestSchema>;
+
+export function stagedMessageFilePath(value: string) {
+  const match = /^relay-file:([a-f0-9-]{36})\/([^/\\]+)$/i.exec(value);
+  if (!match || !z.uuid().safeParse(match[1]).success) return undefined;
+  const name = match[2];
+  if (name.startsWith(".") || /\p{Cc}/u.test(name)) return undefined;
+  return `${match[1]}/${name}`;
+}
+
+export function messageMarkdownLinks(content: string): string[] {
+  const links = new Set<string>();
+  let fence: string | undefined;
+  for (const line of content.split("\n")) {
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})/)?.[1];
+    if (marker) {
+      if (!fence) fence = marker;
+      else if (marker[0] === fence[0] && marker.length >= fence.length) fence = undefined;
+      continue;
+    }
+    if (fence || /^(?: {4}|\t| {0,3}>)/.test(line)) continue;
+    for (const match of line
+      .replace(/(`+).*?\1/g, "")
+      .matchAll(/(?<![!\\])\[[^\]]+\]\(\s*(?:<([^>\n]+)>|([^\s)]+))\s*\)/g)) {
+      links.add(match[1] ?? match[2]);
+    }
+  }
+  return [...links];
+}
+
+export function messageFileLinkPath(destination: string) {
+  const local = destination.startsWith("file:///")
+    ? destination.slice("file://".length)
+    : destination;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(local) && !local.startsWith("relay-file:")) return undefined;
+  try {
+    const path = decodeURIComponent(local.split(/[?#]/, 1)[0]);
+    if (path && !/[\p{Cc}\\]/u.test(path) && !path.startsWith("//")) return path;
+  } catch {
+    return undefined;
+  }
+}
+
 export const ThreadSummarySchema = z.object({
   id: z.string().min(1),
   parentThreadId: z.string().min(1).optional(),
@@ -586,6 +655,7 @@ export const StatusResponseSchema = z.object({
   workspacePath: z.string(),
   threadCount: z.number().int().nonnegative(),
   appServerAvailable: z.boolean().default(false),
+  messageFileDownloads: z.boolean().optional(),
   preferences: RuntimePreferencesSchema.default({ runtimeMode: "default" }),
   runtimePreferencesByWorkspacePath: RuntimePreferencesByWorkspacePathSchema.default({}),
 });
@@ -1341,6 +1411,8 @@ export const apiPaths = {
   skills: "/v1/skills",
   workspaceFiles: "/v1/workspace/files",
   workspaceFileContent: "/v1/workspace/file",
+  messageFile: "/v1/message-files/prepare",
+  messageFileChunk: "/v1/message-files/chunk",
   workspaceDirectories: "/v1/workspace-directories",
   workspaceChanges: "/v1/workspace/changes",
   workspaceCheckout: "/v1/workspace/checkout",

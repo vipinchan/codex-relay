@@ -54,6 +54,9 @@ import {
   ListSkillsResponseSchema,
   ListThreadsResponseSchema,
   ListWorkspaceFilesResponseSchema,
+  MessageFileChunkResponseSchema,
+  MessageFileResponseSchema,
+  type MessageFileRequest,
   ListWorkspaceDirectoriesResponseSchema,
   PairResponseSchema,
   PushNotificationSettingsResponseSchema,
@@ -207,7 +210,7 @@ export {
 };
 export type { CodexRelayServerUrlCandidate };
 
-class CodexRelayApiError extends Error {
+export class CodexRelayApiError extends Error {
   code: string | undefined;
   status: number;
 
@@ -1732,6 +1735,90 @@ function decryptForContext(payload: unknown, context: RequestContext) {
   return decryptResponsePayload(payload, context.credentialId);
 }
 
+export function createMessageFileDownload(signal: AbortSignal) {
+  const context = captureRequestContext();
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal.addEventListener("abort", abort);
+  context.signal.addEventListener("abort", abort);
+  if (signal.aborted || context.signal.aborted) abort();
+
+  const assertActive = () => {
+    context.assertCurrent();
+    assertNotAborted(controller.signal);
+  };
+  async function call(path: string, input?: object) {
+    assertActive();
+    await ensureComputerConnection(context);
+    assertActive();
+    const body = input ? encryptRequestPayload(input, context.credentialId) : undefined;
+    if (body) EncryptedPayloadSchema.parse(JSON.parse(body));
+    const signal = controller.signal;
+    let rejectOnAbort: () => void = () => undefined;
+    const cancelled = new Promise<never>((_, reject) => {
+      rejectOnAbort = () => reject(new Error("File download cancelled."));
+      signal.addEventListener("abort", rejectOnAbort);
+    });
+    let response: Response;
+    try {
+      response = await Promise.race([
+        fetchForContext(
+          path,
+          {
+            method: input ? "POST" : "GET",
+            headers: requestHeaders(undefined, undefined, context),
+            body,
+            signal,
+            timeoutMs: 30_000,
+          },
+          context,
+        ),
+        cancelled,
+      ]);
+    } finally {
+      signal.removeEventListener("abort", rejectOnAbort);
+    }
+    const rawPayload = await response.json().catch(() => undefined);
+    assertActive();
+    const payload = decryptForContext(
+      response.ok ? EncryptedPayloadSchema.parse(rawPayload) : rawPayload,
+      context,
+    );
+    if (!response.ok) {
+      throw new CodexRelayApiError(
+        errorMessage(payload, "File download failed."),
+        response.status,
+        errorCode(payload),
+      );
+    }
+    return payload;
+  }
+
+  return {
+    assertActive,
+    async prepare(input: MessageFileRequest) {
+      const status = StatusResponseSchema.parse(await call(apiPaths.status));
+      if (!status.messageFileDownloads) {
+        throw new CodexRelayApiError(
+          "Update the Relay on your computer to download this file.",
+          0,
+          "file_download_unsupported",
+        );
+      }
+      return MessageFileResponseSchema.parse(await call(apiPaths.messageFile, input));
+    },
+    async read(downloadId: string, offset: number) {
+      return MessageFileChunkResponseSchema.parse(
+        await call(apiPaths.messageFileChunk, { downloadId, offset }),
+      );
+    },
+    close() {
+      signal.removeEventListener("abort", abort);
+      context.signal.removeEventListener("abort", abort);
+    },
+  };
+}
+
 async function fetchForContext(
   path: string,
   init: NetworkRequestInit | undefined,
@@ -1742,7 +1829,7 @@ async function fetchForContext(
   try {
     const response = await fetchWithNetworkContext(`${context.url}${path}`, {
       ...init,
-      signal: context.signal,
+      signal: init?.signal ?? context.signal,
     });
     context.assertCurrent();
     return response;

@@ -59,6 +59,24 @@ run.
 - Keep pairing and session data under your local relay state.
 - Save multiple computer pairings and switch computers from mobile Settings.
 
+### Files in conversations
+
+Ask the assistant to share a generated file in the conversation. A Markdown link
+to an artifact in that conversation's workspace, such as
+`[Download IPA](./build/CodexRelay.ipa)`, appears as a file card. For files
+outside the workspace or files with custom extensions, the assistant can copy
+the file to `<Relay data directory>/deliveries/<uuid>/<filename>` and reply
+with `[Download file](relay-file:<uuid>/<filename>)`. Use a fresh UUID for each
+delivery and percent-encode spaces and other URL characters in the link.
+Relay uses `CODEX_RELAY_HOME` as its data directory when configured. On macOS,
+the default is `~/Library/Application Support/codex-relay`.
+
+Tap **Download** to view progress, then **Save…** to open the system share
+sheet and choose **Save to Files** or a compatible app. Relay downloads files
+up to 200 MB over the secure pairing and verifies them before sharing.
+Earlier cards remain downloadable while their source files are available.
+HTTPS file links open at their original source.
+
 ## Quick Start
 
 ### Requirements

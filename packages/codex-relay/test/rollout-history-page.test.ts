@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readRolloutHistoryPage } from "../src/rollout-history-page.js";
+import { readRolloutHistoryLine, readRolloutHistoryPage } from "../src/rollout-history-page.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -22,6 +22,18 @@ async function writeRollout(records: unknown[]) {
 }
 
 describe("readRolloutHistoryPage", () => {
+  it("reads a stored message at its byte offset and rejects offsets inside a line", async () => {
+    const metadata = { type: "session_meta", name: "历史" };
+    const message = {
+      type: "event_msg",
+      payload: { type: "agent_message", message: "[Build](./app.ipa)" },
+    };
+    const path = await writeRollout([metadata, message]);
+    const offset = Buffer.byteLength(JSON.stringify(metadata)) + 1;
+    await expect(readRolloutHistoryLine(path, offset)).resolves.toBe(JSON.stringify(message));
+    await expect(readRolloutHistoryLine(path, offset + 1)).resolves.toBeUndefined();
+  });
+
   it("returns complete recent turns and a stable cursor without reading the whole rollout", async () => {
     const records: unknown[] = [{ type: "session_meta", payload: { id: "thread-1" } }];
     for (let turn = 0; turn < 200; turn += 1) {

@@ -10,6 +10,26 @@ export type RolloutHistoryPage = {
 
 const CHUNK_SIZE = 64 * 1024;
 
+export async function readRolloutHistoryLine(path: string, offset: number) {
+  if (!Number.isSafeInteger(offset) || offset < 0) return undefined;
+  const file = await open(path, "r");
+  try {
+    const { size } = await file.stat();
+    if (offset >= size) return undefined;
+    if (offset > 0) {
+      const previous = Buffer.alloc(1);
+      const { bytesRead } = await file.read(previous, 0, 1, offset - 1);
+      if (bytesRead !== 1 || previous[0] !== 10) return undefined;
+    }
+    const buffer = Buffer.alloc(Math.min(size - offset, 2 * 1024 * 1024));
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, offset);
+    const newline = buffer.subarray(0, bytesRead).indexOf(10);
+    return newline < 0 ? undefined : buffer.toString("utf8", 0, newline);
+  } finally {
+    await file.close();
+  }
+}
+
 type Boundary =
   | { kind: "start" | "context"; turnId: string | null }
   | { kind: "user"; source: "event" | "response"; key: string }

@@ -6,6 +6,7 @@ import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-
 import { StyleSheet } from "react-native-unistyles";
 
 import { ASSISTANT_MARKDOWN_FLAVOR } from "@/components/chat/assistant-markdown-presentation";
+import { MessageFileCards } from "@/components/chat/MessageFileCards";
 import { ProtocolActivityCard } from "@/components/chat/ProtocolActivityCard";
 import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
@@ -88,6 +89,16 @@ export function BotMessageRow({
                 selectable
               />
             )
+          ) : null}
+          {message.sender === "bot" && message.status === "completed" ? (
+            <MessageFileCards
+              content={message.content}
+              message={{
+                source: "bot",
+                conversationId: message.conversationId,
+                messageId: message.id,
+              }}
+            />
           ) : null}
           {message.status === "failed" || message.status === "interrupted" ? (
             <Text style={styles.failedText}>

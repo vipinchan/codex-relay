@@ -31,7 +31,7 @@ export function BotDirectMessageRow({
     state:
       message.status === "running"
         ? "streaming"
-        : message.status === "failed"
+        : message.status === "failed" || message.status === "interrupted"
           ? "failed"
           : "completed",
     createdAt: message.createdAt,
@@ -47,7 +47,11 @@ export function BotDirectMessageRow({
         </View>
       ) : null}
       {message.activity || message.content || message.attachments?.length ? (
-        <MessageBubble message={chatMessage} onOpenMarkdownAttachment={onOpenMarkdownAttachment} />
+        <MessageBubble
+          fileSource="bot"
+          message={chatMessage}
+          onOpenMarkdownAttachment={onOpenMarkdownAttachment}
+        />
       ) : null}
       {message.status === "interrupted" ? (
         <Text style={styles.hint}>{botText("回复已停止", "Reply stopped")}</Text>

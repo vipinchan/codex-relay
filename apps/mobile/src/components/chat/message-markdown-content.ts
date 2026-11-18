@@ -1,11 +1,81 @@
+import {
+  messageFileLinkPath,
+  messageMarkdownLinks,
+  stagedMessageFilePath,
+} from "codex-relay/api-schema";
+
 export type MessageLinkAction =
   | { kind: "external"; url: string }
   | { kind: "ignore" }
   | { kind: "workspace-markdown"; path: string };
 
+const downloadableExtensions = new Set([
+  "7z",
+  "csv",
+  "doc",
+  "docx",
+  "dmg",
+  "epub",
+  "gz",
+  "ipa",
+  "jpeg",
+  "jpg",
+  "mov",
+  "mp3",
+  "mp4",
+  "pdf",
+  "png",
+  "ppt",
+  "pptx",
+  "tar",
+  "txt",
+  "webp",
+  "xls",
+  "xlsx",
+  "zip",
+]);
+
+export function externalFileLinks(content: string) {
+  const results: { url: string; name: string; extension: string }[] = [];
+  for (const url of messageMarkdownLinks(content)) {
+    if (!url.startsWith("https://")) continue;
+    try {
+      const parsed = new URL(url);
+      const name = decodeURIComponent(parsed.pathname.split("/").pop() ?? "");
+      const extension = name.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+      if (!extension || !downloadableExtensions.has(extension)) continue;
+      results.push({ url, name, extension: extension.toUpperCase() });
+    } catch {
+      continue;
+    }
+  }
+  return results;
+}
+
+export function localFileLinks(content: string) {
+  const files = new Map<string, { path: string; name: string; extension?: string }>();
+  for (const destination of messageMarkdownLinks(content)) {
+    const path = messageFileLinkPath(destination);
+    if (!path) continue;
+    const staged = stagedMessageFilePath(path);
+    if (path.startsWith("relay-file:") && !staged) continue;
+    if (!staged && (path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path))) continue;
+    const name = (staged ?? path).split("/").at(-1);
+    if (!name) continue;
+    const extension = name.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+    if (!staged && (!extension || !downloadableExtensions.has(extension))) continue;
+    files.set(path, { path, name, extension: extension?.toUpperCase() });
+  }
+  return [...files.values()];
+}
+
 export function messageLinkAction(url: string): MessageLinkAction {
   const normalized = unwrapMarkdownUrl(url);
-  if (!normalized || normalized.startsWith("https://codex.local/skills/")) {
+  if (
+    !normalized ||
+    normalized.startsWith("https://codex.local/skills/") ||
+    /^relay-file:/i.test(normalized)
+  ) {
     return { kind: "ignore" };
   }
 
