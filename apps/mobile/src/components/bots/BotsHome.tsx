@@ -8,8 +8,8 @@ import {
   Keyboard,
   Pressable,
   ScrollView,
-  TextInput,
   View,
+  type TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
@@ -21,6 +21,7 @@ import {
   SheetSelectedDot,
 } from "@/components/ui/bottom-sheet";
 import { Icon } from "@/components/ui/icon";
+import { SearchableListHeader } from "@/components/ui/searchable-list-header";
 import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
@@ -50,6 +51,7 @@ export function BotsHome() {
   const [serverUrl, setServerUrl] = useState(getCodexRelayCacheIdentity());
   const [paired, setPaired] = useState(hasCodexRelaySession());
   const [focused, setFocused] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [sheet, setSheet] = useState<{ mode: "create" | "group"; visible: boolean }>({
     mode: "create",
@@ -108,6 +110,14 @@ export function BotsHome() {
       .toLocaleLowerCase()
       .includes(term),
   );
+
+  function toggleSearch() {
+    setSearchOpen((open) => !open);
+    if (searchOpen) {
+      setSearch("");
+      Keyboard.dismiss();
+    }
+  }
 
   async function openDirectChat(botId: string) {
     if (!focused || openingRequest.current || serverUrl !== getCodexRelayCacheIdentity()) return;
@@ -195,36 +205,31 @@ export function BotsHome() {
       edges={["top", "left", "right"]}
       style={[styles.screen, { backgroundColor: theme.background }]}
     >
-      <View style={styles.header}>
-        <Text accessibilityRole="header" style={[styles.heading, { color: theme.text }]}>
-          BOT
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={botText("新建机器人或群聊", "Create a BOT or group")}
-          disabled={!!openingBotId}
-          onPress={() => {
-            if (openingRequest.current) return;
-            Keyboard.dismiss();
-            setSheet({ mode: "create", visible: true });
-          }}
-          style={[styles.addButton, { backgroundColor: theme.backgroundElement }]}
-        >
-          <Icon name="newThread" size={23} tintColor={theme.powerBlue} />
-        </Pressable>
-      </View>
-      <View style={[styles.searchBox, { backgroundColor: theme.backgroundElement }]}>
-        <Icon name="search" size={18} tintColor={theme.textSecondary} />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder={botText("搜索机器人或群聊", "Search BOTs and groups")}
-          placeholderTextColor={theme.textSecondary}
-          style={[styles.searchInput, { color: theme.text }]}
-          autoCapitalize="none"
-          clearButtonMode="while-editing"
-        />
-      </View>
+      <SearchableListHeader
+        title="BOT"
+        searchOpen={searchOpen}
+        query={search}
+        searchLabel={botText("搜索机器人或群聊", "Search BOTs and groups")}
+        closeLabel={botText("关闭搜索", "Close search")}
+        clearLabel={botText("清除搜索", "Clear search")}
+        onToggleSearch={toggleSearch}
+        onChangeQuery={setSearch}
+        rightAction={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={botText("新建机器人或群聊", "Create a BOT or group")}
+            disabled={!!openingBotId}
+            onPress={() => {
+              if (openingRequest.current) return;
+              Keyboard.dismiss();
+              setSheet({ mode: "create", visible: true });
+            }}
+            style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
+          >
+            <Icon name="newThread" size={23} tintColor={theme.powerBlue} />
+          </Pressable>
+        }
+      />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {!paired ? (
           <Text style={[styles.empty, { color: theme.textSecondary }]}>
@@ -467,34 +472,16 @@ function GroupField({
 
 const styles = StyleSheet.create((theme) => ({
   screen: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 22,
-    paddingTop: 13,
-    paddingBottom: 15,
-  },
-  heading: { fontFamily: Fonts.sansBold, fontSize: 30, fontWeight: "700" },
   addButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: theme.backgroundElement,
   },
-  searchBox: {
-    marginHorizontal: 20,
-    minHeight: 44,
-    paddingVertical: 8,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-  searchInput: { flex: 1, fontFamily: Fonts.sans, fontSize: 14, paddingVertical: 0 },
   content: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 28, gap: 6 },
+  pressed: { opacity: 0.64, transform: [{ scale: 0.96 }] },
   section: { paddingTop: 14, paddingBottom: 2 },
   sectionTitle: { fontFamily: Fonts.sansSemiBold, fontSize: 14 },
   groupAvatar: {

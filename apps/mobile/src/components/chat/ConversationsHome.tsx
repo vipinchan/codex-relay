@@ -9,14 +9,14 @@ import {
   Alert,
   Pressable,
   SectionList,
-  TextInput,
   View,
   type SectionListData,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
-import { Icon, type AppIconName } from "@/components/ui/icon";
+import { Icon } from "@/components/ui/icon";
+import { SearchableListHeader } from "@/components/ui/searchable-list-header";
 import {
   AppBottomSheet,
   AppBottomSheetTextInput,
@@ -264,7 +264,6 @@ export function ConversationsHome() {
   }
 
   function toggleSearch() {
-    hapticSelection();
     setSearchOpen((open) => !open);
     if (searchOpen) setSearchQuery("");
   }
@@ -338,48 +337,17 @@ export function ConversationsHome() {
       edges={["top", "left", "right"]}
       style={[styles.screen, { backgroundColor: theme.background }]}
     >
-      <View style={styles.topBar}>
-        <View style={styles.topBarSide}>
-          <RoundTopButton
-            icon={searchOpen ? "x" : "search"}
-            label={
-              searchOpen
-                ? zh
-                  ? "关闭搜索"
-                  : "Close search"
-                : zh
-                  ? "搜索会话"
-                  : "Search conversations"
-            }
-            onPress={toggleSearch}
-          />
-        </View>
-        <ThemedText style={styles.appTitle}>Codex</ThemedText>
-        <View style={[styles.topBarSide, styles.topBarSideEnd]}>
-          <GroupingButton mode={groupingMode} zh={zh} onPress={toggleGroupingMode} />
-        </View>
-      </View>
-
-      {searchOpen ? (
-        <View style={styles.searchWrap}>
-          <Icon name="search" size={18} tintColor={theme.textSecondary} />
-          <TextInput
-            autoFocus
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder={zh ? "搜索会话" : "Search conversations"}
-            placeholderTextColor={theme.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={styles.searchInput}
-          />
-          {searchQuery ? (
-            <Pressable hitSlop={8} onPress={() => setSearchQuery("")}>
-              <Icon name="x" size={17} tintColor={theme.textSecondary} />
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
+      <SearchableListHeader
+        title="Codex"
+        searchOpen={searchOpen}
+        query={searchQuery}
+        searchLabel={zh ? "搜索会话" : "Search conversations"}
+        closeLabel={zh ? "关闭搜索" : "Close search"}
+        clearLabel={zh ? "清除搜索" : "Clear search"}
+        onToggleSearch={toggleSearch}
+        onChangeQuery={setSearchQuery}
+        rightAction={<GroupingButton mode={groupingMode} zh={zh} onPress={toggleGroupingMode} />}
+      />
 
       <SectionList
         key={groupingMode}
@@ -644,29 +612,6 @@ function ThreadRow({
   );
 }
 
-function RoundTopButton({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: AppIconName;
-  label: string;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      hitSlop={8}
-      onPress={onPress}
-      style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}
-    >
-      <Icon name={icon} size={27} tintColor={theme.accent} strokeWidth={1.8} />
-    </Pressable>
-  );
-}
-
 function GroupingButton({
   mode,
   zh,
@@ -850,23 +795,6 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     justifyContent: "flex-end",
   },
-  topBar: {
-    height: 64,
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexDirection: "row",
-    paddingHorizontal: 22,
-  },
-  topBarSide: { width: 90, alignItems: "flex-start" },
-  topBarSideEnd: { alignItems: "flex-end" },
-  appTitle: { fontSize: 22, lineHeight: 27, fontWeight: "700", color: theme.text },
-  topButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   groupingButton: {
     height: 34,
     minWidth: 72,
@@ -886,18 +814,6 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: 16,
     fontWeight: "600",
   },
-  searchWrap: {
-    marginHorizontal: 18,
-    marginBottom: 8,
-    minHeight: 42,
-    borderRadius: 14,
-    paddingHorizontal: 13,
-    gap: 9,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: theme.backgroundElement,
-  },
-  searchInput: { flex: 1, color: theme.text, fontSize: 16, paddingVertical: 9 },
   listContent: { paddingBottom: 92 },
   paginationFooter: {
     alignItems: "center",
