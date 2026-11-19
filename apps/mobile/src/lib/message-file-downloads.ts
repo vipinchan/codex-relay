@@ -96,7 +96,7 @@ export async function downloadMessageFile(request: MessageFileRequest) {
     try {
       setState(key, { status: "downloading", size: metadata.size, written: 0 });
       await transferMessageFile(metadata, {
-        read: (offset) => download.read(metadata.downloadId, offset),
+        read: download.read,
         write: (bytes) => handle.writeBytes(bytes),
         progress: (written) =>
           setState(key, { status: "downloading", size: metadata.size, written }),

@@ -73,7 +73,8 @@ the default is `~/Library/Application Support/codex-relay`.
 
 Tap **Download** to view progress, then **Save…** to open the system share
 sheet and choose **Save to Files** or a compatible app. Relay downloads files
-up to 200 MB over the secure pairing and verifies them before sharing.
+up to 200 MB over the secure pairing, resumes interrupted chunks from the last
+received byte, and verifies the complete file before sharing.
 Earlier cards remain downloadable while their source files are available.
 HTTPS file links open at their original source.
 

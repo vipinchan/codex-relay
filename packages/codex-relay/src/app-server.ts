@@ -15,6 +15,7 @@ import {
   type CodexAppServerModeResolution,
 } from "./codex-binary.js";
 import { relayDebugLog } from "./debug-log.js";
+import { relayChatTurnInstructions } from "./relay-chat-instructions.js";
 
 type JsonRpcServerMessage = {
   id?: number | string;
@@ -479,7 +480,21 @@ export class CodexAppServerClient {
   }
 
   async startTurn(params: AppServerTurnStartParams) {
-    const response = await this.request<{ turn: AppServerTurn }>("turn/start", params);
+    const mode = params.collaborationMode;
+    // Only the normal Relay chat path sets the submitted user message ID.
+    const turnParams =
+      params.clientUserMessageId &&
+      mode?.mode === "default" &&
+      mode.settings.developer_instructions === null
+        ? {
+            ...params,
+            collaborationMode: {
+              ...mode,
+              settings: { ...mode.settings, developer_instructions: relayChatTurnInstructions() },
+            },
+          }
+        : params;
+    const response = await this.request<{ turn: AppServerTurn }>("turn/start", turnParams);
     this.rememberTurn(params.threadId, response.turn);
     return response.turn;
   }

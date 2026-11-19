@@ -9,7 +9,7 @@ vi.mock("../src/debug-log.js", () => ({
   relayDebugLog: vi.fn<(event: string, fields?: Record<string, unknown>) => void>(),
 }));
 
-import { CodexAppServerClient } from "../src/app-server.js";
+import { CodexAppServerClient, type AppServerTurnStartParams } from "../src/app-server.js";
 import { relayDebugLog } from "../src/debug-log.js";
 
 type JsonRpcRequest = {
@@ -30,6 +30,114 @@ describe("CodexAppServerClient shared socket mode", () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it("sends file delivery guidance on new and resumed Relay chat turns", async () => {
+    const codexHome = await mkdtemp(join(socketTempRoot, "relay-file-guidance-"));
+    const socketPath = join(codexHome, "app-server-control", "app-server-control.sock");
+    const server = await startSharedSocketServer(socketPath, (request) => {
+      if (request.method === "thread/start") return { thread: { id: "new-chat" } };
+      if (request.method === "thread/resume") return { thread: { id: request.params?.threadId } };
+      if (request.method === "turn/start")
+        return { turn: { id: "file-turn", status: "completed", items: [] } };
+      return {};
+    });
+    vi.stubEnv("CODEX_HOME", codexHome);
+    vi.stubEnv("CODEX_RELAY_APP_SERVER_MODE", "socket");
+    vi.stubEnv("CODEX_RELAY_HOME", join(codexHome, "Relay data"));
+    const client = new CodexAppServerClient({
+      startSharedServer: async () => {
+        throw new Error("Expected an existing shared app-server.");
+      },
+    });
+    const chatTurn = {
+      cwd: codexHome,
+      input: [{ type: "text", text: "Send me the PDF", text_elements: [] }],
+      model: "chat-model",
+      effort: "high",
+      serviceTier: "fast",
+      collaborationMode: {
+        mode: "default",
+        settings: {
+          developer_instructions: null,
+          model: "chat-model",
+          reasoning_effort: "high",
+        },
+      },
+    } satisfies Omit<AppServerTurnStartParams, "threadId">;
+
+    try {
+      await client.startThread({ threadSource: "codex-relay" });
+      await client.startTurn({
+        ...chatTurn,
+        threadId: "new-chat",
+        clientUserMessageId: "new-user",
+      });
+      await client.resumeThread({ excludeTurns: true, threadId: "old-chat" });
+      await client.startTurn({
+        ...chatTurn,
+        threadId: "old-chat",
+        clientUserMessageId: "old-user",
+      });
+      const turns = server.requests.filter((request) => request.method === "turn/start");
+
+      expect(turns.map((turn) => turn.params?.threadId)).toEqual(["new-chat", "old-chat"]);
+      for (const turn of turns) {
+        expect(turn.params).toMatchObject({
+          ...chatTurn,
+          collaborationMode: {
+            mode: "default",
+            settings: {
+              model: "chat-model",
+              reasoning_effort: "high",
+              developer_instructions: expect.stringContaining("[Download PDF](./report.pdf)"),
+            },
+          },
+        });
+        const mode = turn.params?.collaborationMode as NonNullable<
+          AppServerTurnStartParams["collaborationMode"]
+        >;
+        const guidance = mode.settings.developer_instructions;
+        expect(guidance).toContain("Collaboration Mode: Default");
+        expect(guidance).toContain(join(codexHome, "Relay data", "deliveries"));
+        expect(guidance).toContain("relay-file:");
+        expect(guidance).toContain("200 MB");
+        expect(guidance).toContain("secure pairing");
+      }
+
+      const otherTurns = [
+        { ...chatTurn, threadId: "bot-or-title" },
+        {
+          ...chatTurn,
+          threadId: "legacy",
+          clientUserMessageId: "legacy-user",
+          collaborationMode: null,
+        },
+        {
+          ...chatTurn,
+          threadId: "plan",
+          clientUserMessageId: "plan-user",
+          collaborationMode: { ...chatTurn.collaborationMode, mode: "plan" },
+        },
+        {
+          ...chatTurn,
+          threadId: "custom",
+          clientUserMessageId: "custom-user",
+          collaborationMode: {
+            ...chatTurn.collaborationMode,
+            settings: { ...chatTurn.collaborationMode.settings, developer_instructions: "Custom" },
+          },
+        },
+      ] satisfies AppServerTurnStartParams[];
+      for (const params of otherTurns) {
+        await client.startTurn(params);
+        expect(server.requests.at(-1)).toMatchObject({ method: "turn/start", params });
+      }
+    } finally {
+      client.close();
+      await server.close();
+      await rm(codexHome, { recursive: true, force: true });
+    }
   });
 
   it("preserves confirmed runtime settings from start and resume response envelopes", async () => {

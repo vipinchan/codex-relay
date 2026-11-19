@@ -7,15 +7,16 @@ import { transferMessageFile } from "./message-file-transfer";
 
 const bytes = Uint8Array.of(1, 2, 3, 4);
 const metadata = { size: bytes.length, sha256: bytesToHex(sha256(bytes)) };
+const chunk = (offset: number) => ({
+  offset,
+  nextOffset: offset + 2,
+  data: fromByteArray(bytes.slice(offset, offset + 2)),
+});
 
 it("reports bytes only after writing each chunk and verifies the complete file", async () => {
   const events: string[] = [];
   await transferMessageFile(metadata, {
-    read: async (offset) => ({
-      offset,
-      nextOffset: offset + 2,
-      data: fromByteArray(bytes.slice(offset, offset + 2)),
-    }),
+    read: async (offset) => chunk(offset),
     write: async (part) => {
       events.push(`write:${part[0]}`);
     },

@@ -54,6 +54,7 @@ import {
   ListSkillsResponseSchema,
   ListThreadsResponseSchema,
   ListWorkspaceFilesResponseSchema,
+  MessageFileChunkRequestSchema,
   MessageFileChunkResponseSchema,
   MessageFileResponseSchema,
   type MessageFileRequest,
@@ -1738,6 +1739,10 @@ function decryptForContext(payload: unknown, context: RequestContext) {
 export function createMessageFileDownload(signal: AbortSignal) {
   const context = captureRequestContext();
   const controller = new AbortController();
+  const requestTimeoutMs = 30_000;
+  let prepared:
+    | { request: MessageFileRequest; ticket: ReturnType<typeof MessageFileResponseSchema.parse> }
+    | undefined;
   const abort = () => controller.abort();
   signal.addEventListener("abort", abort);
   context.signal.addEventListener("abort", abort);
@@ -1749,8 +1754,6 @@ export function createMessageFileDownload(signal: AbortSignal) {
   };
   async function call(path: string, input?: object) {
     assertActive();
-    await ensureComputerConnection(context);
-    assertActive();
     const body = input ? encryptRequestPayload(input, context.credentialId) : undefined;
     if (body) EncryptedPayloadSchema.parse(JSON.parse(body));
     const signal = controller.signal;
@@ -1759,27 +1762,37 @@ export function createMessageFileDownload(signal: AbortSignal) {
       rejectOnAbort = () => reject(new Error("File download cancelled."));
       signal.addEventListener("abort", rejectOnAbort);
     });
-    let response: Response;
+    let result: { response: Response; rawPayload: unknown };
     try {
-      response = await Promise.race([
-        fetchForContext(
-          path,
-          {
-            method: input ? "POST" : "GET",
-            headers: requestHeaders(undefined, undefined, context),
-            body,
-            signal,
-            timeoutMs: 30_000,
-          },
-          context,
+      result = await Promise.race([
+        withTimeout(
+          (async () => {
+            const response = await fetchForContext(
+              path,
+              {
+                method: input ? "POST" : "GET",
+                headers: requestHeaders(undefined, undefined, context),
+                body,
+                signal,
+                timeoutMs: requestTimeoutMs,
+              },
+              context,
+            );
+            const rawPayload: unknown = await response.json();
+            return { response, rawPayload };
+          })(),
+          requestTimeoutMs,
         ),
         cancelled,
       ]);
+    } catch {
+      assertActive();
+      throw new CodexRelayApiError("File download connection interrupted.", 0, "download_network");
     } finally {
       signal.removeEventListener("abort", rejectOnAbort);
     }
-    const rawPayload = await response.json().catch(() => undefined);
     assertActive();
+    const { response, rawPayload } = result;
     const payload = decryptForContext(
       response.ok ? EncryptedPayloadSchema.parse(rawPayload) : rawPayload,
       context,
@@ -1794,10 +1807,40 @@ export function createMessageFileDownload(signal: AbortSignal) {
     return payload;
   }
 
+  async function callWithRetry(path: string, input?: object) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await call(path, input);
+      } catch (error) {
+        assertActive();
+        const transient =
+          error instanceof CodexRelayApiError &&
+          (error.code === "download_network" ||
+            [408, 429, 500, 502, 503, 504].includes(error.status) ||
+            (path === apiPaths.messageFileChunk &&
+              error.status === 400 &&
+              error.code === "invalid_request"));
+        if (!transient || attempt === 4) throw error;
+        await sleep(400 * 2 ** attempt);
+      }
+    }
+  }
+
+  async function prepareTicket(input: MessageFileRequest) {
+    return MessageFileResponseSchema.parse(await callWithRetry(apiPaths.messageFile, input));
+  }
+
+  async function readChunk(downloadId: string, offset: number) {
+    const input = MessageFileChunkRequestSchema.parse({ downloadId, offset });
+    return MessageFileChunkResponseSchema.parse(
+      await callWithRetry(apiPaths.messageFileChunk, input),
+    );
+  }
+
   return {
     assertActive,
     async prepare(input: MessageFileRequest) {
-      const status = StatusResponseSchema.parse(await call(apiPaths.status));
+      const status = StatusResponseSchema.parse(await callWithRetry(apiPaths.status));
       if (!status.messageFileDownloads) {
         throw new CodexRelayApiError(
           "Update the Relay on your computer to download this file.",
@@ -1805,12 +1848,29 @@ export function createMessageFileDownload(signal: AbortSignal) {
           "file_download_unsupported",
         );
       }
-      return MessageFileResponseSchema.parse(await call(apiPaths.messageFile, input));
+      const ticket = await prepareTicket(input);
+      prepared = { request: input, ticket };
+      return ticket;
     },
-    async read(downloadId: string, offset: number) {
-      return MessageFileChunkResponseSchema.parse(
-        await call(apiPaths.messageFileChunk, { downloadId, offset }),
-      );
+    async read(offset: number) {
+      if (!prepared) throw new Error("File download was not prepared.");
+      const { request, ticket } = prepared;
+      try {
+        return await readChunk(ticket.downloadId, offset);
+      } catch (error) {
+        if (!(error instanceof CodexRelayApiError) || error.code !== "download_expired")
+          throw error;
+        const renewed = await prepareTicket(request);
+        if (renewed.size !== ticket.size || renewed.sha256 !== ticket.sha256) {
+          throw new CodexRelayApiError(
+            "The original file changed during download.",
+            409,
+            "file_changed",
+          );
+        }
+        prepared = { request, ticket: renewed };
+        return readChunk(renewed.downloadId, offset);
+      }
     },
     close() {
       signal.removeEventListener("abort", abort);

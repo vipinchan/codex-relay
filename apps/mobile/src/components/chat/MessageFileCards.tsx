@@ -191,6 +191,8 @@ function downloadError(code?: string) {
       return text("原文件已变更", "Original file changed");
     case "file_too_large":
       return text("文件超过 200 MB", "File exceeds 200 MB");
+    case "download_network":
+      return text("连接中断，请重试", "Connection interrupted. Try again.");
     case "cache_missing":
       return text("本地缓存已清理", "Local copy was cleared");
     default:

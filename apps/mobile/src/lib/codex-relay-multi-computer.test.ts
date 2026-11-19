@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createSecurePairing,
   createServerIdentity,
+  decryptFromMobile,
   encryptForMobile,
 } from "../../../../packages/codex-relay/src/secure-transport";
 
@@ -77,6 +78,65 @@ async function paired(id: string, url: string, urls = [url]) {
 }
 
 describe("scoped relay requests", () => {
+  it("retries an interrupted file chunk at the same offset and renews a consumed ticket", async () => {
+    const { server } = await paired("a", "https://example.com");
+    const metadata = {
+      name: "build.ipa",
+      size: 4,
+      sha256: "a".repeat(64),
+    };
+    const ids = ["a41a970f-8f18-4df5-b28f-1332fc2ebc5c", "b41a970f-8f18-4df5-b28f-1332fc2ebc5c"];
+    let prepared = 0;
+    const counters: number[] = [];
+    const requests: number[] = [];
+    const reply = (body: object, responseStatus = 200) =>
+      Response.json(encryptForMobile(server, JSON.stringify(body)), { status: responseStatus });
+    mocks.fetch.mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith("/status")) return reply({ ...status, messageFileDownloads: true });
+      const envelope = JSON.parse(String(init?.body));
+      counters.push(envelope.counter);
+      if (path.endsWith("/chunk") && requests.length === 0) {
+        server.lastMobileCounter = envelope.counter;
+        requests.push(0);
+        return reply({ error: { code: "invalid_request", message: "Invalid file chunk" } }, 400);
+      }
+      if (path.endsWith("/chunk") && requests.length === 1) {
+        requests.push(0);
+        return reply({ offset: 0, nextOffset: 2, data: "AQI=" });
+      }
+      if (path.endsWith("/prepare")) return reply({ ...metadata, downloadId: ids[prepared++] });
+      const payload = JSON.parse(decryptFromMobile(server, envelope));
+      requests.push(payload.offset);
+      if (payload.offset === 0) return reply({ offset: 0, nextOffset: 2, data: "AQI=" });
+      if (requests.length === 1)
+        throw new Error("Connection dropped after the server sent the chunk");
+      if (payload.downloadId === ids[0]) {
+        return reply({ error: { code: "download_expired", message: "Start over" } }, 404);
+      }
+      return reply({ offset: 2, nextOffset: 4, data: "AwQ=" });
+    });
+    const api = await import("./codex-relay-api");
+    const request = {
+      source: "session" as const,
+      conversationId: "thread",
+      messageId: "reply",
+      path: "./build.ipa",
+    };
+    const download = api.createMessageFileDownload(new AbortController().signal);
+    try {
+      await download.prepare(request);
+      await expect(download.read(0)).resolves.toMatchObject({ nextOffset: 2 });
+      await expect(download.read(2)).resolves.toMatchObject({ nextOffset: 4 });
+      expect(counters).toHaveLength(6);
+      expect(requests).toEqual([0, 0, 2, 2]);
+      expect(prepared).toBe(2);
+      expect(new Set(counters).size).toBe(counters.length);
+    } finally {
+      download.close();
+    }
+  }, 15_000);
+
   it("rejects a late Mac A response without touching Mac B's crypto session", async () => {
     const a = await paired("a", "http://192.168.1.2:8787");
     let resolve!: (response: Response) => void;
