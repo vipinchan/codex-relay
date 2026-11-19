@@ -151,6 +151,7 @@ import {
   readFileSync,
   readSync,
   readdirSync,
+  realpathSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -1415,7 +1416,8 @@ export function createApp(options: AppOptions = {}) {
   app.get("/v1/bot-conversations/:conversationId/messages", async (c) => {
     const store = await botStore;
     const conversationId = c.req.param("conversationId");
-    if (!(await store.getConversation(conversationId)))
+    const conversation = await store.getConversation(conversationId);
+    if (!conversation)
       return secureJson(
         c,
         options.pairing,
@@ -1434,11 +1436,28 @@ export function createApp(options: AppOptions = {}) {
         400,
       );
     }
+    const page = await store.listMessages(conversationId, cursor);
+    const messages = page.messages.map((message) => {
+      if (message.sender !== "bot" || message.status !== "completed" || message.activity) {
+        return message;
+      }
+      const parts = agentMessageParts(
+        message.content,
+        conversation.workspacePath,
+        6 - (message.attachments?.length ?? 0),
+      );
+      if (!parts.details) return message;
+      return {
+        ...message,
+        content: parts.content,
+        attachments: [...(message.attachments ?? []), ...parts.details.attachments].slice(0, 6),
+      };
+    });
     return secureJson(
       c,
       options.pairing,
       secureSessionsByTokenHash,
-      ListBotMessagesResponseSchema.parse(await store.listMessages(conversationId, cursor)),
+      ListBotMessagesResponseSchema.parse({ ...page, messages }),
     );
   });
 
@@ -7489,7 +7508,7 @@ function appServerAgentMessageParts(item: Extract<AppServerThreadItem, { type: "
   return agentMessageParts(item.text);
 }
 
-function agentMessageParts(text: string) {
+function agentMessageParts(text: string, workspacePath?: string, limit = Infinity) {
   const imageReferences = localMarkdownImageReferences(text);
   if (imageReferences.length === 0) {
     return {
@@ -7500,9 +7519,31 @@ function agentMessageParts(text: string) {
 
   const materializedReferences = new Set<string>();
   const attachments = imageReferences.flatMap((reference) => {
+    if (materializedReferences.size >= limit) return [];
+    let destination = reference.destination;
+    if (workspacePath) {
+      try {
+        const workspace = realpathSync(workspacePath);
+        const candidate = destination.startsWith("file://")
+          ? fileURLToPath(destination)
+          : resolve(workspace, destination);
+        const canonical = realpathSync(candidate);
+        const relativePath = relative(workspace, canonical);
+        if (
+          !relativePath ||
+          isAbsolute(relativePath) ||
+          relativePath.split(/[\\/]/).some((part) => part.startsWith("."))
+        ) {
+          return [];
+        }
+        destination = canonical;
+      } catch {
+        return [];
+      }
+    }
     const name =
       reference.alt || basename(localImageFilePath(reference.destination) ?? reference.destination);
-    const details = localImageAttachmentDetails(reference.destination, name);
+    const details = localImageAttachmentDetails(destination, name);
     if (details.length > 0) {
       materializedReferences.add(reference.destination);
     }

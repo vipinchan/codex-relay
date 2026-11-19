@@ -3,7 +3,7 @@ import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { RotateCcw } from "lucide-react-native";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -31,6 +31,7 @@ export default function ImageViewerScreen() {
   const params = useLocalSearchParams<{ title?: string; uri?: string }>();
   const uri = normalizedParam(params.uri);
   const title = normalizedParam(params.title) ?? "Image";
+  const [failed, setFailed] = useState(false);
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -134,10 +135,11 @@ export default function ImageViewerScreen() {
       </View>
       <GestureDetector gesture={imageGesture}>
         <Animated.View style={styles.stage}>
-          {uri ? (
+          {uri && !failed ? (
             <Animated.View style={[styles.imageFrame, imageStyle]}>
               <Image
                 contentFit="contain"
+                onError={() => setFailed(true)}
                 source={{ uri }}
                 style={[styles.image, { height, width }]}
                 transition={120}

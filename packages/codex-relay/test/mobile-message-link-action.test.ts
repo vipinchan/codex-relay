@@ -34,8 +34,12 @@ describe("mobile message link action", () => {
     },
   );
 
-  it("does not hand non-Markdown file URLs to the platform URL opener", () => {
-    expect(messageLinkAction("file:///Users/vipinchan/image.png")).toEqual({ kind: "ignore" });
+  it("routes local image URLs through the workspace image viewer", () => {
+    expect(messageLinkAction("file:///Users/vipinchan/image.png")).toEqual({
+      kind: "workspace-image",
+      path: "/Users/vipinchan/image.png",
+    });
+    expect(messageLinkAction("file:///Users/vipinchan/archive.zip")).toEqual({ kind: "ignore" });
   });
 
   it("continues to ignore skill display links", () => {

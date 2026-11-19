@@ -36,6 +36,7 @@ import {
 } from "./assistant-markdown-presentation";
 import { messageLinkAction, messageMarkdownContentForRender } from "./message-markdown-content";
 import { MessageFileCards } from "./MessageFileCards";
+import { openExternalImage, openMessageImage } from "./open-message-image";
 import { PromptMarkdownText } from "./PromptMarkdownText";
 import { ProtocolActivityCard } from "./ProtocolActivityCard";
 import type { WorkspaceMarkdownPreviewTarget } from "./workspace-preview/markdown-target";
@@ -204,6 +205,20 @@ export const MessageBubble = memo(function MessageBubble({
         onOpenMarkdownAttachment({ path: action.path });
         return;
       }
+      if (action.kind === "workspace-image") {
+        if (!isAssistant || (message.state && message.state !== "completed")) return;
+        void openMessageImage({
+          source: fileSource,
+          conversationId: message.threadId,
+          messageId: message.id,
+          path: action.path,
+        });
+        return;
+      }
+      if (action.kind === "external-image") {
+        openExternalImage(action.url);
+        return;
+      }
       void Linking.openURL(action.url).catch((caught: unknown) => {
         Alert.alert(
           "Couldn't open link",
@@ -211,7 +226,14 @@ export const MessageBubble = memo(function MessageBubble({
         );
       });
     },
-    [onOpenMarkdownAttachment],
+    [
+      fileSource,
+      isAssistant,
+      message.id,
+      message.state,
+      message.threadId,
+      onOpenMarkdownAttachment,
+    ],
   );
 
   useEffect(() => {
@@ -524,7 +546,7 @@ function parseGoalPrompt(content: string) {
   return match?.[1]?.trim();
 }
 
-function messageImageUris(attachments: unknown) {
+export function messageImageUris(attachments: unknown) {
   const uris = attachmentImageUris(attachments);
   return [...new Set(uris)];
 }
@@ -733,7 +755,7 @@ async function downloadImageFileToCache(fileUri: string, uri: string, cacheDirec
   }
 }
 
-function MessageAttachments({
+export function MessageAttachments({
   imageUris,
   markdownAttachments,
   messageId,
@@ -837,6 +859,7 @@ function AttachmentImage({
 }) {
   const { push } = useRouter();
   const [localUri, setLocalUri] = useState(uri.startsWith("file:") ? uri : "");
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (uri.startsWith("file:")) {
@@ -875,11 +898,13 @@ function AttachmentImage({
         }
         if (!cancelled) {
           setLocalUri("");
+          setFailed(true);
         }
       }
     }
 
     setLocalUri("");
+    setFailed(false);
     void loadImage();
 
     return () => {
@@ -907,9 +932,19 @@ function AttachmentImage({
       style={styles.messageImageButton}
     >
       {localUri ? (
-        <Image contentFit="cover" source={{ uri: localUri }} style={style} />
+        <Image
+          contentFit="cover"
+          onError={() => {
+            setLocalUri("");
+            setFailed(true);
+          }}
+          source={{ uri: localUri }}
+          style={style}
+        />
       ) : (
-        <View style={style} />
+        <View style={[style, styles.messageImagePlaceholder]}>
+          {failed ? <ThemedText>Image failed to load</ThemedText> : null}
+        </View>
       )}
     </Pressable>
   );
@@ -1099,6 +1134,10 @@ function formatMessageTime(value: string) {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  messageImagePlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
   row: {
     marginVertical: 5,
   },

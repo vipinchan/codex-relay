@@ -20,6 +20,64 @@ const defaultModels = [
 ];
 
 describe("bot conversations", () => {
+  it.each(["direct", "group"] as const)(
+    "returns completed %s bot markdown images as attachments",
+    async (kind) => {
+      const directory = await mkdtemp(join(tmpdir(), "relay-bot-images-"));
+      const outside = await mkdtemp(join(tmpdir(), "relay-bot-outside-"));
+      try {
+        const databasePath = join(directory, "bots.db");
+        const imagePath = join(directory, "图片.png");
+        await writeFile(imagePath, Buffer.from("image"));
+        const store = await createBotStore(databasePath);
+        const bot = await store.createBot({
+          name: "A",
+          color: "#112233",
+          instructions: "",
+          runtimeMode: "default",
+        });
+        const conversation = await store.createConversation(
+          kind === "direct"
+            ? { kind, workspacePath: directory, botId: bot.id }
+            : {
+                kind,
+                name: "Team",
+                workspacePath: directory,
+                botIds: [bot.id],
+                defaultBotId: bot.id,
+              },
+        );
+        await store.appendMessage({
+          conversationId: conversation.id,
+          sender: "bot",
+          botId: bot.id,
+          content: `![图片](<${imagePath}>)`,
+        });
+        const outsidePath = join(outside, "private.png");
+        await writeFile(outsidePath, Buffer.from("private"));
+        await store.appendMessage({
+          conversationId: conversation.id,
+          sender: "bot",
+          botId: bot.id,
+          content: `![outside](<${outsidePath}>)`,
+        });
+        const app = createApp({ appServer: null, botStorePath: databasePath });
+        const response = await app.request(`/v1/bot-conversations/${conversation.id}/messages`);
+        const body = await response.json();
+        expect(response.status).toBe(200);
+        expect(body.messages[0].attachments).toBeUndefined();
+        expect(body.messages[1].attachments?.[0]).toMatchObject({
+          type: "image",
+          url: expect.stringMatching(/^\/v1\/attachments\/images\//),
+        });
+        expect(body.messages[1].content).toBe("");
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+        await rm(outside, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("imports terminal edits and rejects a stale phone form save", async () => {
     const directory = await mkdtemp(join(tmpdir(), "relay-bot-definition-api-"));
     try {

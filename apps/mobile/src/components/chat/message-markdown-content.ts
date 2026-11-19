@@ -6,7 +6,9 @@ import {
 
 export type MessageLinkAction =
   | { kind: "external"; url: string }
+  | { kind: "external-image"; url: string }
   | { kind: "ignore" }
+  | { kind: "workspace-image"; path: string }
   | { kind: "workspace-markdown"; path: string };
 
 const downloadableExtensions = new Set([
@@ -81,6 +83,24 @@ export function messageLinkAction(url: string): MessageLinkAction {
 
   if (isWorkspaceMarkdownLink(normalized)) {
     return { kind: "workspace-markdown", path: stripLocalLinkSuffix(normalized) };
+  }
+
+  if (isLocalPath(normalized)) {
+    const path = messageFileLinkPath(normalized);
+    if (path && /\.(?:gif|heic|heif|jpe?g|png|webp)$/i.test(path)) {
+      return { kind: "workspace-image", path };
+    }
+  }
+
+  if (/^https:\/\//i.test(normalized)) {
+    try {
+      const path = new URL(normalized).pathname;
+      if (/\.(?:gif|heic|heif|jpe?g|png|webp)$/i.test(path)) {
+        return { kind: "external-image", url: normalized };
+      }
+    } catch {
+      return { kind: "ignore" };
+    }
   }
 
   if (isLocalPath(normalized)) {

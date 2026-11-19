@@ -34,6 +34,20 @@ describe("external file links", () => {
 });
 
 describe("conversation file links", () => {
+  it("routes local image links to the image viewer", () => {
+    expect(messageLinkAction("/Users/example/图片.png")).toEqual({
+      kind: "workspace-image",
+      path: "/Users/example/图片.png",
+    });
+  });
+
+  it("routes HTTPS image links to the image viewer", () => {
+    expect(messageLinkAction("https://example.com/image.png?size=large")).toEqual({
+      kind: "external-image",
+      url: "https://example.com/image.png?size=large",
+    });
+  });
+
   it("extracts local artifacts and staged files without changing Markdown previews", () => {
     const staged = "relay-file:12345678-1234-4123-8123-123456789abc/Build%20notes.custom";
     const content = [

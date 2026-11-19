@@ -1,12 +1,15 @@
 import type { Bot, BotMessage } from "codex-relay/api-schema";
 import * as Clipboard from "expo-clipboard";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, View } from "react-native";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 import { StyleSheet } from "react-native-unistyles";
 
 import { ASSISTANT_MARKDOWN_FLAVOR } from "@/components/chat/assistant-markdown-presentation";
+import { MessageAttachments, messageImageUris } from "@/components/chat/MessageBubble";
 import { MessageFileCards } from "@/components/chat/MessageFileCards";
+import { messageLinkAction } from "@/components/chat/message-markdown-content";
+import { openExternalImage, openMessageImage } from "@/components/chat/open-message-image";
 import { ProtocolActivityCard } from "@/components/chat/ProtocolActivityCard";
 import { Text } from "@/components/ui/text";
 import { Fonts } from "@/constants/theme";
@@ -86,10 +89,30 @@ export function BotMessageRow({
                 markdown={message.content}
                 markdownStyle={markdownStyle}
                 maxFontSizeMultiplier={1}
+                onLinkPress={({ url }) => {
+                  const action = messageLinkAction(url);
+                  if (action.kind === "workspace-image" && message.status === "completed") {
+                    void openMessageImage({
+                      source: "bot",
+                      conversationId: message.conversationId,
+                      messageId: message.id,
+                      path: action.path,
+                    });
+                  } else if (action.kind === "external-image") {
+                    openExternalImage(action.url);
+                  } else if (action.kind === "external") {
+                    void Linking.openURL(action.url).catch(() => undefined);
+                  }
+                }}
                 selectable
               />
             )
           ) : null}
+          <MessageAttachments
+            imageUris={messageImageUris(message.attachments)}
+            markdownAttachments={[]}
+            messageId={message.id}
+          />
           {message.sender === "bot" && message.status === "completed" ? (
             <MessageFileCards
               content={message.content}
