@@ -1,16 +1,23 @@
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import type { MessageFileRequest } from "codex-relay/api-schema";
 import { Directory, File, Paths } from "expo-file-system";
 import { isAvailableAsync, shareAsync } from "expo-sharing";
 
 import { CodexRelayApiError, createMessageFileDownload } from "./codex-relay-api";
+import { getActiveComputer } from "./computer-profiles";
 import { onConnectionInvalidated } from "./connection-context";
-import { transferMessageFile } from "./message-file-transfer";
+import { MessageFileTransferError, transferMessageFile } from "./message-file-transfer";
 
 type DownloadState =
   | { status: "preparing" }
   | { status: "downloading" | "verifying"; size: number; written: number }
   | { status: "ready"; size: number; file: File; directory: Directory }
-  | { status: "error"; code?: string };
+  | {
+      status: "error";
+      code?: string;
+      savedBytes?: number;
+    };
 
 const states = new Map<string, DownloadState>();
 const listeners = new Set<() => void>();
@@ -56,7 +63,6 @@ function removeDirectory(directory?: Directory) {
 
 onConnectionInvalidated(() => {
   active?.controller.abort();
-  active = undefined;
   for (const state of states.values()) {
     if (state.status === "ready") removeDirectory(state.directory);
   }
@@ -71,14 +77,18 @@ export function cancelMessageFile(key: string) {
 export async function downloadMessageFile(request: MessageFileRequest) {
   if (active) return;
   const key = messageFileKey(request);
+  const credentialId = getActiveComputer()?.credentialId;
   const job = { key, controller: new AbortController() };
   const previous = states.get(key);
   if (previous?.status === "ready") removeDirectory(previous.directory);
   active = job;
   setState(key, { status: "preparing" });
-  const download = createMessageFileDownload(job.controller.signal);
+  let download: ReturnType<typeof createMessageFileDownload> | undefined;
   let temporary: Directory | undefined;
+  let readyDirectory: Directory | undefined;
+  let savedBytes = previous?.status === "error" ? previous.savedBytes : undefined;
   try {
+    download = createMessageFileDownload(job.controller.signal);
     const metadata = await download.prepare(request);
     download.assertActive();
     const root = new Directory(Paths.cache, "message-files");
@@ -87,19 +97,38 @@ export async function downloadMessageFile(request: MessageFileRequest) {
       initialized = true;
     }
     root.create({ idempotent: true, intermediates: true });
-    const directory = new Directory(root, metadata.downloadId);
+    const partialRoot = new Directory(Paths.cache, "message-file-partials");
+    partialRoot.create({ idempotent: true, intermediates: true });
+    const identity = JSON.stringify([
+      credentialId,
+      key,
+      metadata.name,
+      metadata.size,
+      metadata.sha256,
+    ]);
+    const directory = new Directory(partialRoot, bytesToHex(sha256(utf8ToBytes(identity))));
     temporary = directory;
-    directory.create();
+    for (const entry of partialRoot.list()) {
+      if (entry.name !== directory.name) entry.delete();
+    }
+    directory.create({ idempotent: true, intermediates: true });
     const file = new File(directory, metadata.name);
-    file.create();
+    if (file.exists && file.size > metadata.size) file.delete();
+    if (!file.exists) file.create();
     const handle = file.open();
     try {
-      setState(key, { status: "downloading", size: metadata.size, written: 0 });
+      const savedSize = file.size;
+      savedBytes = savedSize;
+      setState(key, { status: "downloading", size: metadata.size, written: savedSize });
       await transferMessageFile(metadata, {
         read: download.read,
+        savedSize,
+        readSaved: (length) => handle.readBytes(length),
         write: (bytes) => handle.writeBytes(bytes),
-        progress: (written) =>
-          setState(key, { status: "downloading", size: metadata.size, written }),
+        progress: (written) => {
+          savedBytes = written;
+          setState(key, { status: "downloading", size: metadata.size, written });
+        },
         verifying: () =>
           setState(key, { status: "verifying", size: metadata.size, written: metadata.size }),
         assertActive: download.assertActive,
@@ -108,29 +137,43 @@ export async function downloadMessageFile(request: MessageFileRequest) {
       handle.close();
     }
     download.assertActive();
-    if (file.size !== metadata.size) throw new Error("File size check failed.");
+    if (file.size !== metadata.size) throw new MessageFileTransferError("download_integrity");
+    readyDirectory = new Directory(root, metadata.downloadId);
+    readyDirectory.create();
+    file.move(new File(readyDirectory, metadata.name));
     const ready = [...states].filter(([, state]) => state.status === "ready");
     for (const [cachedKey, cachedState] of ready.slice(0, Math.max(0, ready.length - 2))) {
       if (cachedState.status === "ready") removeDirectory(cachedState.directory);
       states.delete(cachedKey);
     }
-    temporary = undefined;
-    setState(key, { status: "ready", file, directory, size: metadata.size });
+    setState(key, { status: "ready", file, directory: readyDirectory, size: metadata.size });
+    readyDirectory = undefined;
   } catch (error) {
     if (active === job) {
+      const canResume =
+        !job.controller.signal.aborted &&
+        error instanceof CodexRelayApiError &&
+        error.code !== "file_changed" &&
+        error.code !== "file_unavailable";
+      if (canResume && savedBytes) temporary = undefined;
       setState(
         key,
         job.controller.signal.aborted
           ? undefined
           : {
               status: "error",
-              code: error instanceof CodexRelayApiError ? error.code : undefined,
+              code:
+                error instanceof CodexRelayApiError || error instanceof MessageFileTransferError
+                  ? error.code
+                  : "download_storage",
+              savedBytes: canResume ? savedBytes : undefined,
             },
       );
     }
   } finally {
-    download.close();
+    download?.close();
     removeDirectory(temporary);
+    removeDirectory(readyDirectory);
     if (active === job) {
       active = undefined;
       publish();

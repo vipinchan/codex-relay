@@ -46,3 +46,22 @@ it("rejects corruption and refuses to write a response received after cancellati
   await expect(transferMessageFile(metadata, transfer)).rejects.toThrow("Cancelled");
   expect(write).not.toHaveBeenCalled();
 });
+
+it("resumes from saved bytes and verifies the entire file", async () => {
+  const read = vi.fn<(offset: number) => Promise<ReturnType<typeof chunk>>>(async (offset) =>
+    chunk(offset),
+  );
+  const write = vi.fn<(bytes: Uint8Array) => void>();
+  await transferMessageFile(metadata, {
+    read,
+    write,
+    progress: vi.fn<(written: number) => void>(),
+    verifying: vi.fn<() => void>(),
+    assertActive: () => undefined,
+    savedSize: 2,
+    readSaved: () => bytes.slice(0, 2),
+  });
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(read).toHaveBeenCalledWith(2);
+  expect(write).toHaveBeenCalledWith(bytes.slice(2));
+});

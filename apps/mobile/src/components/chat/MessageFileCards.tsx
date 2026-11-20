@@ -81,7 +81,12 @@ function LocalFileCard({
   if (state?.status === "verifying") detail = text("正在校验文件…", "Verifying file…");
   if (state?.status === "ready")
     detail = `${formatBytes(state.size)} · ${text("已校验", "Verified")}`;
-  if (state?.status === "error") detail = downloadError(state.code);
+  if (state?.status === "error") {
+    detail = downloadError(state.code);
+    if (state.savedBytes) {
+      detail += ` · ${formatBytes(state.savedBytes)} ${text("已保留", "kept")}`;
+    }
+  }
   const action = working
     ? text("取消", "Cancel")
     : status === "ready"
@@ -193,6 +198,15 @@ function downloadError(code?: string) {
       return text("文件超过 200 MB", "File exceeds 200 MB");
     case "download_network":
       return text("连接中断，请重试", "Connection interrupted. Try again.");
+    case "download_response":
+      return text("加密响应校验失败", "Encrypted response verification failed");
+    case "download_chunk":
+    case "invalid_request":
+      return text("文件分片传输失败", "File chunk transfer failed");
+    case "download_integrity":
+      return text("文件完整性校验失败", "File integrity check failed");
+    case "download_storage":
+      return text("无法读写本地缓存", "Couldn't access the local download cache");
     case "cache_missing":
       return text("本地缓存已清理", "Local copy was cleared");
     default:

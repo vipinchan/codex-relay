@@ -102,6 +102,14 @@ describe("scoped relay requests", () => {
         return reply({ error: { code: "invalid_request", message: "Invalid file chunk" } }, 400);
       }
       if (path.endsWith("/chunk") && requests.length === 1) {
+        const valid = encryptForMobile(
+          server,
+          JSON.stringify({ offset: 0, nextOffset: 2, data: "AQI=" }),
+        );
+        requests.push(0);
+        return Response.json({ ...valid, ciphertext: "AAAA" });
+      }
+      if (path.endsWith("/chunk") && requests.length === 2) {
         requests.push(0);
         return reply({ offset: 0, nextOffset: 2, data: "AQI=" });
       }
@@ -109,8 +117,6 @@ describe("scoped relay requests", () => {
       const payload = JSON.parse(decryptFromMobile(server, envelope));
       requests.push(payload.offset);
       if (payload.offset === 0) return reply({ offset: 0, nextOffset: 2, data: "AQI=" });
-      if (requests.length === 1)
-        throw new Error("Connection dropped after the server sent the chunk");
       if (payload.downloadId === ids[0]) {
         return reply({ error: { code: "download_expired", message: "Start over" } }, 404);
       }
@@ -128,8 +134,8 @@ describe("scoped relay requests", () => {
       await download.prepare(request);
       await expect(download.read(0)).resolves.toMatchObject({ nextOffset: 2 });
       await expect(download.read(2)).resolves.toMatchObject({ nextOffset: 4 });
-      expect(counters).toHaveLength(6);
-      expect(requests).toEqual([0, 0, 2, 2]);
+      expect(counters).toHaveLength(7);
+      expect(requests).toEqual([0, 0, 0, 2, 2]);
       expect(prepared).toBe(2);
       expect(new Set(counters).size).toBe(counters.length);
     } finally {

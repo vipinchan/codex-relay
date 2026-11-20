@@ -8,7 +8,15 @@ type FileTransfer = {
   progress: (written: number) => void;
   verifying: () => void;
   assertActive: () => void;
+  savedSize?: number;
+  readSaved?: (length: number) => Uint8Array;
 };
+
+export class MessageFileTransferError extends Error {
+  constructor(readonly code: "download_integrity" | "download_chunk") {
+    super(code === "download_integrity" ? "File integrity check failed." : "Invalid file chunk.");
+  }
+}
 
 export async function transferMessageFile(
   metadata: { size: number; sha256: string },
@@ -16,6 +24,18 @@ export async function transferMessageFile(
 ) {
   const hash = sha256.create();
   let written = 0;
+  const savedSize = transfer.savedSize ?? 0;
+  if (savedSize < 0 || savedSize > metadata.size || (savedSize > 0 && !transfer.readSaved)) {
+    throw new Error("Invalid saved file.");
+  }
+  while (written < savedSize) {
+    transfer.assertActive();
+    const bytes = transfer.readSaved!(Math.min(256 * 1024, savedSize - written));
+    if (!bytes.length || bytes.length > savedSize - written) throw new Error("Invalid saved file.");
+    hash.update(bytes);
+    written += bytes.length;
+  }
+  if (written) transfer.progress(written);
   while (written < metadata.size) {
     transfer.assertActive();
     const chunk = await transfer.read(written);
@@ -27,7 +47,7 @@ export async function transferMessageFile(
       chunk.nextOffset !== written + bytes.length ||
       chunk.nextOffset > metadata.size
     ) {
-      throw new Error("Invalid file chunk.");
+      throw new MessageFileTransferError("download_chunk");
     }
     await transfer.write(bytes);
     transfer.assertActive();
@@ -38,6 +58,6 @@ export async function transferMessageFile(
   transfer.assertActive();
   transfer.verifying();
   if (bytesToHex(hash.digest()) !== metadata.sha256) {
-    throw new Error("File integrity check failed.");
+    throw new MessageFileTransferError("download_integrity");
   }
 }

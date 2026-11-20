@@ -1793,10 +1793,20 @@ export function createMessageFileDownload(signal: AbortSignal) {
     }
     assertActive();
     const { response, rawPayload } = result;
-    const payload = decryptForContext(
-      response.ok ? EncryptedPayloadSchema.parse(rawPayload) : rawPayload,
-      context,
-    );
+    let payload: unknown;
+    try {
+      payload = decryptForContext(
+        response.ok ? EncryptedPayloadSchema.parse(rawPayload) : rawPayload,
+        context,
+      );
+    } catch {
+      assertActive();
+      throw new CodexRelayApiError(
+        "Could not verify the encrypted file response.",
+        response.status,
+        "download_response",
+      );
+    }
     if (!response.ok) {
       throw new CodexRelayApiError(
         errorMessage(payload, "File download failed."),
@@ -1816,6 +1826,7 @@ export function createMessageFileDownload(signal: AbortSignal) {
         const transient =
           error instanceof CodexRelayApiError &&
           (error.code === "download_network" ||
+            error.code === "download_response" ||
             [408, 429, 500, 502, 503, 504].includes(error.status) ||
             (path === apiPaths.messageFileChunk &&
               error.status === 400 &&
