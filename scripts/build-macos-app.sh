@@ -31,7 +31,7 @@ fi
 for tool in node xcodebuild pod rsync patch codesign; do
   command -v "$tool" >/dev/null || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
-if [[ ! -d "$ROOT_DIR/apps/mobile/node_modules/expo" ]]; then
+if ! (cd "$ROOT_DIR/apps/mobile" && node -e 'require.resolve("expo/package.json")' >/dev/null 2>&1); then
   echo "Install workspace dependencies with the pnpm version in package.json first." >&2
   exit 1
 fi
@@ -49,7 +49,8 @@ export NODE_ENV=production
 
 node "$ROOT_DIR/scripts/macos/prepare-workspace.mjs" "$ROOT_DIR" "$WORKSPACE_DIR"
 cd "$MOBILE_DIR"
-node "$ROOT_DIR/apps/mobile/node_modules/expo/bin/cli" prebuild --platform ios --no-install
+EXPO_CLI="$(node -p 'require.resolve("expo/bin/cli")')"
+node "$EXPO_CLI" prebuild --platform ios --no-install
 node "$ROOT_DIR/scripts/macos/validate-project.mjs" "$MOBILE_DIR/ios"
 if [[ "$PREPARE_ONLY" == 1 ]]; then
   echo "Catalyst project ready: $MOBILE_DIR/ios"

@@ -1,5 +1,6 @@
 import { cp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 
 const [root, workspace] = process.argv.slice(2).map((value) => path.resolve(value));
@@ -34,28 +35,32 @@ for (const name of ["node_modules", "packages"]) {
 
 const modules = path.join(workspace, "apps/mobile/node_modules");
 await mkdir(modules, { recursive: true });
+const mobileRequire = createRequire(path.join(root, "apps/mobile/package.json"));
 for (const name of await readdir(path.join(root, "apps/mobile/node_modules"))) {
+  if (name.startsWith(".")) continue;
   const destination = path.join(modules, name);
   await rm(destination, { recursive: true, force: true });
-  const source = path.join(root, "apps/mobile/node_modules", name);
-  if (name === "expo-camera") {
-    const camera = JSON.parse(await readFile(path.join(source, "package.json"), "utf8"));
-    if (camera.version !== "57.0.4") {
-      throw new Error(`Review the Catalyst camera patch for expo-camera ${camera.version}`);
-    }
-    await cp(source, destination, { recursive: true, dereference: true });
-    execFileSync(
-      "patch",
-      ["--batch", "-p1", "-i", path.join(root, "scripts/macos/expo-camera.patch")],
-      {
-        cwd: destination,
-        stdio: "inherit",
-      },
-    );
-  } else {
-    await symlink(source, destination);
-  }
+  await symlink(path.join(root, "apps/mobile/node_modules", name), destination);
 }
+
+// pnpm may hoist this package to the workspace root; keep the patched copy local
+// to the Mac build so the installed mobile dependency remains untouched.
+const cameraSource = path.dirname(mobileRequire.resolve("expo-camera/package.json"));
+const camera = JSON.parse(await readFile(path.join(cameraSource, "package.json"), "utf8"));
+if (camera.version !== "57.0.4") {
+  throw new Error(`Review the Catalyst camera patch for expo-camera ${camera.version}`);
+}
+const cameraDestination = path.join(modules, "expo-camera");
+await rm(cameraDestination, { recursive: true, force: true });
+await cp(cameraSource, cameraDestination, { recursive: true, dereference: true });
+execFileSync(
+  "patch",
+  ["--batch", "-p1", "-i", path.join(root, "scripts/macos/expo-camera.patch")],
+  {
+    cwd: cameraDestination,
+    stdio: "inherit",
+  },
+);
 
 // This package copy belongs only to the Mac build; installed mobile dependencies stay untouched.
 const packagePath = path.join(workspace, "apps/mobile/package.json");
