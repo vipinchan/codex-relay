@@ -2943,6 +2943,9 @@ function sameSkillSelection(left: AgentSkill[], right: AgentSkill[]) {
 const styles = StyleSheet.create((theme) => ({
   composerStack: {
     position: "relative",
+    width: "100%",
+    maxWidth: 860,
+    alignSelf: "center",
   },
   container: {
     borderColor: theme.inputBorder,

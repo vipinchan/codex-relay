@@ -199,11 +199,12 @@ const MIN_PREVIEW_PANE_WIDTH = 360;
 const EMPTY_SKILLS: AgentSkill[] = [];
 const EMPTY_THREADS: ThreadSummary[] = [];
 
-type ChatScreenProps = {
+export type ChatScreenProps = {
+  embedded?: boolean;
   initialPairingUrl?: string | null;
 };
 
-export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
+export function ChatScreen({ embedded = false, initialPairingUrl }: ChatScreenProps = {}) {
   const theme = useTheme();
   const screenConnection = useMemo(captureConnection, []);
   const {
@@ -438,8 +439,10 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
   const runtimePreferencesCoordinator = useMemo(createRuntimePreferencesCoordinator, []);
   const [copyToast, setCopyToast] = useState<{ id: number } | undefined>(undefined);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const usesExpandedSidebar = width >= EXPANDED_DRAWER_BREAKPOINT;
-  const usesWideLayout = width >= THREE_PANE_LAYOUT_BREAKPOINT;
+  const usesExpandedSidebar = width >= EXPANDED_DRAWER_BREAKPOINT || embedded;
+  const usesWideLayout = embedded
+    ? wideLayoutWidth >= 760 || width >= THREE_PANE_LAYOUT_BREAKPOINT
+    : width >= THREE_PANE_LAYOUT_BREAKPOINT;
   const drawerNavigation = useNavigation<{
     openDrawer?: () => void;
   }>();
@@ -2585,13 +2588,19 @@ export function ChatScreen({ initialPairingUrl }: ChatScreenProps = {}) {
       olderMessagesError={activeOlderMessagesRequest?.error}
       isRunning={isRunning}
       leadingAction={{
-        icon: usesExpandedSidebar ? (isSidebarVisible ? "sidebarHide" : "sidebarShow") : "menu",
-        label: usesExpandedSidebar
-          ? isSidebarVisible
-            ? "Hide threads"
-            : "Show threads"
-          : "Open threads",
-        onPress: usesExpandedSidebar ? toggleThreadSidebar : openThreadDrawer,
+        icon:
+          usesExpandedSidebar || embedded
+            ? isSidebarVisible
+              ? "sidebarHide"
+              : "sidebarShow"
+            : "menu",
+        label:
+          usesExpandedSidebar || embedded
+            ? isSidebarVisible
+              ? "Hide threads"
+              : "Show threads"
+            : "Open threads",
+        onPress: usesExpandedSidebar || embedded ? toggleThreadSidebar : openThreadDrawer,
       }}
       messages={messages}
       onAttachImage={attachImagesFromGallery}

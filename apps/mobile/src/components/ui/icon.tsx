@@ -29,6 +29,7 @@ import {
   LogOut,
   Menu,
   Mic,
+  MoreHorizontal,
   PanelRightClose,
   PanelRightOpen,
   PanelLeftClose,
@@ -78,6 +79,7 @@ export type AppIconName =
   | "goal"
   | "web"
   | "menu"
+  | "moreHorizontal"
   | "model"
   | "newChat"
   | "newThread"
@@ -137,6 +139,7 @@ const iconComponents: Record<AppIconName, LucideComponent> = {
   goal: CircleCheck,
   web: Globe,
   menu: Menu,
+  moreHorizontal: MoreHorizontal,
   model: Sparkles,
   newChat: SquarePen,
   newThread: Plus,

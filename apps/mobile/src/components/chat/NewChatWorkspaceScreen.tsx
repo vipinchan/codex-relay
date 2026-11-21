@@ -35,7 +35,11 @@ type WorkspaceRow =
   | { id: string; kind: "parent"; path: string }
   | { id: string; kind: "directory"; name: string; path: string };
 
-export function NewChatWorkspaceScreen() {
+export type NewChatWorkspaceScreenProps = {
+  embedded?: boolean;
+};
+
+export function NewChatWorkspaceScreen({ embedded = false }: NewChatWorkspaceScreenProps = {}) {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const [browser, setBrowser] = useState<WorkspaceBrowser | undefined>(undefined);
@@ -163,6 +167,7 @@ export function NewChatWorkspaceScreen() {
 
   function close() {
     hapticSelection();
+    if (embedded) return;
     router.back();
   }
 
@@ -184,7 +189,7 @@ export function NewChatWorkspaceScreen() {
 
   return (
     <SafeAreaView
-      edges={["top", "left", "right", "bottom"]}
+      edges={embedded ? ["top"] : ["top", "left", "right", "bottom"]}
       style={[styles.screen, { backgroundColor: theme.background }]}
     >
       <KeyboardAvoidingView
@@ -192,14 +197,18 @@ export function NewChatWorkspaceScreen() {
         style={styles.content}
       >
         <View style={styles.header}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Cancel new chat"
-            onPress={close}
-            style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
-          >
-            <ThemedText style={styles.cancelText}>Cancel</ThemedText>
-          </Pressable>
+          {!embedded ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel new chat"
+              onPress={close}
+              style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
+            >
+              <ThemedText style={styles.cancelText}>Cancel</ThemedText>
+            </Pressable>
+          ) : (
+            <View style={styles.headerButton} />
+          )}
           <View style={styles.headerCopy}>
             <ThemedText style={styles.title}>New Chat</ThemedText>
             <ThemedText numberOfLines={1} style={styles.subtitle}>

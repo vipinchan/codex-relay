@@ -9,8 +9,11 @@ const podfile = await readFile(path.join(ios, "Podfile"), "utf8");
 if (
   delegate.includes("HotUpdater.bundleURL()") ||
   !delegate.includes('Bundle.main.url(forResource: "main", withExtension: "jsbundle")') ||
+  !delegate.includes("CGSize(width: 1200, height: 720)") ||
   !project.includes("SUPPORTS_MACCATALYST = YES") ||
   !podfile.includes(":mac_catalyst_enabled => true")
 ) {
-  throw new Error("Generated project is missing Catalyst support or the embedded JS entry point");
+  throw new Error(
+    "Generated project is missing Catalyst support, window size restriction, or the embedded JS entry point",
+  );
 }

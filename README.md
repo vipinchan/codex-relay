@@ -221,8 +221,12 @@ for versioning, tag commands, and OTA boundaries.
 ## Local Mac App
 
 On an Apple Silicon Mac, the mobile UI can also be built as a standalone
-Mac Catalyst app with its JavaScript bundle embedded. It does not need Metro at
-runtime; it connects to the same local relay and keeps its own pairing.
+Mac Catalyst app with its JavaScript bundle embedded. It adapts to large screens
+with a dedicated 3-column desktop workspace (a 56px left navigation rail, a resizable
+thread sidebar, centered chat timeline, and an inline workspace preview pane) and
+a minimum window size of 1200×720, while preserving the existing touch adaptations
+on iPad and iPhone. It does not need Metro at runtime; it connects to the same local
+relay and keeps its own pairing.
 
 ```sh
 pnpm install --frozen-lockfile

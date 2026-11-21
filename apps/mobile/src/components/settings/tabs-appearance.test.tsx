@@ -12,6 +12,14 @@ const ui = vi.hoisted(() => ({
 vi.mock("@/hooks/use-theme", () => ({
   useTheme: () => (ui.dark ? appearanceDark : appearanceLight),
 }));
+vi.mock("react-native", () => ({
+  View: ({ children }: { children: React.ReactNode }) => children,
+  useWindowDimensions: () => ({ width: 375, height: 812 }),
+  Platform: {
+    OS: "ios",
+    select: (values: Record<string, unknown>) => values.ios ?? values.default,
+  },
+}));
 vi.mock("lucide-react-native", () => ({
   Bot: () => null,
   MessageSquare: () => null,
@@ -27,6 +35,8 @@ vi.mock("react-native-unistyles", async () => {
   };
 });
 vi.mock("expo-router", () => ({
+  useRouter: () => ({ navigate: vi.fn<(to: string) => void>() }),
+  usePathname: () => "/(drawer)",
   Tabs: Object.assign(
     ({ screenOptions }: { screenOptions: { tabBarStyle: typeof ui.tabBarStyle } }) => {
       ui.tabBarStyle = screenOptions.tabBarStyle;

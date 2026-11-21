@@ -66,6 +66,27 @@ module.exports = function withMacCatalyst(config) {
       "return HotUpdater.bundleURL()",
       'return Bundle.main.url(forResource: "main", withExtension: "jsbundle")',
     );
+    const windowRestriction = [
+      "#if targetEnvironment(macCatalyst)",
+      "    NotificationCenter.default.addObserver(",
+      "      forName: UIApplication.didBecomeActiveNotification,",
+      "      object: nil,",
+      "      queue: .main",
+      "    ) { _ in",
+      "      for scene in UIApplication.shared.connectedScenes {",
+      "        if let windowScene = scene as? UIWindowScene {",
+      "          windowScene.sizeRestrictions?.minimumSize = CGSize(width: 1200, height: 720)",
+      "        }",
+      "      }",
+      "    }",
+      "#endif",
+      "    return super.application(application, didFinishLaunchingWithOptions: launchOptions)",
+    ].join("\n");
+    mod.modResults.contents = replaceRequired(
+      mod.modResults.contents,
+      "    return super.application(application, didFinishLaunchingWithOptions: launchOptions)",
+      windowRestriction,
+    );
     return mod;
   });
 };

@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { ThemedText } from "@/components/themed-text";
+import { HoverablePressable } from "@/components/ui/hoverable-pressable";
 import { useTheme } from "@/hooks/use-theme";
 import { hasCodexRelaySession } from "@/lib/codex-relay-api";
 import { hapticLightImpact, hapticSelection, hapticSuccess } from "@/lib/haptics";
@@ -56,7 +57,19 @@ type GroupingMode = ConversationsGroupingMode;
 type ThreadSection = { key: string; title: string; data: ThreadSummary[] };
 type ThreadGlyph = "agentAtom" | "branch" | "file" | "folder" | "terminal";
 
-export function ConversationsHome() {
+export type ConversationsHomeProps = {
+  variant?: "screen" | "sidebar";
+  selectedThreadId?: string;
+  onSelectThread?: (thread: ThreadSummary) => void;
+  onCreateNewChat?: () => void;
+};
+
+export function ConversationsHome({
+  variant = "screen",
+  selectedThreadId,
+  onSelectThread,
+  onCreateNewChat,
+}: ConversationsHomeProps = {}) {
   const {
     archiveThreadServerState,
     fetchOlderThreadsState,
@@ -254,13 +267,21 @@ export function ConversationsHome() {
     hapticSelection();
     setActiveThread(thread.id);
     requestThreadStreamReconnect(thread.id);
-    router.push("/chat");
+    if (onSelectThread) {
+      onSelectThread(thread);
+    } else {
+      router.push("/chat");
+    }
   }
 
   function createNewChat() {
     hapticSelection();
     setActiveThread(undefined);
-    router.push("/chat");
+    if (onCreateNewChat) {
+      onCreateNewChat();
+    } else {
+      router.push("/chat");
+    }
   }
 
   function toggleSearch() {
@@ -332,11 +353,17 @@ export function ConversationsHome() {
     </View>
   ) : null;
 
+  const RootContainer = variant === "sidebar" ? View : SafeAreaView;
+  const rootContainerProps =
+    variant === "sidebar"
+      ? { style: [styles.screen, styles.sidebarContainer, { backgroundColor: theme.background }] }
+      : {
+          edges: ["top", "left", "right"] as const,
+          style: [styles.screen, { backgroundColor: theme.background }],
+        };
+
   return (
-    <SafeAreaView
-      edges={["top", "left", "right"]}
-      style={[styles.screen, { backgroundColor: theme.background }]}
-    >
+    <RootContainer {...rootContainerProps}>
       <SearchableListHeader
         title="Codex"
         searchOpen={searchOpen}
@@ -346,7 +373,21 @@ export function ConversationsHome() {
         clearLabel={zh ? "清除搜索" : "Clear search"}
         onToggleSearch={toggleSearch}
         onChangeQuery={setSearchQuery}
-        rightAction={<GroupingButton mode={groupingMode} zh={zh} onPress={toggleGroupingMode} />}
+        rightAction={
+          <View style={styles.rightActionContainer}>
+            {variant === "sidebar" ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={zh ? "新建会话" : "New chat"}
+                onPress={createNewChat}
+                style={({ pressed }) => [styles.sidebarNewChatButton, pressed && styles.pressed]}
+              >
+                <Icon name="newChat" size={18} tintColor={theme.accent} />
+              </Pressable>
+            ) : null}
+            <GroupingButton mode={groupingMode} zh={zh} onPress={toggleGroupingMode} />
+          </View>
+        }
       />
 
       <SectionList
@@ -405,9 +446,12 @@ export function ConversationsHome() {
           <ThreadRow
             thread={item}
             pinned={pinnedThreadIds.includes(item.id)}
+            selected={item.id === selectedThreadId}
+            variant={variant}
             zh={zh}
             onPress={() => openThread(item)}
             onLongPress={() => openThreadActions(item)}
+            onOpenActions={() => openThreadActions(item)}
           />
         )}
         ListEmptyComponent={
@@ -430,16 +474,18 @@ export function ConversationsHome() {
         }
       />
 
-      <View pointerEvents="box-none" style={styles.fabDock}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="New chat"
-          onPress={createNewChat}
-          style={({ pressed }) => [styles.newFab, pressed && styles.pressed]}
-        >
-          <Icon name="newChat" size={26} tintColor={theme.onAccent} />
-        </Pressable>
-      </View>
+      {variant !== "sidebar" ? (
+        <View pointerEvents="box-none" style={styles.fabDock}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="New chat"
+            onPress={createNewChat}
+            style={({ pressed }) => [styles.newFab, pressed && styles.pressed]}
+          >
+            <Icon name="newChat" size={26} tintColor={theme.onAccent} />
+          </Pressable>
+        </View>
+      ) : null}
       <AppBottomSheet
         onBack={isRenamingThread ? () => setIsRenamingThread(false) : undefined}
         onClose={closeThreadActions}
@@ -562,53 +608,104 @@ export function ConversationsHome() {
           </>
         ) : null}
       </AppBottomSheet>
-    </SafeAreaView>
+    </RootContainer>
   );
 }
 
 function ThreadRow({
   thread,
   pinned,
+  selected,
+  variant,
   zh,
   onPress,
   onLongPress,
+  onOpenActions,
 }: {
   thread: ThreadSummary;
   pinned: boolean;
+  selected?: boolean;
+  variant?: "screen" | "sidebar";
   zh: boolean;
   onPress: () => void;
   onLongPress: () => void;
+  onOpenActions?: () => void;
 }) {
   const theme = useTheme();
   const preview =
     thread.lastMessagePreview || thread.lastResult || thread.lastPrompt || thread.cwd || "";
   const visual = threadVisual(thread, theme);
+  const isSidebar = variant === "sidebar";
 
   return (
-    <Pressable
+    <HoverablePressable
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={350}
-      style={({ pressed }) => [styles.threadRow, pressed && styles.rowPressed]}
+      style={({ pressed, hovered }) => [
+        styles.threadRow,
+        isSidebar && styles.threadRowSidebar,
+        selected && { backgroundColor: theme.backgroundElement },
+        hovered && !selected && { backgroundColor: theme.tintSoft },
+        pressed && styles.rowPressed,
+      ]}
     >
-      <View style={[styles.threadIcon, { backgroundColor: visual.background }]}>
-        <Icon name={visual.icon} size={22} tintColor={visual.foreground} strokeWidth={1.8} />
-      </View>
-      <View style={styles.threadCopy}>
-        <ThemedText numberOfLines={1} style={styles.threadTitle}>
-          {thread.title || "New Chat"}
-        </ThemedText>
-        <ThemedText numberOfLines={1} style={styles.threadPreview}>
-          {preview || (zh ? "暂无消息" : "No messages yet")}
-        </ThemedText>
-      </View>
-      <View style={styles.threadMeta}>
-        <ThemedText numberOfLines={1} style={styles.threadDate}>
-          {relativeDate(activityTime(thread), zh)}
-        </ThemedText>
-        {pinned ? <Icon name="pin" size={12} tintColor={theme.textMuted} /> : null}
-      </View>
-    </Pressable>
+      {({ hovered }) => (
+        <>
+          <View
+            style={[
+              styles.threadIcon,
+              isSidebar && styles.threadIconSidebar,
+              { backgroundColor: visual.background },
+            ]}
+          >
+            <Icon
+              name={visual.icon}
+              size={isSidebar ? 18 : 22}
+              tintColor={visual.foreground}
+              strokeWidth={1.8}
+            />
+          </View>
+          <View style={styles.threadCopy}>
+            <ThemedText
+              numberOfLines={1}
+              style={[styles.threadTitle, isSidebar && styles.threadTitleSidebar]}
+            >
+              {thread.title || "New Chat"}
+            </ThemedText>
+            <ThemedText
+              numberOfLines={1}
+              style={[styles.threadPreview, isSidebar && styles.threadPreviewSidebar]}
+            >
+              {preview || (zh ? "暂无消息" : "No messages yet")}
+            </ThemedText>
+          </View>
+          <View style={styles.threadMeta}>
+            {isSidebar && hovered && onOpenActions ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={zh ? "更多操作" : "More options"}
+                hitSlop={8}
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  onOpenActions();
+                }}
+                style={styles.moreButton}
+              >
+                <Icon name="moreHorizontal" size={16} tintColor={theme.textSecondary} />
+              </Pressable>
+            ) : (
+              <>
+                <ThemedText numberOfLines={1} style={styles.threadDate}>
+                  {relativeDate(activityTime(thread), zh)}
+                </ThemedText>
+                {pinned ? <Icon name="pin" size={12} tintColor={theme.textMuted} /> : null}
+              </>
+            )}
+          </View>
+        </>
+      )}
+    </HoverablePressable>
   );
 }
 
@@ -909,4 +1006,47 @@ const styles = StyleSheet.create((theme) => ({
     shadowOffset: { width: 0, height: 5 },
   },
   pressed: { opacity: 0.64, transform: [{ scale: 0.96 }] },
+  rightActionContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  sidebarContainer: {
+    flex: 1,
+    backgroundColor: theme.background,
+  },
+  sidebarNewChatButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.backgroundElement,
+  },
+  threadRowSidebar: {
+    minHeight: 52,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 8,
+  },
+  threadIconSidebar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  threadTitleSidebar: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  threadPreviewSidebar: {
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  moreButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 }));

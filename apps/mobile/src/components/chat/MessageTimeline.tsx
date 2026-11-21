@@ -238,6 +238,9 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: 6,
     paddingHorizontal: 18,
     paddingTop: 6,
+    width: "100%",
+    maxWidth: 860,
+    alignSelf: "center",
   },
   empty: {
     alignItems: "center",

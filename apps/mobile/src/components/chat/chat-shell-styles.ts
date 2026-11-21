@@ -1,7 +1,5 @@
 import { StyleSheet } from "react-native-unistyles";
 
-import { MaxContentWidth } from "@/constants/theme";
-
 export const chatShellStyles = StyleSheet.create((theme) => ({
   chatBody: {
     flex: 1,
@@ -11,6 +9,7 @@ export const chatShellStyles = StyleSheet.create((theme) => ({
     elevation: 12,
     flexShrink: 0,
     position: "relative",
+    width: "100%",
     zIndex: 8,
   },
   container: {
@@ -21,7 +20,7 @@ export const chatShellStyles = StyleSheet.create((theme) => ({
   },
   safeArea: {
     flex: 1,
-    maxWidth: MaxContentWidth,
+    width: "100%",
   },
   shell: {
     backgroundColor: theme.background,
