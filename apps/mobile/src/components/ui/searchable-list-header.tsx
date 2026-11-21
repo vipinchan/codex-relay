@@ -17,6 +17,7 @@ type SearchableListHeaderProps = {
   clearLabel: string;
   onToggleSearch: () => void;
   onChangeQuery: (query: string) => void;
+  hideTitle?: boolean;
 };
 
 export function SearchableListHeader({
@@ -29,6 +30,7 @@ export function SearchableListHeader({
   clearLabel,
   onToggleSearch,
   onChangeQuery,
+  hideTitle = false,
 }: SearchableListHeaderProps) {
   const theme = useTheme();
   return (
@@ -53,9 +55,11 @@ export function SearchableListHeader({
             />
           </Pressable>
         </View>
-        <ThemedText accessibilityRole="header" style={styles.title}>
-          {title}
-        </ThemedText>
+        {hideTitle ? null : (
+          <ThemedText accessibilityRole="header" style={styles.title}>
+            {title}
+          </ThemedText>
+        )}
         <View style={[styles.topBarSide, styles.topBarSideEnd]}>{rightAction}</View>
       </View>
       {searchOpen ? (
@@ -96,8 +100,8 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     paddingHorizontal: 22,
   },
-  topBarSide: { width: 90, alignItems: "flex-start" },
-  topBarSideEnd: { alignItems: "flex-end" },
+  topBarSide: { gap: 2, flexDirection: "row", minWidth: 90, alignItems: "center" },
+  topBarSideEnd: { alignItems: "flex-end", flexDirection: "row", justifyContent: "flex-end" },
   title: { fontSize: 22, lineHeight: 27, fontWeight: "700", color: theme.text },
   searchButton: {
     width: 40,

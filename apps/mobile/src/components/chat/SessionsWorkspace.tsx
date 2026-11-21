@@ -18,7 +18,7 @@ const SIDEBAR_RESIZE_HANDLE_WIDTH = 10;
 export function SessionsWorkspace() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
-  const { isSidebarVisible, sidebarWidth, beginSidebarResize, resizeSidebar } =
+  const { isSidebarVisible, sidebarWidth, beginSidebarResize, resizeSidebar, toggleSidebar } =
     useIpadSplitLayout();
 
   const activeThreadId = useSelector(() => chatStore$.activeThreadId.get());
@@ -78,7 +78,10 @@ export function SessionsWorkspace() {
         ) : activeThreadId ? (
           <ChatScreen key={activeThreadId} embedded />
         ) : (
-          <NewChatWorkspaceScreen embedded />
+          <NewChatWorkspaceScreen
+            embedded
+            onShowSidebar={isSidebarVisible ? undefined : toggleSidebar}
+          />
         )}
       </View>
     </View>

@@ -98,7 +98,7 @@ export function ChatShell({
   messageLoadError?: string;
   olderMessagesError?: string;
   isRunning: boolean;
-  leadingAction: ChatShellAction;
+  leadingAction?: ChatShellAction;
   messages: ChatMessage[];
   onAttachImage: () => Promise<void> | void;
   onCancel: () => void;

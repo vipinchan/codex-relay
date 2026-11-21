@@ -12,7 +12,7 @@ import {
   View,
   type SectionListData,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
 import { Icon } from "@/components/ui/icon";
@@ -46,6 +46,7 @@ import {
   setHasPairedSession,
 } from "@/state/chat-store";
 import { pinnedThreadStore$, togglePinnedThread, unpinThread } from "@/state/pinned-thread-store";
+import { titlebarInset } from "./workspace-layout";
 import {
   conversationsViewStore$,
   toggleConversationsGroupingMode,
@@ -86,6 +87,7 @@ export function ConversationsHome({
 
   const queryClient = useQueryClient();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const hasPairedSession = useSelector(() => chatStore$.hasPairedSession.get());
   const pinnedThreadIds = useSelector(() => pinnedThreadStore$.threadIds.get());
   const cachedThreadIds = useSelector(() => chatStore$.threadIds.get());
@@ -356,7 +358,13 @@ export function ConversationsHome({
   const RootContainer = variant === "sidebar" ? View : SafeAreaView;
   const rootContainerProps =
     variant === "sidebar"
-      ? { style: [styles.screen, styles.sidebarContainer, { backgroundColor: theme.background }] }
+      ? {
+          style: [
+            styles.screen,
+            styles.sidebarContainer,
+            { backgroundColor: theme.background, paddingTop: titlebarInset(insets.top) },
+          ],
+        }
       : {
           edges: ["top", "left", "right"] as const,
           style: [styles.screen, { backgroundColor: theme.background }],
@@ -373,6 +381,7 @@ export function ConversationsHome({
         clearLabel={zh ? "清除搜索" : "Clear search"}
         onToggleSearch={toggleSearch}
         onChangeQuery={setSearchQuery}
+        hideTitle={variant === "sidebar"}
         rightAction={
           <View style={styles.rightActionContainer}>
             {variant === "sidebar" ? (

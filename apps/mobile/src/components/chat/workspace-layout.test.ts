@@ -10,6 +10,7 @@ import {
   resolveBreakpoint,
   shouldShowDesktopWorkspace,
   shouldShowThreeColumnDesktop,
+  titlebarInset,
 } from "./workspace-layout";
 
 describe("workspace-layout", () => {
@@ -50,5 +51,13 @@ describe("workspace-layout", () => {
     expect(clampPreviewWidth(200, 1600)).toBe(320);
     expect(clampPreviewWidth(420, 1600)).toBe(420);
     expect(clampPreviewWidth(900, 1600)).toBe(720);
+  });
+
+  it("reserves the macOS titlebar strip for desktop panes", () => {
+    expect(titlebarInset(0, true)).toBe(32);
+    expect(titlebarInset(24, true)).toBe(32);
+    expect(titlebarInset(44, true)).toBe(44);
+    expect(titlebarInset(0, false)).toBe(0);
+    expect(titlebarInset(44, false)).toBe(44);
   });
 });

@@ -76,6 +76,7 @@ module.exports = function withMacCatalyst(config) {
       "      for scene in UIApplication.shared.connectedScenes {",
       "        if let windowScene = scene as? UIWindowScene {",
       "          windowScene.sizeRestrictions?.minimumSize = CGSize(width: 1200, height: 720)",
+      "          windowScene.titlebar?.titleVisibility = .hidden",
       "        }",
       "      }",
       "    }",

@@ -1,10 +1,11 @@
 import React from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Bot, MessageSquare, Settings } from "lucide-react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { HoverablePressable } from "@/components/ui/hoverable-pressable";
-import { MAC_ICON_RAIL_WIDTH } from "./workspace-layout";
+import { MAC_ICON_RAIL_WIDTH, titlebarInset } from "./workspace-layout";
 
 export type DesktopTab = "index" | "bots" | "settings-tab";
 
@@ -19,6 +20,7 @@ export function DesktopNavigationRail({
   onSelectTab: (tab: DesktopTab) => void;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   const items: { id: DesktopTab; label: string; icon: typeof MessageSquare }[] = [
     {
@@ -39,7 +41,7 @@ export function DesktopNavigationRail({
   ];
 
   return (
-    <View style={styles.rail}>
+    <View style={[styles.rail, { paddingTop: titlebarInset(insets.top) + 12 }]}>
       <View style={styles.itemsContainer}>
         {items.map((item) => {
           const isActive = activeTab === item.id;
@@ -78,7 +80,6 @@ const styles = StyleSheet.create((theme) => ({
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: theme.borderSubtle,
     alignItems: "center",
-    paddingTop: 16,
     paddingBottom: 16,
     zIndex: 10,
   },

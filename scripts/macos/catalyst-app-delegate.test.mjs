@@ -33,5 +33,6 @@ test("injects embedded bundle URL and Catalyst minimum window size restriction",
     ),
   );
   assert(result.modResults.contents.includes("CGSize(width: 1200, height: 720)"));
+  assert(result.modResults.contents.includes("windowScene.titlebar?.titleVisibility = .hidden"));
   assert(result.modResults.contents.includes("targetEnvironment(macCatalyst)"));
 });

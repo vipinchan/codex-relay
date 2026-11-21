@@ -431,7 +431,7 @@ export function ChatScreen({ embedded = false, initialPairingUrl }: ChatScreenPr
   >(undefined);
   const [isHandlingScan, setHandlingScan] = useState(false);
   const [activePagerPage, setActivePagerPage] = useState(0);
-  const [isWidePreviewVisible, setWidePreviewVisible] = useState(true);
+  const [isWidePreviewVisible, setWidePreviewVisible] = useState(false);
   const [wideLayoutWidth, setWideLayoutWidth] = useState(0);
   const [previewPaneWidth, setPreviewPaneWidth] = useState(DEFAULT_PREVIEW_PANE_WIDTH);
   const [scannerMessage, setScannerMessage] = useState("Point the camera at the connection QR.");
@@ -2588,19 +2588,13 @@ export function ChatScreen({ embedded = false, initialPairingUrl }: ChatScreenPr
       olderMessagesError={activeOlderMessagesRequest?.error}
       isRunning={isRunning}
       leadingAction={{
-        icon:
-          usesExpandedSidebar || embedded
-            ? isSidebarVisible
-              ? "sidebarHide"
-              : "sidebarShow"
-            : "menu",
-        label:
-          usesExpandedSidebar || embedded
-            ? isSidebarVisible
-              ? "Hide threads"
-              : "Show threads"
-            : "Open threads",
-        onPress: usesExpandedSidebar || embedded ? toggleThreadSidebar : openThreadDrawer,
+        icon: usesExpandedSidebar ? (isSidebarVisible ? "sidebarHide" : "sidebarShow") : "menu",
+        label: usesExpandedSidebar
+          ? isSidebarVisible
+            ? "Hide threads"
+            : "Show threads"
+          : "Open threads",
+        onPress: usesExpandedSidebar ? toggleThreadSidebar : openThreadDrawer,
       }}
       messages={messages}
       onAttachImage={attachImagesFromGallery}

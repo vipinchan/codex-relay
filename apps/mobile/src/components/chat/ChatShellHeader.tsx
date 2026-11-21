@@ -20,14 +20,14 @@ export function ChatShellHeader({
   title,
   trailingActions,
 }: {
-  leadingAction: ChatShellAction;
+  leadingAction?: ChatShellAction;
   subtitle: string;
   title: string;
   trailingActions: readonly ChatShellAction[];
 }) {
   return (
     <View pointerEvents="box-none" style={styles.header}>
-      <HeaderButton action={leadingAction} />
+      {leadingAction ? <HeaderButton action={leadingAction} /> : null}
       <View pointerEvents="none" style={styles.titleGroup}>
         <ThemedText type="smallBold" style={styles.title} numberOfLines={1}>
           {title}

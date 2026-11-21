@@ -37,9 +37,13 @@ type WorkspaceRow =
 
 export type NewChatWorkspaceScreenProps = {
   embedded?: boolean;
+  onShowSidebar?: () => void;
 };
 
-export function NewChatWorkspaceScreen({ embedded = false }: NewChatWorkspaceScreenProps = {}) {
+export function NewChatWorkspaceScreen({
+  embedded = false,
+  onShowSidebar,
+}: NewChatWorkspaceScreenProps = {}) {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const [browser, setBrowser] = useState<WorkspaceBrowser | undefined>(undefined);
@@ -205,6 +209,15 @@ export function NewChatWorkspaceScreen({ embedded = false }: NewChatWorkspaceScr
               style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
             >
               <ThemedText style={styles.cancelText}>Cancel</ThemedText>
+            </Pressable>
+          ) : onShowSidebar ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Show threads"
+              onPress={onShowSidebar}
+              style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
+            >
+              <Icon name="sidebarShow" size={18} tintColor={theme.text} />
             </Pressable>
           ) : (
             <View style={styles.headerButton} />
