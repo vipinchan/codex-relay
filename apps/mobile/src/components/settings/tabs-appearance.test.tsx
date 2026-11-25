@@ -12,6 +12,9 @@ const ui = vi.hoisted(() => ({
 vi.mock("@/hooks/use-theme", () => ({
   useTheme: () => (ui.dark ? appearanceDark : appearanceLight),
 }));
+vi.mock("@/components/chat/DesktopNavigationRail", () => ({
+  DesktopNavigationRail: () => null,
+}));
 vi.mock("react-native", () => ({
   View: ({ children }: { children: React.ReactNode }) => children,
   useWindowDimensions: () => ({ width: 375, height: 812 }),
