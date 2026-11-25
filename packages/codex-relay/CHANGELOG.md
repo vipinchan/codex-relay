@@ -1,5 +1,11 @@
 # codex-relay
 
+## 1.6.1
+
+### Patch Changes
+
+- eea0e43: Tell Relay chat turns how to deliver verified files through paired downloads, and resume interrupted file chunks without restarting the transfer.
+
 ## 1.6.0
 
 ### Minor Changes
