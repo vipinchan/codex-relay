@@ -2069,11 +2069,12 @@ export function ChatScreen({ embedded = false, initialPairingUrl }: ChatScreenPr
     void sendPrompt(context, "plan");
   }
 
-  async function submitInputRequest(request: PendingInputRequest, answers: string[]) {
+  async function submitInputRequest(request: PendingInputRequest, answerGroups: string[][]) {
     hapticLightImpact();
     try {
       await resolveApproval(request.id, {
-        answers,
+        answers: answerGroups.map((group) => group[0] ?? ""),
+        ...(request.questions.some((question) => question.mode) ? { answerGroups } : {}),
         decision: "approve",
       });
       removePendingInputRequestState(queryClient, request.threadId, request.id);
@@ -2081,9 +2082,11 @@ export function ChatScreen({ embedded = false, initialPairingUrl }: ChatScreenPr
       if (!closeStreamRef.current && chatStore$.activeThreadId.peek() === request.threadId) {
         requestThreadStreamReconnect(request.threadId);
       }
+      return true;
     } catch (caught) {
       syncPairedSessionState();
       setConnection("offline", errorMessage(caught));
+      return false;
     }
   }
 
@@ -2098,9 +2101,11 @@ export function ChatScreen({ embedded = false, initialPairingUrl }: ChatScreenPr
       if (!closeStreamRef.current && chatStore$.activeThreadId.peek() === request.threadId) {
         requestThreadStreamReconnect(request.threadId);
       }
+      return true;
     } catch (caught) {
       syncPairedSessionState();
       setConnection("offline", errorMessage(caught));
+      return false;
     }
   }
 
@@ -2602,7 +2607,7 @@ export function ChatScreen({ embedded = false, initialPairingUrl }: ChatScreenPr
       onCollaborationModeChange={changeCollaborationMode}
       onAddPlanContext={addPlanContext}
       onImplementPlan={implementPlan}
-      onIgnoreInputRequest={(request) => void ignoreInputRequest(request)}
+      onIgnoreInputRequest={ignoreInputRequest}
       onMessageCopied={showMessageCopiedToast}
       onLoadEarlierMessages={handleLoadEarlierMessages}
       onRetryMessages={() => {
@@ -2617,7 +2622,7 @@ export function ChatScreen({ embedded = false, initialPairingUrl }: ChatScreenPr
       }
       onOpenMarkdownAttachment={openMarkdownAttachmentPreview}
       onRefreshUsageStatus={() => refreshUsageStatus()}
-      onSubmitInputRequest={(request, answers) => void submitInputRequest(request, answers)}
+      onSubmitInputRequest={submitInputRequest}
       onRemoveQueuedPrompt={(item) => void removeQueuedPrompt(item)}
       onRestoreQueuedPrompt={(item) => void restoreQueuedPrompt(item)}
       onSend={() => sendPrompt()}

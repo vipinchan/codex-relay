@@ -71,6 +71,7 @@ import {
 } from "@/state/chat-store";
 
 import { PromptMarkdownText } from "./PromptMarkdownText";
+import { InputRequestSheet } from "./InputRequestSheet";
 
 const ATTACH_SHEET_DISMISS_DELAY_MS = 260;
 const ADD_SHEET_KEYBOARD_DISMISS_FALLBACK_MS = 360;
@@ -292,10 +293,10 @@ export const ChatComposer = memo(function ChatComposer({
   onCancel: () => void;
   onCollaborationModeChange?: (mode: ThreadCollaborationMode) => void;
   onImplementPlan?: () => void;
-  onIgnoreInputRequest?: (request: PendingInputRequest) => void;
+  onIgnoreInputRequest?: (request: PendingInputRequest) => Promise<boolean>;
   onKeyboardLayoutFrozenChange?: (frozen: boolean) => void;
   onRefreshUsageStatus?: () => Promise<void> | void;
-  onSubmitInputRequest?: (request: PendingInputRequest, answers: string[]) => void;
+  onSubmitInputRequest?: (request: PendingInputRequest, answers: string[][]) => Promise<boolean>;
   onQueuedPromptPanelHeightChange?: (height: number) => void;
   onRemoveQueuedPrompt?: (item: QueuedComposerPrompt) => void;
   onRestoreQueuedPrompt?: (item: QueuedComposerPrompt) => void;
@@ -573,7 +574,10 @@ export const ChatComposer = memo(function ChatComposer({
       });
       return;
     }
-    onSubmitInputRequest?.(pendingInputRequest, nextAnswers);
+    void onSubmitInputRequest?.(
+      pendingInputRequest,
+      nextAnswers.map((answer) => [answer]),
+    );
   }
 
   async function selectSkill(skill: AgentSkill) {
@@ -919,6 +923,19 @@ export const ChatComposer = memo(function ChatComposer({
   }
 
   if (pendingInputRequest) {
+    if (pendingInputRequest.questions.some((question) => question.mode)) {
+      return (
+        <InputRequestSheet
+          autoOpen
+          key={pendingInputRequest.id}
+          questions={pendingInputRequest.questions}
+          onSubmit={(answers) =>
+            onSubmitInputRequest?.(pendingInputRequest, answers) ?? Promise.resolve(false)
+          }
+          onSkip={() => onIgnoreInputRequest?.(pendingInputRequest) ?? Promise.resolve(false)}
+        />
+      );
+    }
     return (
       <View style={styles.composerStack}>
         <InputRequestPanel
@@ -942,7 +959,7 @@ export const ChatComposer = memo(function ChatComposer({
           }}
           onIgnore={() => {
             hapticSelection();
-            onIgnoreInputRequest?.(pendingInputRequest);
+            void onIgnoreInputRequest?.(pendingInputRequest);
           }}
           onOptionSelect={(option) => {
             hapticSelection();

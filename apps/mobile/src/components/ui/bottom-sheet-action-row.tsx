@@ -11,6 +11,7 @@ import { Text } from "./text";
 
 export function SheetActionRow({
   accessibilityLabel,
+  accessibilityRole = "button",
   disabled,
   expanded,
   icon,
@@ -25,6 +26,7 @@ export function SheetActionRow({
   trailing,
 }: {
   accessibilityLabel: string;
+  accessibilityRole?: "button" | "radio" | "checkbox";
   disabled?: boolean;
   expanded?: boolean;
   icon: AppIconName;
@@ -51,8 +53,12 @@ export function SheetActionRow({
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      accessibilityState={{ disabled, expanded, selected }}
+      accessibilityRole={accessibilityRole}
+      accessibilityState={{
+        disabled,
+        expanded,
+        ...(accessibilityRole === "button" ? { selected } : { checked: selected }),
+      }}
       disabled={disabled}
       onPress={
         onPress

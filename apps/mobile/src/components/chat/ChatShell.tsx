@@ -105,14 +105,14 @@ export function ChatShell({
   onCollaborationModeChange: (mode: ThreadCollaborationMode) => void;
   onAddPlanContext?: (context: string) => void;
   onImplementPlan?: () => void;
-  onIgnoreInputRequest?: (request: PendingInputRequest) => void;
+  onIgnoreInputRequest?: (request: PendingInputRequest) => Promise<boolean>;
   onMessageCopied?: () => void;
   onMessageRewind?: (message: ChatMessage) => void;
   onLoadEarlierMessages?: () => Promise<boolean>;
   onRetryMessages?: () => void;
   onOpenMarkdownAttachment?: (target: WorkspaceMarkdownPreviewTarget) => void;
   onRefreshUsageStatus?: () => Promise<void> | void;
-  onSubmitInputRequest?: (request: PendingInputRequest, answers: string[]) => void;
+  onSubmitInputRequest?: (request: PendingInputRequest, answers: string[][]) => Promise<boolean>;
   onRemoveQueuedPrompt?: (item: QueuedComposerPrompt) => void;
   onRestoreQueuedPrompt?: (item: QueuedComposerPrompt) => void;
   onSend: () => void;

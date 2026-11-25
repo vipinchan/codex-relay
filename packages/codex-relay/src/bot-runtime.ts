@@ -10,6 +10,7 @@ import {
 } from "./api-schema.js";
 import type { CodexAppServerClient, AppServerRequest, AppServerTurn } from "./app-server.js";
 import type { BotStore } from "./bot-store.js";
+import { clarificationTool, isClarificationRequest } from "./clarification-tool.js";
 import { listAvailableSkills } from "./skill-discovery.js";
 
 type Runtime = ReturnType<typeof createBotRuntime>;
@@ -117,6 +118,10 @@ export function createBotRuntime(
     activeListeners += 1;
     if (cleanupAppServerListener || !appServer?.onRequest) return;
     cleanupAppServerListener = appServer.onRequest((request: AppServerRequest) => {
+      if (isClarificationRequest(request)) {
+        onApprovalCallback?.(request);
+        return;
+      }
       if (
         request.method === "item/tool/call" &&
         request.params &&
@@ -257,6 +262,7 @@ export function createBotRuntime(
       const recalled = await recall(bot.id);
       const developerInstructions =
         `You are BOT ${currentBot.name}. ${currentBot.instructions}\n\n` +
+        "When you need clarification, use relay_ask_user if available. Use single for mutually exclusive options, multi when multiple options can apply, or text for an open question. If the tool is unavailable, ask in chat. " +
         "Use bot_history_search and bot_history_read to inspect original chat records when needed. " +
         "Those tools are limited to this BOT's accessible direct and group history. " +
         "The current saved memory is authoritative for preferences and decisions. " +
@@ -310,7 +316,7 @@ export function createBotRuntime(
         const thread = await appServer.startThread({
           cwd: conversation.workspacePath,
           developerInstructions,
-          dynamicTools: historyTools,
+          dynamicTools: [...historyTools, clarificationTool],
           model: effectiveModel ?? null,
           serviceTier: configuredTier ?? null,
           threadSource: "codex-relay-bot",

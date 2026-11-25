@@ -180,7 +180,7 @@ describe("BOT storage", () => {
     runtime.schedule(aChat, a, own.message, own.replies[0]!);
     await waitFor(async () => (await store.getMessage(own.replies[0]!.id))?.status === "completed");
     expect((threadStart!.dynamicTools as Array<{ name: string }>).map((tool) => tool.name)).toEqual(
-      ["bot_history_search", "bot_history_read"],
+      ["bot_history_search", "bot_history_read", "relay_ask_user"],
     );
     requestHandler!({
       id: 1,

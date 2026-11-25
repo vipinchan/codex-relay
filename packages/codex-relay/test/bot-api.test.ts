@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../src/app.js";
 import type { CodexAppServerClient, AppServerRequest, AppServerTurn } from "../src/app-server.js";
@@ -703,110 +703,141 @@ describe("bot conversations", () => {
     ).not.toHaveProperty("resolvedModel");
   });
 
-  it("persists BOT approvals and resolves them through the existing approval route", async () => {
-    const handlers: Array<(request: AppServerRequest) => void> = [];
-    let started = false;
-    let approved = false;
-    const appServer = {
-      async listModels() {
-        return defaultModels;
-      },
-      onRequest(handler: (request: AppServerRequest) => void) {
-        handlers.push(handler);
-        return () => {
-          const index = handlers.indexOf(handler);
-          if (index >= 0) handlers.splice(index, 1);
-        };
-      },
-      async startThread() {
-        return { id: "bot-thread" };
-      },
-      async startTurn() {
-        started = true;
-        return {
-          id: "bot-turn",
-          status: { type: "inProgress" },
-          items: [],
-          startedAt: null,
-          completedAt: null,
-        };
-      },
-      async readThread() {
-        return {
-          turns: [
-            {
-              id: "bot-turn",
-              status: { type: approved ? "completed" : "inProgress" },
-              items: approved ? [{ id: "answer", type: "agentMessage", text: "Approved." }] : [],
-              startedAt: null,
-              completedAt: null,
-            },
-          ],
-        };
-      },
-      async respondToRequest() {
-        approved = true;
-      },
-    } as unknown as CodexAppServerClient;
-    const app = createApp({ appServer });
-    const post = async (path: string, body: unknown) =>
-      app.request(path, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    const bot = (
-      await (await post("/v1/bots", { name: "A", color: "#112233", instructions: "" })).json()
-    ).bot;
-    const conversation = (
-      await (
-        await post("/v1/bot-conversations", {
-          kind: "direct",
-          botId: bot.id,
-        })
-      ).json()
-    ).conversation;
-    await post(`/v1/bot-conversations/${conversation.id}/messages`, {
-      requestId: "approval",
-      text: "Perform an action",
-    });
-    await waitFor(() => Promise.resolve(started));
-    for (const handler of handlers)
-      handler({
-        id: 9,
-        method: "item/commandExecution/requestApproval",
-        params: {
-          threadId: "bot-thread",
-          turnId: "bot-turn",
-          command: "echo test",
-          cwd: "/tmp",
+  it.each(["command", "clarification"] as const)(
+    "persists BOT %s requests and resolves them through the approval route",
+    async (kind) => {
+      const handlers: Array<(request: AppServerRequest) => void> = [];
+      let started = false;
+      let approved = false;
+      const appServer = {
+        async listModels() {
+          return defaultModels;
         },
+        onRequest(handler: (request: AppServerRequest) => void) {
+          handlers.push(handler);
+          return () => {
+            const index = handlers.indexOf(handler);
+            if (index >= 0) handlers.splice(index, 1);
+          };
+        },
+        async startThread() {
+          return { id: "bot-thread" };
+        },
+        async startTurn() {
+          started = true;
+          return {
+            id: "bot-turn",
+            status: { type: "inProgress" },
+            items: [],
+            startedAt: null,
+            completedAt: null,
+          };
+        },
+        async readThread() {
+          return {
+            turns: [
+              {
+                id: "bot-turn",
+                status: { type: approved ? "completed" : "inProgress" },
+                items: approved ? [{ id: "answer", type: "agentMessage", text: "Approved." }] : [],
+                startedAt: null,
+                completedAt: null,
+              },
+            ],
+          };
+        },
+        respondToRequest: vi.fn<CodexAppServerClient["respondToRequest"]>(async () => {
+          approved = true;
+        }),
+      } as unknown as CodexAppServerClient;
+      const app = createApp({ appServer });
+      const post = async (path: string, body: unknown) =>
+        app.request(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      const bot = (
+        await (await post("/v1/bots", { name: "A", color: "#112233", instructions: "" })).json()
+      ).bot;
+      const conversation = (
+        await (
+          await post("/v1/bot-conversations", {
+            kind: "direct",
+            botId: bot.id,
+          })
+        ).json()
+      ).conversation;
+      await post(`/v1/bot-conversations/${conversation.id}/messages`, {
+        requestId: "approval",
+        text: "Perform an action",
       });
-    let approvalId = "";
-    await waitFor(async () => {
-      const response = await app.request(`/v1/bot-conversations/${conversation.id}/messages`);
-      const { messages } = await response.json();
-      approvalId =
-        messages.find(
+      await waitFor(() => Promise.resolve(started));
+      for (const handler of handlers)
+        handler({
+          id: 9,
+          method: kind === "command" ? "item/commandExecution/requestApproval" : "item/tool/call",
+          params: {
+            threadId: "bot-thread",
+            turnId: "bot-turn",
+            ...(kind === "command"
+              ? { command: "echo test", cwd: "/tmp" }
+              : {
+                  tool: "relay_ask_user",
+                  arguments: {
+                    questions: [
+                      {
+                        id: "topics",
+                        question: "Which topics?",
+                        mode: "multi",
+                        options: [{ label: "Cost" }, { label: "Risk" }],
+                      },
+                    ],
+                  },
+                }),
+          },
+        });
+      let approvalId = "";
+      await waitFor(async () => {
+        const response = await app.request(`/v1/bot-conversations/${conversation.id}/messages`);
+        const { messages } = await response.json();
+        approvalId =
+          messages.find(
+            (message: { activity?: { details?: { approvalId?: string } } }) =>
+              message.activity?.details?.approvalId,
+          )?.activity.details.approvalId ?? "";
+        return Boolean(approvalId);
+      });
+      const resolved = await post(`/v1/approvals/${encodeURIComponent(approvalId)}`, {
+        decision: "approve",
+        ...(kind === "clarification" ? { answerGroups: [["Cost", "Risk"]] } : {}),
+      });
+      expect(resolved.status).toBe(200);
+      expect(appServer.respondToRequest).toHaveBeenCalledWith(
+        9,
+        kind === "clarification"
+          ? {
+              success: true,
+              contentItems: [
+                {
+                  type: "inputText",
+                  text: JSON.stringify({ answers: { topics: ["Cost", "Risk"] } }),
+                },
+              ],
+            }
+          : { decision: "accept" },
+      );
+      await waitFor(async () => {
+        const response = await app.request(`/v1/bot-conversations/${conversation.id}/messages`);
+        const { messages } = await response.json();
+        const activity = messages.find(
           (message: { activity?: { details?: { approvalId?: string } } }) =>
-            message.activity?.details?.approvalId,
-        )?.activity.details.approvalId ?? "";
-      return Boolean(approvalId);
-    });
-    const resolved = await post(`/v1/approvals/${encodeURIComponent(approvalId)}`, {
-      decision: "approve",
-    });
-    expect(resolved.status).toBe(200);
-    await waitFor(async () => {
-      const response = await app.request(`/v1/bot-conversations/${conversation.id}/messages`);
-      const { messages } = await response.json();
-      const activity = messages.find(
-        (message: { activity?: { details?: { approvalId?: string } } }) =>
-          message.activity?.details?.approvalId === approvalId,
-      )?.activity;
-      return activity?.details?.approvalResolved === true;
-    });
-  });
+            message.activity?.details?.approvalId === approvalId,
+        )?.activity;
+        return activity?.details?.approvalResolved === true;
+      });
+    },
+  );
 
   it("stops a running BOT and skips queued group members", async () => {
     let turnsStarted = 0;

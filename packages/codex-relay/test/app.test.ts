@@ -6881,135 +6881,200 @@ describe("Codex Relay server routes", () => {
     );
   });
 
-  it("resumes app-server turns after pending input request is answered", async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), "codex-relay-workspace-"));
-    const notificationHandlers = new Set<(notification: unknown) => void>();
-    const requestHandlers = new Set<(request: unknown) => void>();
-    const now = Date.now() / 1000;
-    let inputRequested = false;
-    const appThread = {
-      id: "app-thread-input",
-      createdAt: now,
-      cwd: workspacePath,
-      modelProvider: "gpt-5.5",
-      name: "Input thread",
-      preview: "Input thread",
-      source: "app",
-      status: "idle",
-      turns: [],
-      updatedAt: now,
-    };
-    const respondToRequest = vi.fn<() => Promise<void>>(async () => {
-      for (const handler of notificationHandlers) {
-        handler({
-          method: "turn/completed",
-          params: {
-            status: "completed",
-            threadId: "app-thread-input",
-            turnId: "turn-input",
-          },
-        });
-      }
-    });
-    const appServer = {
-      onNotification(handler: (notification: unknown) => void) {
-        notificationHandlers.add(handler);
-        return () => notificationHandlers.delete(handler);
-      },
-      onRequest(handler: (request: unknown) => void) {
-        requestHandlers.add(handler);
-        return () => requestHandlers.delete(handler);
-      },
-      readThread: vi.fn<() => Promise<unknown>>(async () => appThread),
-      respondToRequest,
-      startThread: vi.fn<() => Promise<unknown>>(async () => appThread),
-      startTurn: vi.fn<() => Promise<unknown>>(async () => {
-        queueMicrotask(() => {
-          inputRequested = true;
-          for (const handler of requestHandlers) {
-            handler({
-              id: "request-7",
-              method: "item/tool/requestUserInput",
-              params: {
-                isBlocking: false,
-                questions: [
-                  {
-                    header: "Scope",
-                    id: "scope",
-                    question: "What should Codex do next?",
-                  },
-                ],
-                threadId: "app-thread-input",
-                turnId: "turn-input",
-              },
-            });
-          }
-        });
-        return {
-          id: "turn-input",
-          items: [],
-          status: "running",
-          startedAt: now,
-          completedAt: null,
-        };
-      }),
-    };
-    const app = createApp({
-      appServer: appServer as never,
-      codex: createMockCodex(),
-      workspacePath,
-    });
+  it.each([
+    { mode: "plan", source: "native" },
+    { mode: "default", source: "relay" },
+    { mode: "plan", source: "relay" },
+  ] as const)(
+    "resumes $mode app-server turns after a $source input request is answered",
+    async ({ mode, source }) => {
+      const workspacePath = await mkdtemp(join(tmpdir(), "codex-relay-workspace-"));
+      const notificationHandlers = new Set<(notification: unknown) => void>();
+      const requestHandlers = new Set<(request: unknown) => void>();
+      const now = Date.now() / 1000;
+      let inputRequested = false;
+      const appThread = {
+        id: "app-thread-input",
+        createdAt: now,
+        cwd: workspacePath,
+        modelProvider: "gpt-5.5",
+        name: "Input thread",
+        preview: "Input thread",
+        source: "app",
+        status: "idle",
+        turns: [],
+        updatedAt: now,
+      };
+      const respondToRequest = vi.fn<() => Promise<void>>(async () => {
+        for (const handler of notificationHandlers) {
+          handler({
+            method: "turn/completed",
+            params: {
+              status: "completed",
+              threadId: "app-thread-input",
+              turnId: "turn-input",
+            },
+          });
+        }
+      });
+      const appServer = {
+        onNotification(handler: (notification: unknown) => void) {
+          notificationHandlers.add(handler);
+          return () => notificationHandlers.delete(handler);
+        },
+        onRequest(handler: (request: unknown) => void) {
+          requestHandlers.add(handler);
+          return () => requestHandlers.delete(handler);
+        },
+        readThread: vi.fn<() => Promise<unknown>>(async () => appThread),
+        respondToRequest,
+        startThread: vi.fn<() => Promise<unknown>>(async () => appThread),
+        startTurn: vi.fn<() => Promise<unknown>>(async () => {
+          queueMicrotask(() => {
+            inputRequested = true;
+            for (const handler of requestHandlers) {
+              handler({
+                id: "request-7",
+                method: source === "relay" ? "item/tool/call" : "item/tool/requestUserInput",
+                params: {
+                  isBlocking: false,
+                  ...(source === "relay"
+                    ? {
+                        tool: "relay_ask_user",
+                        arguments: {
+                          questions: [
+                            {
+                              id: "scope",
+                              question: "What should Codex do next?",
+                              mode: "multi",
+                              options: [{ label: "Restart Vite" }, { label: "Check logs" }],
+                            },
+                          ],
+                        },
+                      }
+                    : {
+                        questions: [
+                          {
+                            header: "Scope",
+                            id: "scope",
+                            question: "What should Codex do next?",
+                          },
+                        ],
+                      }),
+                  threadId: "app-thread-input",
+                  turnId: "turn-input",
+                },
+              });
+            }
+          });
+          return {
+            id: "turn-input",
+            items: [],
+            status: "running",
+            startedAt: now,
+            completedAt: null,
+          };
+        }),
+      };
+      const app = createApp({
+        appServer: appServer as never,
+        codex: createMockCodex(),
+        workspacePath,
+      });
 
-    await app.request("/v1/threads", {
-      method: "POST",
-      body: JSON.stringify({ title: "Input thread" }),
-      headers: { "content-type": "application/json" },
-    });
-    const streamResponse = await app.request("/v1/threads/app-thread-input/runs/stream", {
-      method: "POST",
-      body: JSON.stringify({ prompt: "Needs input" }),
-      headers: { "content-type": "application/json" },
-    });
-    await waitUntil(() => expect(inputRequested).toBe(true));
+      await app.request("/v1/threads", {
+        method: "POST",
+        body: JSON.stringify({ title: "Input thread" }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(appServer.startThread).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dynamicTools: [expect.objectContaining({ name: "relay_ask_user" })],
+        }),
+      );
+      const streamResponse = await app.request("/v1/threads/app-thread-input/runs/stream", {
+        method: "POST",
+        body: JSON.stringify({ prompt: "Needs input", collaborationMode: mode }),
+        headers: { "content-type": "application/json" },
+      });
+      await waitUntil(() => expect(inputRequested).toBe(true));
+      expect(appServer.startTurn).toHaveBeenCalledWith(
+        expect.objectContaining({ collaborationMode: expect.objectContaining({ mode }) }),
+      );
 
-    const detailBeforeResponse = await app.request("/v1/threads/app-thread-input");
-    const detailBeforeBody = await detailBeforeResponse.json();
-    const pendingInputRequest = detailBeforeBody.pendingInputRequests[0];
-    expect(detailBeforeBody.pendingInputRequests).toContainEqual(
-      expect.objectContaining({
-        id: expect.stringMatching(/^approval-[a-f0-9]{24}$/),
-        isBlocking: false,
-        questions: [
-          expect.objectContaining({
-            id: "scope",
-            question: "What should Codex do next?",
-          }),
-        ],
-      }),
-    );
-    expect(detailBeforeBody.messages).not.toContainEqual(
-      expect.objectContaining({ kind: "structuredUserInput" }),
-    );
+      const detailBeforeResponse = await app.request("/v1/threads/app-thread-input");
+      const detailBeforeBody = await detailBeforeResponse.json();
+      const pendingInputRequest = detailBeforeBody.pendingInputRequests[0];
+      expect(detailBeforeBody.pendingInputRequests).toContainEqual(
+        expect.objectContaining({
+          id: expect.stringMatching(/^approval-[a-f0-9]{24}$/),
+          isBlocking: false,
+          questions: [
+            expect.objectContaining({
+              id: "scope",
+              question: "What should Codex do next?",
+              ...(source === "relay" ? { mode: "multi" } : {}),
+            }),
+          ],
+        }),
+      );
+      expect(detailBeforeBody.messages).not.toContainEqual(
+        expect.objectContaining({ kind: "structuredUserInput" }),
+      );
 
-    const approvalResponse = await app.request(`/v1/approvals/${pendingInputRequest.id}`, {
-      method: "POST",
-      body: JSON.stringify({ decision: "approve", answers: ["Restart Vite"] }),
-      headers: { "content-type": "application/json" },
-    });
-    const streamBody = await streamResponse.text();
-    const detailResponse = await app.request("/v1/threads/app-thread-input");
-    const detailBody = await detailResponse.json();
+      const invalidResponse =
+        source === "relay"
+          ? await app.request(`/v1/approvals/${pendingInputRequest.id}`, {
+              method: "POST",
+              body: JSON.stringify({
+                decision: "approve",
+                answerGroups: [["Restart Vite", "Invalid"]],
+              }),
+              headers: { "content-type": "application/json" },
+            })
+          : undefined;
+      expect(invalidResponse?.status).toBe(source === "relay" ? 400 : undefined);
+      expect(respondToRequest).not.toHaveBeenCalled();
+      const approvalResponse = await app.request(`/v1/approvals/${pendingInputRequest.id}`, {
+        method: "POST",
+        body: JSON.stringify({
+          decision: "approve",
+          ...(source === "relay"
+            ? { answerGroups: [["Restart Vite", "Check logs"]] }
+            : { answers: ["Restart Vite"] }),
+        }),
+        headers: { "content-type": "application/json" },
+      });
+      const streamBody = await streamResponse.text();
+      const detailResponse = await app.request("/v1/threads/app-thread-input");
+      const detailBody = await detailResponse.json();
 
-    expect(approvalResponse.status).toBe(200);
-    expect(streamBody).toContain("thread.input_request.created");
-    expect(respondToRequest).toHaveBeenCalledWith("request-7", {
-      answers: { scope: { answers: ["Restart Vite"] } },
-    });
-    expect(streamBody).toContain('"state":"completed"');
-    expect(detailBody.messages).not.toContainEqual(
-      expect.objectContaining({ kind: "structuredUserInput" }),
-    );
-  });
+      expect(approvalResponse.status).toBe(200);
+      expect(streamBody).toContain("thread.input_request.created");
+      expect(respondToRequest).toHaveBeenCalledWith(
+        "request-7",
+        source === "relay"
+          ? {
+              success: true,
+              contentItems: [
+                {
+                  type: "inputText",
+                  text: JSON.stringify({
+                    answers: { scope: ["Restart Vite", "Check logs"] },
+                  }),
+                },
+              ],
+            }
+          : {
+              answers: { scope: { answers: ["Restart Vite"] } },
+            },
+      );
+      expect(streamBody).toContain('"state":"completed"');
+      expect(detailBody.messages).not.toContainEqual(
+        expect.objectContaining({ kind: "structuredUserInput" }),
+      );
+    },
+  );
 
   it("recovers a missing app-server thread even after prior messages exist", async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), "codex-relay-workspace-"));

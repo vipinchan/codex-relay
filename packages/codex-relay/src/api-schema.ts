@@ -528,6 +528,7 @@ export const PendingInputRequestOptionSchema = z.object({
 export const PendingInputRequestQuestionSchema = z.object({
   header: z.string().optional(),
   id: z.string().min(1),
+  mode: z.enum(["single", "multi", "text"]).optional(),
   options: z.array(PendingInputRequestOptionSchema).optional(),
   question: z.string().min(1),
 });
@@ -985,6 +986,10 @@ export const ApprovalDecisionSchema = z.enum(["approve", "approve-for-session", 
 export const ResolveApprovalRequestSchema = z.object({
   decision: ApprovalDecisionSchema,
   answers: z.array(z.string()).optional(),
+  answerGroups: z
+    .array(z.array(z.string().max(4000)).max(10))
+    .max(3)
+    .optional(),
 });
 
 export const ResolveApprovalResponseSchema = z.object({
@@ -2320,6 +2325,7 @@ export function createOpenApiDocument() {
           properties: {
             header: { type: "string" },
             id: { type: "string" },
+            mode: { type: "string", enum: ["single", "multi", "text"] },
             options: {
               type: "array",
               items: { $ref: "#/components/schemas/PendingInputRequestOption" },

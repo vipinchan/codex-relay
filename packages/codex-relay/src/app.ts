@@ -188,6 +188,12 @@ import {
 import { readLatestContextWindowUsage } from "./context-window.js";
 import { createBotStore } from "./bot-store.js";
 import { createBotRuntime } from "./bot-runtime.js";
+import {
+  clarificationQuestions,
+  clarificationResponse,
+  clarificationTool,
+  isClarificationRequest,
+} from "./clarification-tool.js";
 import { listInstalledCodexPlugins } from "./plugin-discovery.js";
 import {
   createBotDefinitionStore,
@@ -559,11 +565,15 @@ export function createApp(options: AppOptions = {}) {
   }
   botRuntime.bindAppServer({
     onApproval(request) {
-      if (!isApprovalServerRequest(request.method)) return;
+      if (!isApprovalServerRequest(request.method) && !isClarificationRequest(request)) return;
       const approval = approvalMessageFromRequest(request);
       if (!approval) return;
       const context = botRuntime.getApprovalContext(approval.threadId);
       if (!context) return;
+      if (isClarificationRequest(request) && !approval.questions?.length) {
+        void appServer!.rejectRequest(request.id, -32602, "Invalid clarification questions.");
+        return;
+      }
       void (async () => {
         try {
           const activity = ChatMessageSchema.parse({
@@ -4286,11 +4296,31 @@ export function createApp(options: AppOptions = {}) {
       );
     }
 
+    if (
+      pending.method === "item/tool/call" &&
+      (parsed.data.decision === "approve" || parsed.data.decision === "approve-for-session")
+    ) {
+      try {
+        clarificationResponse(
+          pending.questions ?? [],
+          parsed.data.answerGroups ?? (parsed.data.answers ?? []).map((answer) => [answer]),
+        );
+      } catch (error) {
+        return secureJson(
+          c,
+          options.pairing,
+          secureSessionsByTokenHash,
+          apiError("invalid_answers", errorMessage(error)),
+          400,
+        );
+      }
+    }
     pendingApprovals.delete(approvalId);
     const resolution = resolveAppServerRequest(
       pending,
       parsed.data.decision,
       parsed.data.answers ?? [],
+      parsed.data.answerGroups,
     )
       .then(async () => {
         if (pending.botActivityMessageId) {
@@ -5074,6 +5104,7 @@ async function createAppServerThreadRecord(input: {
   const thread = await input.appServer.startThread({
     approvalPolicy: runtime.approvalPolicy,
     cwd: input.workspacePath,
+    dynamicTools: [clarificationTool],
     model: input.options.model ?? null,
     sandbox: runtime.sandbox,
     serviceTier: input.options.serviceTier ?? null,
@@ -5667,10 +5698,11 @@ async function streamRunningAppServerThread(input: {
   };
 
   cleanupRequestHandler = input.appServer.onRequest((request) => {
-    if (request.method === "item/tool/call") return;
+    const isClarification = isClarificationRequest(request);
+    if (request.method === "item/tool/call" && !isClarification) return;
     const requestThreadId = firstString(recordParams(request), ["threadId", "conversationId"]);
     if (requestThreadId && requestThreadId !== input.threadId) return;
-    if (!isApprovalServerRequest(request.method)) {
+    if (!isApprovalServerRequest(request.method) && !isClarification) {
       void input.appServer.rejectRequest(
         request.id,
         -32601,
@@ -5680,7 +5712,11 @@ async function streamRunningAppServerThread(input: {
     }
 
     const approval = approvalMessageFromRequest(request);
-    if (!approval || approval.threadId !== input.threadId) {
+    if (
+      !approval ||
+      approval.threadId !== input.threadId ||
+      (isClarification && !approval.questions?.length)
+    ) {
       void input.appServer.rejectRequest(request.id, -32602, "Approval request is malformed.");
       return;
     }
@@ -6207,10 +6243,11 @@ async function runAppServerPromptStreamed(input: {
   debugStream("initial event sent", activeThreadId);
 
   const cleanupRequestHandler = input.appServer.onRequest((request) => {
-    if (request.method === "item/tool/call") return;
+    const isClarification = isClarificationRequest(request);
+    if (request.method === "item/tool/call" && !isClarification) return;
     const requestThreadId = firstString(recordParams(request), ["threadId", "conversationId"]);
     if (requestThreadId && requestThreadId !== activeThreadId) return;
-    if (!isApprovalServerRequest(request.method)) {
+    if (!isApprovalServerRequest(request.method) && !isClarification) {
       void input.appServer.rejectRequest(
         request.id,
         -32601,
@@ -6220,7 +6257,11 @@ async function runAppServerPromptStreamed(input: {
     }
 
     const approval = approvalMessageFromRequest(request);
-    if (!approval || approval.threadId !== activeThreadId) {
+    if (
+      !approval ||
+      approval.threadId !== activeThreadId ||
+      (isClarification && !approval.questions?.length)
+    ) {
       void input.appServer.rejectRequest(request.id, -32602, "Approval request is malformed.");
       return;
     }
@@ -7088,6 +7129,7 @@ async function recoverMissingAppServerThread(input: {
   const thread = await input.appServer.startThread({
     approvalPolicy: runtime.approvalPolicy,
     cwd: input.workspacePath,
+    dynamicTools: [clarificationTool],
     model: input.runOptions.model ?? null,
     sandbox: runtime.sandbox,
     serviceTier: input.runOptions.serviceTier ?? null,
@@ -10294,13 +10336,14 @@ function pushNotificationEventFromTerminalNotification(notification: AppServerNo
 }
 
 function pushNotificationEventFromApprovalRequest(request: AppServerRequest) {
-  if (!isApprovalServerRequest(request.method)) {
+  if (!isApprovalServerRequest(request.method) && !isClarificationRequest(request)) {
     return undefined;
   }
   const approval = approvalMessageFromRequest(request);
   if (!approval) {
     return undefined;
   }
+  if (isClarificationRequest(request) && !approval.questions?.length) return undefined;
   return {
     intent: "action_required" as const,
     threadId: approval.threadId,
@@ -10398,8 +10441,13 @@ function approvalMessageFromRequest(request: AppServerRequest) {
         threadId,
         turnId,
       };
-    case "item/tool/requestUserInput":
-      const questions = pendingInputQuestions(params?.questions);
+    case "item/tool/call":
+    case "item/tool/requestUserInput": {
+      const isDynamicTool = request.method === "item/tool/call";
+      if (isDynamicTool && !isClarificationRequest(request)) return undefined;
+      const questions = isDynamicTool
+        ? (clarificationQuestions(params?.arguments) ?? [])
+        : pendingInputQuestions(params?.questions);
       return {
         approvalId,
         content: "Input requested",
@@ -10414,6 +10462,7 @@ function approvalMessageFromRequest(request: AppServerRequest) {
         threadId,
         turnId,
       };
+    }
     case "mcpServer/elicitation/request":
       return {
         approvalId,
@@ -10554,6 +10603,7 @@ async function resolveAppServerRequest(
   pending: PendingApproval,
   decision: "approve" | "approve-for-session" | "deny" | "cancel",
   answers: string[],
+  answerGroups?: string[][],
 ) {
   switch (pending.kind) {
     case "commandExecution":
@@ -10580,9 +10630,25 @@ async function resolveAppServerRequest(
       });
       return;
     case "structuredUserInput":
+      if (pending.method === "item/tool/call") {
+        await pending.appServer.respondToRequest(
+          pending.requestId,
+          clarificationResponse(
+            pending.questions ?? [],
+            decision === "approve" || decision === "approve-for-session"
+              ? (answerGroups ?? answers.map((answer) => [answer]))
+              : undefined,
+          ),
+        );
+        return;
+      }
       await pending.appServer.respondToRequest(
         pending.requestId,
-        structuredUserInputResponse(pending.questions ?? [], decision, answers),
+        structuredUserInputResponse(
+          pending.questions ?? [],
+          decision,
+          answerGroups ? answerGroups.map((group) => group[0] ?? "") : answers,
+        ),
       );
       return;
     case "mcpElicitation":

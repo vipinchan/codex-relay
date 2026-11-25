@@ -19,6 +19,8 @@ import {
 } from "@/lib/codex-relay-api";
 import { hapticSelection, hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { markMessageApprovalResolvedState } from "@/lib/server-state";
+import { InputRequestSheet } from "./InputRequestSheet";
+import { inputRequestQuestions } from "./input-request-answers";
 
 const INLINE_PATCH_LINE_LIMIT = 48;
 
@@ -49,11 +51,16 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
   const userInputPrompt = inputRequestPrompt(message);
   const isInputRequest =
     approvalKind === "structuredUserInput" || approvalKind === "mcpElicitation";
+  const questions =
+    approvalKind === "structuredUserInput" ? inputRequestQuestions(message.details?.questions) : [];
   const needsUserAction = canResolve;
 
-  async function submitDecision(decision: "approve" | "approve-for-session" | "deny" | "cancel") {
+  async function submitDecision(
+    decision: "approve" | "approve-for-session" | "deny" | "cancel",
+    answerGroups?: string[][],
+  ) {
     if (!approvalId || isResolving) {
-      return;
+      return false;
     }
 
     setResolving(true);
@@ -62,7 +69,12 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
       if (!isPreviewMode) {
         await resolveApproval(approvalId, {
           decision,
-          answers: answer.trim() ? [answer.trim()] : undefined,
+          ...(questions.some((question) => question.mode) ? { answerGroups } : {}),
+          answers: answerGroups
+            ? answerGroups.map((group) => group[0] ?? "")
+            : answer.trim()
+              ? [answer.trim()]
+              : undefined,
         });
       }
       setResolution(decision);
@@ -70,12 +82,14 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
       setIsDetailVisible(false);
       markMessageApprovalResolvedState(queryClient, message.threadId, message.id, decision);
       hapticSuccess();
+      return true;
     } catch (caught) {
       hapticWarning();
       Alert.alert(
         "Approval failed",
         caught instanceof Error ? caught.message : "Unable to respond.",
       );
+      return false;
     } finally {
       setResolving(false);
     }
@@ -256,7 +270,14 @@ export function ProtocolActivityCard({ message }: { message: ChatMessage }) {
           ) : null}
         </Pressable>
 
-        {canResolve ? (
+        {canResolve && questions.length > 0 ? (
+          <InputRequestSheet
+            key={approvalId}
+            questions={questions}
+            onSubmit={(answers) => submitDecision("approve", answers)}
+            onSkip={() => submitDecision("cancel")}
+          />
+        ) : canResolve ? (
           <View style={[styles.approvalActions, isInputRequest && styles.inputRequestActions]}>
             {isInputRequest ? (
               <>
